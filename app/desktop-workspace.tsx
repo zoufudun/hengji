@@ -45,10 +45,13 @@ import {
   Upload,
   Users,
   AlertCircle,
+  AlertTriangle,
+  Info,
   X
 } from 'lucide-react';
 import {
   ResponsiveContainer,
+  ComposedChart,
   AreaChart,
   Area,
   LineChart,
@@ -90,6 +93,11 @@ import {
   getInitialProjectGroups,
   exportProjectGroupsCsv,
   initialDepartmentEmployees,
+  getProjectSpanMonths,
+  generateProjectQuotaSchedule,
+  getProjectQuotaPerspective,
+  exportProjectQuotaScheduleCsv,
+  parseProjectQuotaScheduleCsvText,
   monthAmount,
   normalizeMonthInput,
   nowMonth,
@@ -117,7 +125,8 @@ import {
   type State,
   type BackupData,
   type ProjectGroup,
-  type ProjectGroupType
+  type ProjectGroupType,
+  type ProjectMonthlyQuotaPlan
 } from '../lib/core';
 
 type Tab = 'dashboard' | 'projects' | 'plans' | 'groups' | 'employees' | 'analytics' | 'stars' | 'reports' | 'rules' | 'data_io';
@@ -444,6 +453,7 @@ export default function DesktopWorkspace() {
   const [employeeEdit, setEmployeeEdit] = useState<Employee | 'new' | null>(null);
   const [projectEdit, setProjectEdit] = useState<Project | 'new' | null>(null);
   const [projectDetailId, setProjectDetailId] = useState<string | null>(null);
+  const [projectQuotaModalId, setProjectQuotaModalId] = useState<string | null>(null);
   const [planEdit, setPlanEdit] = useState<Plan | 'new' | null>(null);
   const [planProjectId, setPlanProjectId] = useState('');
   const [preloadGroupId, setPreloadGroupId] = useState<string>('');
@@ -752,6 +762,7 @@ export default function DesktopWorkspace() {
                 }
               }}
               onViewDetail={setProjectDetailId}
+              onOpenQuotaSchedule={setProjectQuotaModalId}
               onArchive={project => command('project.archive', { id: project.id }, project.status === 'active' ? '项目已结项' : '项目已恢复')}
               onImportProjects={async projects => {
                 await command('project.importBatch', { projects }, `成功导入 ${projects.length} 个项目`);
@@ -769,6 +780,7 @@ export default function DesktopWorkspace() {
               currentActorId={currentActor.id}
               onAdd={projectId => { setPlanProjectId(projectId); setPlanEdit('new'); }}
               onEdit={setPlanEdit}
+              onOpenQuotaSchedule={setProjectQuotaModalId}
               onAction={(type, plan) => command(type, { id: plan.id }, type === 'plan.publish' ? '月度绩点已发布' : type === 'plan.reopen' ? '月度绩点已撤回' : '月度草稿已删除')}
             />
           )}
@@ -880,6 +892,21 @@ export default function DesktopWorkspace() {
           state={state}
           projectId={projectDetailId}
           onClose={() => setProjectDetailId(null)}
+          onOpenQuotaSchedule={setProjectQuotaModalId}
+        />
+      )}
+
+      {/* Project Quota Schedule & Perspective Modal (额度规划与全景透视) */}
+      {projectQuotaModalId && (
+        <ProjectQuotaModal
+          state={state}
+          projectId={projectQuotaModalId}
+          onClose={() => setProjectQuotaModalId(null)}
+          onSaveQuotaSchedule={async (pId, schedule) => {
+            if (await command('project.saveQuotaSchedule', { projectId: pId, quotaSchedule: schedule }, '项目周期额度规划已成功保存')) {
+              setProjectQuotaModalId(null);
+            }
+          }}
         />
       )}
 
@@ -891,6 +918,7 @@ export default function DesktopWorkspace() {
           initialProjectId={planProjectId}
           projectGroups={projectGroups}
           onSaveGroups={saveProjectGroups}
+          onOpenQuotaSchedule={setProjectQuotaModalId}
           onClose={() => { setPlanEdit(null); setPlanProjectId(''); }}
           onSave={async data => {
             if (await command('plan.save', data, '月度分配草稿已保存')) {
@@ -1546,7 +1574,7 @@ function BatchProjectTeamModal({
 // -------------------------------------------------------------
 // 2. Projects View (项目库与额度管理：支持多样式布局阅览、删除、多维排序与筛选)
 // -------------------------------------------------------------
-function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups = [], onAdd, onEdit, onDelete, onBatchDelete, onViewDetail, onArchive, onImportProjects, onBatchConfigureTeam }: {
+function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups = [], onAdd, onEdit, onDelete, onBatchDelete, onViewDetail, onOpenQuotaSchedule, onArchive, onImportProjects, onBatchConfigureTeam }: {
   state: State;
   isAdmin: boolean;
   isManager: boolean;
@@ -1557,6 +1585,7 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
   onDelete(project: Project): void;
   onBatchDelete(ids: string[]): void;
   onViewDetail(projectId: string): void;
+  onOpenQuotaSchedule?(projectId: string): void;
   onArchive(project: Project): void;
   onImportProjects(projects: any[]): Promise<void>;
   onBatchConfigureTeam?(projectIds: string[], members: string[], defaultRates: Record<string, number>, ownerId?: string): Promise<void>;
@@ -1896,6 +1925,11 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
                               <td style={{ textAlign: 'right' }}>
                                 <div style={{ display: 'inline-flex', gap: '6px' }}>
                                   <button style={{ padding: '3px 8px', fontSize: '11.5px' }} onClick={() => onViewDetail(p.id)}><Eye size={12} />明细</button>
+                                  {onOpenQuotaSchedule && (
+                                    <button style={{ padding: '3px 8px', fontSize: '11.5px', color: '#0369a1', background: '#f0f9ff', borderColor: '#bae6fd' }} onClick={() => onOpenQuotaSchedule(p.id)} title="全周期月度额度规划与执行透视，预防前期超支透支">
+                                      <CalendarRange size={12} />额度规划
+                                    </button>
+                                  )}
                                   {isAdmin && onBatchConfigureTeam && (
                                     <button style={{ padding: '3px 8px', fontSize: '11.5px', color: '#166534' }} onClick={() => setBatchTeamTargetProjects([p])} title="为该项目配置成员名单与默认分配比例">
                                       <Users size={12} />组员与比例
@@ -2034,6 +2068,11 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '6px' }}>
                         <button style={{ padding: '3px 8px', fontSize: '11.5px' }} onClick={() => onViewDetail(p.id)}><Eye size={12} />明细</button>
+                        {onOpenQuotaSchedule && (
+                          <button style={{ padding: '3px 8px', fontSize: '11.5px', color: '#0369a1', background: '#f0f9ff', borderColor: '#bae6fd' }} onClick={() => onOpenQuotaSchedule(p.id)} title="全周期月度额度规划与执行透视，预防前期超支透支">
+                            <CalendarRange size={12} />额度规划
+                          </button>
+                        )}
                         {isAdmin && onBatchConfigureTeam && (
                           <button style={{ padding: '3px 8px', fontSize: '11.5px', color: '#166534' }} onClick={() => setBatchTeamTargetProjects([p])} title="为该项目配置成员名单与默认分配比例">
                             <Users size={12} />组员与比例
@@ -2145,6 +2184,11 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
                   <button onClick={() => onViewDetail(project.id)}>
                     <Eye size={14} />额度明细与分润
                   </button>
+                  {onOpenQuotaSchedule && (
+                    <button style={{ color: '#0369a1' }} onClick={() => onOpenQuotaSchedule(project.id)} title="全周期月度额度规划与执行透视，预防前期超支透支">
+                      <CalendarRange size={14} />额度规划
+                    </button>
+                  )}
                   {isAdmin && onBatchConfigureTeam && (
                     <button onClick={() => setBatchTeamTargetProjects([project])} title="为该项目配置成员名单与默认分配比例">
                       <Users size={14} />组员与比例
@@ -2196,10 +2240,11 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
 // -------------------------------------------------------------
 // 需求1 Modal: Project Detail Realtime Quota & Breakdown
 // -------------------------------------------------------------
-function ProjectDetailModal({ state, projectId, onClose }: { state: State; projectId: string; onClose(): void }) {
+function ProjectDetailModal({ state, projectId, onClose, onOpenQuotaSchedule }: { state: State; projectId: string; onClose(): void; onOpenQuotaSchedule?(projectId: string): void }) {
   const detail = projectAllocDetail(state, projectId);
   if (!detail) return null;
   const project = detail.project;
+  const perspective = getProjectQuotaPerspective(state, projectId);
 
   return (
     <Modal title={`${project.name} · 额度实时监控与明细`} subtitle={`工作令号: ${project.code} · 周期: ${project.start} 至 ${project.end || '持续推进/待定'} · 合同金额 ${detail.contractWan} 万元`} wide onClose={onClose}>
@@ -2287,6 +2332,89 @@ function ProjectDetailModal({ state, projectId, onClose }: { state: State; proje
           </tbody>
         </table>
 
+        {/* 全周期额度规划与执行透视 (规划 vs 实际) */}
+        <div style={{ marginTop: '26px', borderTop: '1px dashed #cbd5e1', paddingTop: '18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CalendarRange size={18} color="#0284c7" />
+              <h3 style={{ fontSize: '15px', margin: 0, color: '#0f172a' }}>
+                全周期月度额度规划与执行透视 (规划 vs 实际对比)
+              </h3>
+              {perspective && (
+                <Badge tone={perspective.isFrontLoadedRisk ? 'amber' : 'green'}>
+                  {perspective.isFrontLoadedRisk ? '⚠️ 存在前期透支风险' : '全周期节奏受控'}
+                </Badge>
+              )}
+            </div>
+            {onOpenQuotaSchedule && (
+              <button
+                type="button"
+                className="primary"
+                style={{ padding: '4px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                onClick={() => { onClose(); onOpenQuotaSchedule(projectId); }}
+              >
+                <Pencil size={13} /> 调整周期额度规划
+              </button>
+            )}
+          </div>
+
+          {perspective?.riskWarnings && perspective.riskWarnings.length > 0 && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fef08a', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px', color: '#92400e', fontSize: '12.5px' }}>
+              {perspective.riskWarnings.map((w, idx) => (
+                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: idx > 0 ? '4px' : 0 }}>
+                  <AlertCircle size={14} color="#d97706" />
+                  <span>{w}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {perspective && perspective.monthRows.length > 0 ? (
+            <table style={{ marginBottom: '20px' }}>
+              <thead>
+                <tr>
+                  <th>规划月份</th>
+                  <th>阶段里程碑 / 交付目标</th>
+                  <th>规划比例</th>
+                  <th>规划额度</th>
+                  <th>实际分配比例</th>
+                  <th>实际分配额度</th>
+                  <th>分配状态</th>
+                  <th>执行偏差</th>
+                  <th>规划交付物说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                {perspective.monthRows.map(r => (
+                  <tr key={r.month} style={{ background: r.isOver ? '#fff1f2' : undefined }}>
+                    <td><b>{r.month}</b></td>
+                    <td><span style={{ fontWeight: 500, color: '#334155' }}>{r.milestone || '阶段研制'}</span></td>
+                    <td>{r.plannedPct}</td>
+                    <td>{r.plannedAmountWan} 万元</td>
+                    <td style={{ fontWeight: 600, color: r.actualRate > 0 ? '#166534' : '#94a3b8' }}>{r.actualPct}</td>
+                    <td style={{ fontWeight: 600 }}>{r.actualAmountWan} 万元</td>
+                    <td>
+                      <Badge tone={r.actualStatus === 'published' ? 'green' : r.actualStatus === 'draft' ? 'amber' : 'neutral'}>
+                        {r.actualStatus === 'published' ? '已发布' : r.actualStatus === 'draft' ? '草稿' : '未分配'}
+                      </Badge>
+                    </td>
+                    <td>
+                      <span style={{ fontWeight: 600, color: r.diffRate > 0 ? '#b91c1c' : r.diffRate < 0 ? '#15803d' : '#64748b' }}>
+                        {r.diffPct}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: '12px', color: '#64748b' }}>{r.note || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', color: '#64748b', fontSize: '12.5px', marginBottom: '20px', textAlign: 'center' }}>
+              暂未制定周期额度规划，点击右上角【调整周期额度规划】可进行一键生成与排期设定
+            </div>
+          )}
+        </div>
+
         {/* 月度分配流水 */}
         <h3 style={{ fontSize: '15px', margin: '0 0 10px', color: '#142822' }}>按月分配流水与成员分润明细</h3>
         <table>
@@ -2346,6 +2474,608 @@ function ProjectDetailModal({ state, projectId, onClose }: { state: State; proje
       </div>
       <div className="modal-actions" style={{ padding: '16px 26px' }}>
         <button className="primary" onClick={onClose}>关闭</button>
+      </div>
+    </Modal>
+  );
+}
+
+// -------------------------------------------------------------
+// 项目全周期月度额度规划与执行透视弹窗 (Project Quota Modal)
+// -------------------------------------------------------------
+function ProjectQuotaModal({
+  state,
+  projectId,
+  onClose,
+  onSaveQuotaSchedule,
+}: {
+  state: State;
+  projectId: string;
+  onClose(): void;
+  onSaveQuotaSchedule(projectId: string, quotaSchedule: ProjectMonthlyQuotaPlan[]): Promise<void>;
+}) {
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) return null;
+
+  const perspective = useMemo(() => getProjectQuotaPerspective(state, projectId), [state, projectId]);
+
+  // Initial schedule state
+  const [schedule, setSchedule] = useState<ProjectMonthlyQuotaPlan[]>(() => {
+    if (project.quotaSchedule && project.quotaSchedule.length > 0) {
+      return structuredClone(project.quotaSchedule);
+    }
+    return generateProjectQuotaSchedule(project, 'deliverable_focused', state);
+  });
+
+  const [newMonth, setNewMonth] = useState('');
+  const [notice, setNotice] = useState('');
+  const [saving, setSaving] = useState(false);
+  const csvFileRef = useRef<HTMLInputElement>(null);
+
+  const totalPlannedRate = total(schedule.map(s => s.rate));
+  const maxAllocableRate = Math.max(0, 10000 - (project.historyCompletedRate || 0));
+  const remainingRate = Math.max(0, maxAllocableRate - totalPlannedRate);
+  const totalPlannedWan = (points(project.contract, totalPlannedRate) / 1_000_000).toFixed(4);
+  const remainingWan = (points(project.contract, remainingRate) / 1_000_000).toFixed(4);
+  const isOverAllocable = totalPlannedRate > maxAllocableRate;
+
+  // Actual plans mapped by month
+  const actualPlans = useMemo(() => state.plans.filter(p => p.projectId === projectId), [state.plans, projectId]);
+  const actualMap = useMemo(() => {
+    const map = new Map<string, { budget: number; status: 'draft' | 'published'; amount: number; note: string }>();
+    for (const pl of actualPlans) {
+      map.set(pl.month, { budget: pl.budget, status: pl.status, amount: monthAmount(project, pl), note: pl.note });
+    }
+    return map;
+  }, [actualPlans, project]);
+
+  // Chart data for visualization
+  const chartData = useMemo(() => {
+    let cumPlan = 0;
+    let cumAct = 0;
+    return schedule.map(item => {
+      cumPlan += item.rate;
+      const act = actualMap.get(item.month);
+      const actRate = act ? act.budget : 0;
+      cumAct += actRate;
+      return {
+        month: item.month,
+        规划额度: Number((points(project.contract, item.rate) / 1_000_000).toFixed(4)),
+        实际分配: act ? Number((act.amount / 1_000_000).toFixed(4)) : 0,
+        累计规划: Number((cumPlan / 100).toFixed(1)),
+        累计实际: Number((cumAct / 100).toFixed(1)),
+      };
+    });
+  }, [schedule, actualMap, project.contract]);
+
+  const handleApplyPreset = (mode: 'deliverable_focused' | 'even' | 'middle_heavy' | 'sync_actual') => {
+    const generated = generateProjectQuotaSchedule(project, mode, state);
+    setSchedule(generated);
+    if (mode === 'deliverable_focused') {
+      setNotice('🎯 已应用【稳健交付型】策略：锁定 45% 以上额度于后期发货交付，防止前期分完！');
+    } else if (mode === 'even') {
+      setNotice('⚖️ 已应用【全周期平摊】策略：平均分配至各个月份');
+    } else if (mode === 'middle_heavy') {
+      setNotice('🚀 已应用【中期攻坚型】策略：重点倾斜于中期核心研制');
+    } else if (mode === 'sync_actual') {
+      setNotice('🔄 已同步【已有实际分配】：已发生月份采用实际分配值，剩余额度平摊到剩余月份');
+    }
+  };
+
+  const handleRateChange = (index: number, valStr: string) => {
+    const clean = valStr.replace('%', '').trim();
+    const num = parseFloat(clean);
+    const newRate = isNaN(num) ? 0 : Math.max(0, Math.min(10000, Math.round(num * 100)));
+    setSchedule(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], rate: newRate };
+      return copy;
+    });
+  };
+
+  const adjustRateStep = (index: number, deltaPct: number) => {
+    setSchedule(prev => {
+      const copy = [...prev];
+      const curPct = copy[index].rate / 100;
+      const nextPct = Math.max(0, Math.min(100, Math.round((curPct + deltaPct) * 100) / 100));
+      copy[index] = { ...copy[index], rate: Math.round(nextPct * 100) };
+      return copy;
+    });
+  };
+
+  const handleMilestoneChange = (index: number, milestone: string) => {
+    setSchedule(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], milestone };
+      return copy;
+    });
+  };
+
+  const handleNoteChange = (index: number, note: string) => {
+    setSchedule(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], note };
+      return copy;
+    });
+  };
+
+  const handleDeleteMonth = (index: number) => {
+    setSchedule(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddMonth = () => {
+    if (!newMonth || !/^\d{4}-\d{2}$/.test(newMonth)) {
+      alert('请输入合法的月份格式，例如 2026-07');
+      return;
+    }
+    if (schedule.some(s => s.month === newMonth)) {
+      alert(`月份 ${newMonth} 已存在于规划中`);
+      return;
+    }
+    const nextList = [...schedule, { month: newMonth, rate: 0, milestone: '新规划阶段', note: '' }];
+    nextList.sort((a, b) => a.month.localeCompare(b.month));
+    setSchedule(nextList);
+    setNewMonth('');
+  };
+
+  const handleFillRemainingToLast = () => {
+    if (schedule.length === 0) return;
+    if (remainingRate <= 0) {
+      setNotice('当前规划已达到或超出可用额度上限，无需补齐');
+      return;
+    }
+    setSchedule(prev => {
+      const copy = [...prev];
+      const lastIdx = copy.length - 1;
+      copy[lastIdx] = { ...copy[lastIdx], rate: copy[lastIdx].rate + remainingRate };
+      return copy;
+    });
+    setNotice(`🎯 已将剩余 ${pct(remainingRate)} (${remainingWan} 万元) 储备金自动填入最后发货交付阶段`);
+  };
+
+  const handleExportCsv = () => {
+    if (!perspective) return;
+    const currentPersp = {
+      ...perspective,
+      monthRows: schedule.map(item => {
+        const act = actualMap.get(item.month);
+        const actualRate = act ? act.budget : 0;
+        const actualAmount = act ? act.amount : 0;
+        const diffRate = actualRate - item.rate;
+        return {
+          month: item.month,
+          plannedRate: item.rate,
+          plannedPct: pct(item.rate),
+          plannedAmountWan: (points(project.contract, item.rate) / 1_000_000).toFixed(4),
+          milestone: item.milestone || '',
+          note: item.note || '',
+          actualRate,
+          actualPct: pct(actualRate),
+          actualAmountWan: (actualAmount / 1_000_000).toFixed(4),
+          actualStatus: act ? act.status : 'none',
+          cumPlannedRate: 0,
+          cumActualRate: 0,
+          diffRate,
+          diffPct: (diffRate > 0 ? '+' : '') + pct(diffRate),
+          isOver: actualRate > item.rate,
+        };
+      })
+    };
+    const csvContent = exportProjectQuotaScheduleCsv(currentPersp as any);
+    triggerDownload(csvContent, `${project.name}-全周期额度规划-${nowMonth()}.csv`);
+  };
+
+  const handleImportCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = evt => {
+      try {
+        const text = evt.target?.result as string;
+        const parsed = parseProjectQuotaScheduleCsvText(text, project);
+        if (parsed.length === 0) throw new Error('CSV中未找到有效月份额度规划数据');
+        setSchedule(parsed);
+        setNotice(`已从 CSV 导入 ${parsed.length} 个月份的额度规划`);
+      } catch (err) {
+        alert(errorText(err));
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+    e.target.value = '';
+  };
+
+  const handleSave = async () => {
+    if (isOverAllocable) {
+      alert(`全周期规划额度总和（${pct(totalPlannedRate)}）不能超过项目可用额度上限（${pct(maxAllocableRate)}），请调减部分月份后再保存`);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSaveQuotaSchedule(projectId, schedule);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      title={`${project.name} · 全周期月度额度规划与执行透视`}
+      subtitle={`工作令号: ${project.code} · 合同金额: ${wan(project.contract)} 万元 · 周期: ${project.start} 至 ${project.end || '待定/持续'} · 科学规划各月分配节奏，防止前期超支、保障后期发货交付有钱可分`}
+      wide
+      onClose={onClose}
+    >
+      <div className="modal-body" style={{ maxHeight: '82vh', overflowY: 'auto' }}>
+        {/* 全景透视核心指标卡片 */}
+        <div className="metrics" style={{ margin: '0 0 16px', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+          <article>
+            <span>合同总额</span>
+            <strong>{wan(project.contract)}<i> 万元</i></strong>
+            <small>基准考核总额度</small>
+          </article>
+
+          <article style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+            <span>全周期已规划额度</span>
+            <strong style={{ color: totalPlannedRate === maxAllocableRate ? '#166534' : isOverAllocable ? '#b91c1c' : '#0369a1' }}>
+              {totalPlannedWan}<i> 万元</i>
+            </strong>
+            <small>
+              规划占比: {pct(totalPlannedRate)} / {pct(maxAllocableRate)}
+              {isOverAllocable && ' ⚠️ 超额'}
+              {totalPlannedRate === maxAllocableRate && ' ✅ 满额规划'}
+            </small>
+          </article>
+
+          <article style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+            <span>实际已分配消耗</span>
+            <strong style={{ color: '#0f172a' }}>
+              {perspective ? perspective.totalActualWan : '0'}<i> 万元</i>
+            </strong>
+            <small>实际占比: {perspective ? perspective.totalActualPct : '0%'}</small>
+          </article>
+
+          <article style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+            <span>后期发货交付储备金</span>
+            <strong style={{ color: remainingRate > 0 ? '#1d4ed8' : '#64748b' }}>
+              {remainingWan}<i> 万元</i>
+            </strong>
+            <small style={{ color: remainingRate < 1500 ? '#b91c1c' : '#1e40af' }}>
+              储备占比: {pct(remainingRate)} {remainingRate < 1500 && '⚠️ 储备不足'}
+            </small>
+          </article>
+
+          <article>
+            <span>规划覆盖周期</span>
+            <strong style={{ color: '#334155' }}>
+              {schedule.length}<i> 个月</i>
+            </strong>
+            <small>{schedule[0]?.month || '-'} 至 {schedule[schedule.length - 1]?.month || '-'}</small>
+          </article>
+        </div>
+
+        {/* 风险预警提示条 */}
+        {perspective?.isFrontLoadedRisk && (
+          <div style={{ background: '#fffbeb', border: '1px solid #fde047', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <AlertCircle size={20} color="#b45309" style={{ flexShrink: 0 }} />
+            <div style={{ fontSize: '13px', color: '#92400e' }}>
+              <strong>前期透支风险预警：</strong>
+              当前项目的实际分配节奏偏快，后期交付发货阶段的储备金仅剩 {remainingWan} 万元 ({pct(remainingRate)})！
+              建议调低前期月份的规划比例，确保在货物交付和最终验收阶段有充足的绩点额度激励团队。
+            </div>
+          </div>
+        )}
+
+        {notice && (
+          <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '8px', padding: '8px 14px', marginBottom: '14px', fontSize: '12.5px', color: '#065f46', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>{notice}</span>
+            <button className="icon-button" style={{ width: 20, height: 20 }} onClick={() => setNotice('')}><X size={12} /></button>
+          </div>
+        )}
+
+        {/* 规划策略预设工具栏 */}
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <Sparkles size={14} color="#0284c7" /> 快捷规划策略：
+              </span>
+              <button
+                type="button"
+                style={{ border: '1px solid #0284c7', background: '#f0f9ff', color: '#0369a1', borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', cursor: 'pointer', fontWeight: 600 }}
+                onClick={() => handleApplyPreset('deliverable_focused')}
+                title="前期20%、中期35%、后期交付发货45%：最适合工程研发，杜绝前期把钱分完导致交付无钱"
+              >
+                🎯 稳健交付型（前低后高·防分完）
+              </button>
+              <button
+                type="button"
+                style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#334155', borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', cursor: 'pointer' }}
+                onClick={() => handleApplyPreset('even')}
+                title="全周期按月平摊额度"
+              >
+                ⚖️ 全周期平摊
+              </button>
+              <button
+                type="button"
+                style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#334155', borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', cursor: 'pointer' }}
+                onClick={() => handleApplyPreset('middle_heavy')}
+                title="重点倾斜在中间核心研制攻坚"
+              >
+                🚀 中期攻坚型
+              </button>
+              <button
+                type="button"
+                style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#334155', borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', cursor: 'pointer' }}
+                onClick={() => handleApplyPreset('sync_actual')}
+                title="将已发生月份同步为系统实际值，并将剩余可用额度平摊到剩余月份"
+              >
+                🔄 同步实际 + 平摊剩余
+              </button>
+              <button
+                type="button"
+                style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#047857', borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', cursor: 'pointer' }}
+                onClick={handleFillRemainingToLast}
+                title="将剩余可用额度全额追加到最后一期发货交付阶段"
+              >
+                🎯 补齐剩余至发货期
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input type="file" accept=".csv" ref={csvFileRef} style={{ display: 'none' }} onChange={handleImportCsv} />
+              <button
+                type="button"
+                style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#334155', borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                onClick={() => csvFileRef.current?.click()}
+              >
+                <Upload size={12} /> 导入规划 CSV
+              </button>
+              <button
+                type="button"
+                style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#334155', borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                onClick={handleExportCsv}
+              >
+                <Download size={12} /> 导出规划 CSV
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 全景透视对比图表 (Recharts) */}
+        {chartData.length > 0 && (
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px 16px', marginBottom: '18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#1e293b' }}>
+                📊 全周期月度规划与实际执行走势对比 (透视分析)
+              </span>
+              <span style={{ fontSize: '11px', color: '#64748b' }}>
+                柱状图: 月度规划额度 vs 实际分配额度 (万元) · 折线图: 累计进度 (%)
+              </span>
+            </div>
+            <div style={{ width: '100%', height: 175 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 10 }} unit="万" />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
+                  <Tooltip
+                    formatter={(val: any, name: any) => [
+                      name.includes('累计') ? `${val}%` : `${val} 万元`,
+                      name
+                    ]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '4px' }} />
+                  <Bar yAxisId="left" dataKey="规划额度" fill="#38bdf8" radius={[3, 3, 0, 0]} barSize={22} />
+                  <Bar yAxisId="left" dataKey="实际分配" fill="#10b981" radius={[3, 3, 0, 0]} barSize={22} />
+                  <Line yAxisId="right" type="monotone" dataKey="累计规划" stroke="#0284c7" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line yAxisId="right" type="monotone" dataKey="累计实际" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* 交互式月度额度规划明细表 */}
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '16px' }}>
+          <table style={{ margin: 0 }}>
+            <thead>
+              <tr style={{ background: '#f8fafc' }}>
+                <th style={{ width: '100px' }}>规划月份</th>
+                <th style={{ width: '190px' }}>阶段里程碑 / 交付目标</th>
+                <th style={{ width: '170px' }}>规划分配比例 (%)</th>
+                <th style={{ width: '110px' }}>规划额度</th>
+                <th style={{ width: '130px' }}>实际分配额度</th>
+                <th style={{ width: '90px' }}>执行偏差</th>
+                <th>交付成果 / 规划说明</th>
+                <th style={{ width: '60px', textAlign: 'center' }}>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {schedule.map((item, index) => {
+                const act = actualMap.get(item.month);
+                const actualRate = act ? act.budget : 0;
+                const actualAmount = act ? act.amount : 0;
+                const plannedAmount = points(project.contract, item.rate);
+                const diffRate = actualRate - item.rate;
+                const isOver = actualRate > item.rate;
+
+                return (
+                  <tr key={item.month} style={{ background: isOver && actualRate > 0 ? '#fff1f2' : undefined }}>
+                    <td>
+                      <b style={{ color: '#0f172a', fontSize: '13px' }}>{item.month}</b>
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        value={item.milestone || ''}
+                        onChange={e => handleMilestoneChange(index, e.target.value)}
+                        placeholder="例如: 初样研制与联调"
+                        style={{ height: '30px', fontSize: '12px' }}
+                      />
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <div className="suffix-input" style={{ width: '85px', height: '30px' }}>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            value={item.rate > 0 ? (item.rate / 100).toFixed(2).replace(/\.00$/, '') : ''}
+                            onChange={e => handleRateChange(index, e.target.value)}
+                            placeholder="0.00"
+                            style={{ textAlign: 'right', fontSize: '12px', height: '28px' }}
+                          />
+                          <span>%</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                          <button
+                            type="button"
+                            style={{ padding: '0 4px', fontSize: '9px', height: '14px', lineHeight: '14px', border: '1px solid #cbd5e1', background: '#fff', borderRadius: '2px', cursor: 'pointer' }}
+                            onClick={() => adjustRateStep(index, 1)}
+                            title="+1%"
+                          >
+                            +1
+                          </button>
+                          <button
+                            type="button"
+                            style={{ padding: '0 4px', fontSize: '9px', height: '14px', lineHeight: '14px', border: '1px solid #cbd5e1', background: '#fff', borderRadius: '2px', cursor: 'pointer' }}
+                            onClick={() => adjustRateStep(index, -1)}
+                            title="-1%"
+                          >
+                            -1
+                          </button>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                          <button
+                            type="button"
+                            style={{ padding: '0 4px', fontSize: '9px', height: '14px', lineHeight: '14px', border: '1px solid #cbd5e1', background: '#fff', borderRadius: '2px', cursor: 'pointer' }}
+                            onClick={() => adjustRateStep(index, 5)}
+                            title="+5%"
+                          >
+                            +5
+                          </button>
+                          <button
+                            type="button"
+                            style={{ padding: '0 4px', fontSize: '9px', height: '14px', lineHeight: '14px', border: '1px solid #cbd5e1', background: '#fff', borderRadius: '2px', cursor: 'pointer' }}
+                            onClick={() => adjustRateStep(index, -5)}
+                            title="-5%"
+                          >
+                            -5
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <b style={{ color: '#0369a1', fontSize: '12.5px' }}>
+                        {(plannedAmount / 1_000_000).toFixed(4)} 万元
+                      </b>
+                    </td>
+                    <td>
+                      {act ? (
+                        <div>
+                          <b style={{ color: '#166534', fontSize: '12.5px' }}>
+                            {(actualAmount / 1_000_000).toFixed(4)} 万元
+                          </b>
+                          <Badge tone={act.status === 'published' ? 'green' : 'amber'} style={{ marginLeft: '4px', fontSize: '10px' }}>
+                            {act.status === 'published' ? '已发布' : '草稿'}
+                          </Badge>
+                        </div>
+                      ) : (
+                        <span style={{ color: '#94a3b8', fontSize: '12px' }}>未分配</span>
+                      )}
+                    </td>
+                    <td>
+                      {act ? (
+                        <span style={{ fontSize: '11.5px', fontWeight: 600, color: diffRate > 0 ? '#b91c1c' : diffRate < 0 ? '#15803d' : '#64748b' }}>
+                          {diffRate > 0 ? `+${(diffRate / 100).toFixed(1)}% ⚠️` : diffRate < 0 ? `${(diffRate / 100).toFixed(1)}%` : '持平'}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#cbd5e1' }}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        value={item.note || ''}
+                        onChange={e => handleNoteChange(index, e.target.value)}
+                        placeholder="交付物说明/关键验收指标..."
+                        style={{ height: '30px', fontSize: '12px' }}
+                      />
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        style={{ width: 26, height: 26, color: '#ef4444' }}
+                        onClick={() => handleDeleteMonth(index)}
+                        title="移除该月份规划"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
+                <td>合计 ({schedule.length} 个月)</td>
+                <td>—</td>
+                <td style={{ color: totalPlannedRate === maxAllocableRate ? '#166534' : isOverAllocable ? '#b91c1c' : '#0369a1' }}>
+                  {(totalPlannedRate / 100).toFixed(2)}% / {pct(maxAllocableRate)}
+                  {isOverAllocable ? ' (⚠️超额)' : totalPlannedRate < maxAllocableRate ? ` (尚余${pct(remainingRate)})` : ' (满额)'}
+                </td>
+                <td style={{ color: '#0369a1' }}>{totalPlannedWan} 万元</td>
+                <td style={{ color: '#166534' }}>
+                  {perspective ? perspective.totalActualWan : '0'} 万元
+                </td>
+                <td>—</td>
+                <td colSpan={2} style={{ fontSize: '12px', color: remainingRate > 0 ? '#1d4ed8' : '#64748b' }}>
+                  储备金剩余: <b>{remainingWan} 万元 ({pct(remainingRate)})</b>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+
+          {/* 追加月份输入行 */}
+          <div style={{ background: '#f8fafc', padding: '8px 14px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '12px', color: '#64748b' }}>追加规划月份：</span>
+            <input
+              type="month"
+              value={newMonth}
+              onChange={e => setNewMonth(e.target.value)}
+              style={{ width: '140px', height: '28px', fontSize: '12px' }}
+            />
+            <button
+              type="button"
+              style={{ border: '1px solid #cbd5e1', background: '#fff', borderRadius: '4px', padding: '3px 10px', fontSize: '11.5px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+              onClick={handleAddMonth}
+            >
+              <Plus size={12} /> 添加月份
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="modal-actions" style={{ padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: '12px', color: '#64748b' }}>
+          提示：保存后，项目在每月录入分配时将自动根据此规划提供参考建议与超支拦截预警。
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button type="button" className="secondary" onClick={onClose} disabled={saving}>
+            取消
+          </button>
+          <button
+            type="button"
+            className="primary"
+            onClick={handleSave}
+            disabled={saving || isOverAllocable}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+          >
+            <Save size={15} />
+            {saving ? '正在保存...' : '保存额度规划'}
+          </button>
+        </div>
       </div>
     </Modal>
   );
@@ -2482,7 +3212,7 @@ function RulesView() {
 // -------------------------------------------------------------
 // 3. Plans View (月度分配)
 // -------------------------------------------------------------
-function PlansView({ state, isAdmin, isManager, currentActorId, onAdd, onEdit, onAction }: {
+function PlansView({ state, isAdmin, isManager, currentActorId, onAdd, onEdit, onAction, onOpenQuotaSchedule }: {
   state: State;
   isAdmin: boolean;
   isManager: boolean;
@@ -2490,11 +3220,13 @@ function PlansView({ state, isAdmin, isManager, currentActorId, onAdd, onEdit, o
   onAdd(projectId: string): void;
   onEdit(plan: Plan): void;
   onAction(type: string, plan: Plan): void;
+  onOpenQuotaSchedule?(projectId: string): void;
 }) {
   const [projectId, setProjectId] = useState(state.projects.find(p => p.status === 'active')?.id || state.projects[0]?.id || '');
   const project = state.projects.find(p => p.id === projectId);
   const plans = useMemo(() => state.plans.filter(p => p.projectId === projectId).sort((a, b) => a.month.localeCompare(b.month)), [state.plans, projectId]);
   const detail = project ? projectAllocDetail(state, project.id) : null;
+  const perspective = project ? getProjectQuotaPerspective(state, project.id) : null;
   const canManageThisProject = isAdmin || (project && project.owner === currentActorId);
 
   // 需求：选中查看工作内容的月份计划
@@ -2649,10 +3381,27 @@ function PlansView({ state, isAdmin, isManager, currentActorId, onAdd, onEdit, o
         </div>
 
         {detail && (
-          <div className="quota-summary">
+          <div className="quota-summary" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <span>合同总额: <b>{detail.contractWan} 万元</b></span>
-            <span>已规划: <b>{detail.totalBudgetPct}</b> ({detail.totalAllocatedWan}万)</span>
+            <span>已分配: <b>{detail.totalBudgetPct}</b> ({detail.totalAllocatedWan}万)</span>
             <span>剩余: <b style={{ color: detail.remainingRate > 0 ? '#b45309' : '#15803d' }}>{detail.remainingPct}</b> ({detail.remainingWan}万)</span>
+            {perspective && (
+              <span>交付储备金: <b style={{ color: perspective.deliveryStageReserveRate >= 3500 ? '#166534' : '#b45309' }}>{wan(perspective.deliveryStageReserveAmount)}万 ({pct(perspective.deliveryStageReserveRate)})</b></span>
+            )}
+            {perspective?.isFrontLoadedRisk && (
+              <Badge tone="amber">⚠️ 前期透支风险</Badge>
+            )}
+            {onOpenQuotaSchedule && (
+              <button
+                type="button"
+                className="secondary"
+                style={{ padding: '3px 9px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                onClick={() => onOpenQuotaSchedule(projectId)}
+                title="打开全周期额度规划与各月交付节点透视"
+              >
+                <CalendarRange size={13} /> 周期额度规划
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -2749,7 +3498,35 @@ function PlansView({ state, isAdmin, isManager, currentActorId, onAdd, onEdit, o
                     <b>{plan.month}</b>
                   </div>
                 </td>
-                <td>{pct(plan.budget)}</td>
+                <td>
+                  <div><b>{pct(plan.budget)}</b></div>
+                  {(() => {
+                    const plannedQuota = project?.quotaSchedule?.find(s => s.month === plan.month);
+                    if (!plannedQuota) return null;
+                    const diff = plan.budget - plannedQuota.rate;
+                    return (
+                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', lineHeight: 1.3 }}>
+                        <div>规划: {pct(plannedQuota.rate)}</div>
+                        <div>
+                          偏差: {diff > 0 ? (
+                            <span style={{ color: '#b45309', fontWeight: 600 }}>+{pct(diff)}</span>
+                          ) : diff < 0 ? (
+                            <span style={{ color: '#0284c7', fontWeight: 600 }}>-{pct(-diff)}</span>
+                          ) : (
+                            <span style={{ color: '#166534', fontWeight: 600 }}>持平</span>
+                          )}
+                        </div>
+                        {plannedQuota.milestone && (
+                          <div style={{ marginTop: '2px' }}>
+                            <span style={{ fontSize: '10px', background: '#e0f2fe', color: '#0369a1', padding: '1px 5px', borderRadius: '4px' }}>
+                              {plannedQuota.milestone}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </td>
                 <td><b>{wan(amt)} 万元</b></td>
                 <td>
                   {memberViewMode === 'table' ? (
@@ -5979,12 +6756,13 @@ const PLAN_COLUMNS_DEF: Record<PlanColKey, PlanColDef> = {
   action: { key: 'action', label: '操作', width: '46px', align: 'center' },
 };
 
-function PlanFormModal({ state, value, initialProjectId, projectGroups, onSaveGroups, onClose, onSave }: {
+function PlanFormModal({ state, value, initialProjectId, projectGroups, onSaveGroups, onOpenQuotaSchedule, onClose, onSave }: {
   state: State;
   value: Plan | 'new';
   initialProjectId: string;
   projectGroups?: ProjectGroup[];
   onSaveGroups?(groups: ProjectGroup[]): void;
+  onOpenQuotaSchedule?(projectId: string): void;
   onClose(): void;
   onSave(data: any): void;
 }) {
@@ -6283,6 +7061,12 @@ function PlanFormModal({ state, value, initialProjectId, projectGroups, onSaveGr
     if (project && budget) preview = monthAmount(project, { budget: toRate(budget) } as Plan);
   } catch {}
 
+  const currentMonthQuota = project?.quotaSchedule?.find(s => s.month === month);
+  const quotaPerspective = project ? getProjectQuotaPerspective(state, project.id) : null;
+  const enteredRate = (() => {
+    try { return budget ? toRate(budget) : 0; } catch { return 0; }
+  })();
+
   return (
     <Modal title={old ? '编辑月度分配草稿' : '新增月度分配'} subtitle="按月规划项目可分配额度，再在成员间按贡献比例分配（支持中途增加或退出成员，支持工作内容与快捷微调）" wide onClose={onClose}>
       <form onSubmit={e => {
@@ -6337,6 +7121,186 @@ function PlanFormModal({ state, value, initialProjectId, projectGroups, onSaveGr
             </div>
           </Field>
         </div>
+
+        {/* 全周期额度规划联动与防前期透支监控 */}
+        {project && (
+          <div style={{
+            marginTop: '12px',
+            marginBottom: '4px',
+            background: currentMonthQuota ? '#f0f9ff' : '#fffbeb',
+            border: `1px solid ${currentMonthQuota ? '#bae6fd' : '#fde68a'}`,
+            borderRadius: '8px',
+            padding: '10px 14px',
+            fontSize: '12px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: currentMonthQuota ? '#0369a1' : '#92400e' }}>
+                <CalendarRange size={15} />
+                <span>全周期额度规划透视 · {month}</span>
+                {currentMonthQuota ? (
+                  <Badge tone="blue">已排期节点</Badge>
+                ) : project.quotaSchedule && project.quotaSchedule.length > 0 ? (
+                  <Badge tone="amber">未在排期中</Badge>
+                ) : (
+                  <Badge tone="neutral">尚未制定规划</Badge>
+                )}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {currentMonthQuota && (
+                  <button
+                    type="button"
+                    style={{
+                      border: '1px solid #0284c7',
+                      background: '#0284c7',
+                      color: '#fff',
+                      borderRadius: '5px',
+                      padding: '3px 9px',
+                      fontSize: '11.5px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                    onClick={() => {
+                      setBudget((currentMonthQuota.rate / 100).toFixed(2).replace(/\.00$/, ''));
+                      setPlanNotice(`⚡ 已自动套用【${month}】规划额度：${pct(currentMonthQuota.rate)} (${currentMonthQuota.milestone || '本期节点'})`);
+                    }}
+                    title="将本月规划的比例快速填入上方输入框"
+                  >
+                    ⚡ 一键套用规划额度 ({pct(currentMonthQuota.rate)})
+                  </button>
+                )}
+                {onOpenQuotaSchedule && (
+                  <button
+                    type="button"
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      background: '#fff',
+                      color: '#475569',
+                      borderRadius: '5px',
+                      padding: '3px 8px',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                    onClick={() => onOpenQuotaSchedule(projectId)}
+                  >
+                    📅 查看/调整全周期规划
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {currentMonthQuota ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', color: '#334155' }}>
+                  <span>本月规划额度：<b style={{ color: '#0369a1' }}>{pct(currentMonthQuota.rate)}</b> ({wan(Math.round((project.contractAmount || 0) * currentMonthQuota.rate / 10000))} 万元)</span>
+                  <span>阶段节点：<b style={{ color: '#1e293b' }}>{currentMonthQuota.milestone || '未指定'}</b></span>
+                  {currentMonthQuota.note && <span>说明：<span style={{ color: '#64748b' }}>{currentMonthQuota.note}</span></span>}
+                  {quotaPerspective && (
+                    <span>后期交付储备金：<b style={{ color: quotaPerspective.deliveryStageReserveRate >= 3500 ? '#166534' : '#b45309' }}>{wan(quotaPerspective.deliveryStageReserveAmount)} 万元 ({pct(quotaPerspective.deliveryStageReserveRate)})</b></span>
+                  )}
+                </div>
+
+                {/* 偏离规划预警 & 提示 */}
+                {enteredRate > currentMonthQuota.rate ? (
+                  <div style={{
+                    marginTop: '4px',
+                    background: '#fef3c7',
+                    border: '1px solid #fde68a',
+                    borderRadius: '6px',
+                    padding: '6px 10px',
+                    color: '#92400e',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '6px'
+                  }}>
+                    <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '1px' }} />
+                    <div>
+                      <strong>⚠️ 超出本月规划预警：</strong>
+                      当前填写的比例 ({pct(enteredRate)}) 高于规划 ({pct(currentMonthQuota.rate)})，多支出 <b>{pct(enteredRate - currentMonthQuota.rate)}</b>（约 {wan(Math.round((project.contractAmount || 0) * (enteredRate - currentMonthQuota.rate) / 10000))} 万元）。
+                      <span style={{ display: 'block', color: '#b45309', marginTop: '2px' }}>
+                        💡 掌握全周期节奏提醒：请确保为后续成品发货、试验交付预留充足额度，防范前期把钱分完导致后续有货无钱可分！
+                      </span>
+                    </div>
+                  </div>
+                ) : enteredRate > 0 && enteredRate < currentMonthQuota.rate ? (
+                  <div style={{
+                    marginTop: '4px',
+                    background: '#e0f2fe',
+                    border: '1px solid #bae6fd',
+                    borderRadius: '6px',
+                    padding: '5px 10px',
+                    color: '#0369a1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    <Info size={14} style={{ flexShrink: 0 }} />
+                    <span>
+                      当前录入比例比规划节余 <b>{pct(currentMonthQuota.rate - enteredRate)}</b>，节余额度将自动沉淀为后续发货交付阶段的激励储备。
+                    </span>
+                  </div>
+                ) : enteredRate === currentMonthQuota.rate && enteredRate > 0 ? (
+                  <div style={{
+                    marginTop: '4px',
+                    background: '#dcfce7',
+                    border: '1px solid #bbf7d0',
+                    borderRadius: '6px',
+                    padding: '5px 10px',
+                    color: '#166534',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    <Check size={14} style={{ flexShrink: 0 }} />
+                    <span>
+                      当前录入额度与全周期月度额度规划精准吻合，执行节奏稳健。
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            ) : project.quotaSchedule && project.quotaSchedule.length > 0 ? (
+              <div style={{ color: '#9a3412', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                <span>
+                  当前月份【{month}】未在项目的全周期规划排期中（当前已规划周期包含 {project.quotaSchedule.length} 个月份）。请确认是否为跨周期追加或点击“查看/调整全周期规划”更新排期。
+                </span>
+              </div>
+            ) : (
+              <div style={{ color: '#92400e', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                <span>
+                  该项目尚未制定全周期额度规划。建议项目负责人预先在【项目看板 → 额度规划】做好月度计划与交付物节点排期，避免前期把钱分完、后期有货无钱的被动局面。
+                </span>
+              </div>
+            )}
+
+            {/* 前期透支风险强警报 */}
+            {quotaPerspective?.isFrontLoadedRisk && (
+              <div style={{
+                marginTop: '6px',
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '6px',
+                padding: '6px 10px',
+                color: '#991b1b',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '6px'
+              }}>
+                <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '1px' }} />
+                <div>
+                  <strong>⚠️ 前期透支高危风险预警：</strong>
+                  该项目前期已累计分配或规划较多额度，预估后期交付期储备金仅剩 <b>{wan(quotaPerspective.deliveryStageReserveAmount)} 万元 ({pct(quotaPerspective.deliveryStageReserveRate)})</b>（低于 35% 安全线）。请严格把控本月分配，优先保障后期发货交付成果！
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 成员当月分配比例配置与工作内容 */}
         {project && (

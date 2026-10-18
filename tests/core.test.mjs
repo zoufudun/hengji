@@ -33,6 +33,11 @@ import {
   getInitialProjectGroups,
   exportPeriodMatrixReportCsv,
   exportPeriodReportCsv,
+  getProjectSpanMonths,
+  generateProjectQuotaSchedule,
+  getProjectQuotaPerspective,
+  exportProjectQuotaScheduleCsv,
+  parseProjectQuotaScheduleCsvText,
 } from '../lib/core.ts';
 
 test('项目创建时只保存成员名单，不需要成员固定系数', () => {
@@ -858,4 +863,56 @@ EA5 S部 月度项目组,项目组,邹富墩,"邹富墩、杨健",2,"邹富墩:3
   assert.equal(singleRes.groups[0].name, '单团队导入测试');
   assert.equal(singleRes.groups[0].members.length, 2);
 });
+
+test('项目周期额度规划与全周期透视功能（防前期把钱分完、全景透视）', () => {
+  let state = demoState();
+  const project = state.projects[0]; // project-a (120万, 2026-01 至 2026-03)
+
+  // 1. 验证根据周期生成月份跨度
+  const months = getProjectSpanMonths(project.start, project.end);
+  assert.deepEqual(months, ['2026-01', '2026-02', '2026-03']);
+
+  // 2. 验证生成“稳健交付型（防前期分完）”规划模板：后期交付阶段占 45% 左右，防止后期发货无钱可分
+  const deliverablePlan = generateProjectQuotaSchedule(project, 'deliverable_focused');
+  assert.equal(deliverablePlan.length, 3);
+  const totalRate = deliverablePlan.reduce((s, p) => s + p.rate, 0);
+  assert.equal(totalRate, 10000); // 100%
+  // 最后一期（发货交付期）规划比例明显高于前期
+  assert.ok(deliverablePlan[2].rate >= 4500, '交付发货期应保留至少 45% 额度');
+  assert.ok(deliverablePlan[0].rate <= 2500, '前期规划比例控制在 20%~25%');
+
+  // 3. 验证保存项目额度规划
+  state = execute(state, 'admin', {
+    type: 'project.saveQuotaSchedule',
+    data: {
+      projectId: project.id,
+      quotaSchedule: deliverablePlan,
+    }
+  }, 'save-quota-1', '2026-01-01T00:00:00Z');
+
+  const updatedPrj = state.projects.find(p => p.id === project.id);
+  assert.ok(updatedPrj.quotaSchedule);
+  assert.equal(updatedPrj.quotaSchedule.length, 3);
+  assert.equal(updatedPrj.quotaSchedule[0].month, '2026-01');
+
+  // 4. 验证获取全周期透视数据（规划 vs 实际、偏差、进度）
+  const perspective = getProjectQuotaPerspective(state, project.id);
+  assert.ok(perspective);
+  assert.equal(perspective.totalPlannedRate, 10000);
+  assert.equal(perspective.monthRows.length, 3);
+  // demoState 中 2026-01, 2026-02 已有分配（各 3333 bps，2026-03 有 3334）
+  assert.ok(perspective.totalActualRate > 0);
+
+  // 5. 验证 CSV 导出与导入
+  const csvText = exportProjectQuotaScheduleCsv(perspective);
+  assert.ok(csvText.includes('工作令号'));
+  assert.ok(csvText.includes('规划分配比例(%)'));
+  assert.ok(csvText.includes('2026-01'));
+
+  const parsedSchedule = parseProjectQuotaScheduleCsvText(csvText, project);
+  assert.equal(parsedSchedule.length, 3);
+  assert.equal(parsedSchedule[0].month, '2026-01');
+  assert.equal(parsedSchedule[0].rate, deliverablePlan[0].rate);
+});
+
 

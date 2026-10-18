@@ -14,6 +14,13 @@ export type Employee = {
   active: boolean;
 };
 
+export type ProjectMonthlyQuotaPlan = {
+  month: string;      // 规划月份 YYYY-MM
+  rate: number;       // 规划分配比例（基点 0-10000）
+  milestone?: string; // 阶段里程碑 / 交付目标（如：方案设计、初样研制、联调测试、最终发货交付）
+  note?: string;      // 规划说明 / 交付成果
+};
+
 export type Project = {
   id: string;
   code: string;
@@ -28,6 +35,7 @@ export type Project = {
   historyCompletedAmount?: number; // 历史已完成额度（分），默认为 0
   historyCompletedRate?: number;   // 历史已完成比例（基点 0-10000），默认为 0
   defaultRates?: Record<string, number>; // 可选：项目默认成员分配比例 (基点 0-10000)
+  quotaSchedule?: ProjectMonthlyQuotaPlan[]; // 项目全周期月度额度规划与节奏计划
 };
 
 export type PlanEntry = {
@@ -274,6 +282,8 @@ export function execute(current: State, actorId: string, command: Command, id: s
       members: Array.isArray(data.members) ? data.members.map(String) : [],
       historyCompletedAmount,
       historyCompletedRate,
+      defaultRates: data.defaultRates || old?.defaultRates,
+      quotaSchedule: Array.isArray(data.quotaSchedule) ? data.quotaSchedule : old?.quotaSchedule,
     };
     if (!state.employees.some(employee => employee.id === project.owner && employee.active)) fail('负责人必须是启用中的员工');
     if (old && state.plans.some(plan => plan.projectId === old.id)) {
@@ -408,6 +418,29 @@ export function execute(current: State, actorId: string, command: Command, id: s
     }
     action = '批量设置项目组成员与比例';
     target = `已为 ${count} 个项目配置 ${memberIds.length} 位成员与默认分配比例`;
+  } else if (command.type === 'project.saveQuotaSchedule') {
+    const project = state.projects.find(p => p.id === data.projectId);
+    if (!project) fail('目标项目不存在');
+    if (actor.role !== 'admin' && project.owner !== actor.id) fail('只有管理员或项目负责人可以调整项目额度规划');
+    if (project.status === 'archived') fail('已结项项目不能调整额度规划');
+    if (!Array.isArray(data.quotaSchedule)) fail('规划数据格式不正确');
+
+    const schedule: ProjectMonthlyQuotaPlan[] = data.quotaSchedule.map((item: any) => ({
+      month: text(item.month, '规划月份'),
+      rate: integer(item.rate, '规划比例', 0, SCALE),
+      milestone: typeof item.milestone === 'string' ? item.milestone.slice(0, 200) : '',
+      note: typeof item.note === 'string' ? item.note.slice(0, 200) : '',
+    })).sort((a, b) => a.month.localeCompare(b.month));
+
+    const totalRate = total(schedule.map(s => s.rate));
+    const maxAllocable = Math.max(0, SCALE - (project.historyCompletedRate || 0));
+    if (totalRate > maxAllocable) {
+      fail(`全周期规划分配比例合计（${pct(totalRate)}）不能超过项目可分配余额（${pct(maxAllocable)}）`);
+    }
+
+    project.quotaSchedule = schedule;
+    action = '制定项目额度规划';
+    target = `${project.name} (已规划 ${schedule.length} 个月度，额度规划总额 ${pct(totalRate)})`;
   } else if (command.type.startsWith('plan.')) {
     const old = state.plans.find(plan => plan.id === data.id);
     const project = state.projects.find(item => item.id === (old?.projectId || data.projectId));
@@ -609,7 +642,382 @@ export function getMonthsBetween(startMonth: string, endMonth: string): string[]
   return result;
 }
 
-// 需求2：支持查看每位成员整年度、某些区间或者某几个月度的获得总额度
+// 获取项目起止周期内的完整月份清单（若结束日期待定或为空，默认推导 6 个月）
+export function getProjectSpanMonths(startMonth: string, endMonth?: string, fallbackCount = 6): string[] {
+  if (!startMonth || !monthValid(startMonth)) return [nowMonth()];
+  if (endMonth && monthValid(endMonth) && endMonth >= startMonth) {
+    return getMonthsBetween(startMonth, endMonth);
+  }
+  const result: string[] = [];
+  let [curY, curM] = startMonth.split('-').map(Number);
+  for (let i = 0; i < fallbackCount; i++) {
+    result.push(`${curY}-${String(curM).padStart(2, '0')}`);
+    curM++;
+    if (curM > 12) { curM = 1; curY++; }
+  }
+  return result;
+}
+
+// 自动生成项目周期额度规划策略模板（支持：防前期分光的稳健交付型、全周期平摊、中期攻坚型、同步实际平摊剩余）
+export function generateProjectQuotaSchedule(
+  project: Project,
+  mode: 'deliverable_focused' | 'even' | 'middle_heavy' | 'sync_actual',
+  state?: State
+): ProjectMonthlyQuotaPlan[] {
+  const months = getProjectSpanMonths(project.start, project.end);
+  const totalAllocableRate = Math.max(0, SCALE - (project.historyCompletedRate || 0));
+  const n = months.length;
+  if (n === 0) return [];
+
+  if (mode === 'sync_actual' && state) {
+    // 同步现有实际分配月份并平摊后续剩余额度
+    const actualPlans = state.plans.filter(p => p.projectId === project.id);
+    const actualMap = new Map(actualPlans.map(p => [p.month, p.budget]));
+    let usedRate = 0;
+    const futureMonths: string[] = [];
+
+    for (const m of months) {
+      if (actualMap.has(m)) {
+        usedRate += actualMap.get(m)!;
+      } else {
+        futureMonths.push(m);
+      }
+    }
+
+    const remRate = Math.max(0, totalAllocableRate - usedRate);
+    const futureN = futureMonths.length;
+    const baseShare = futureN > 0 ? Math.floor(remRate / futureN) : 0;
+    let remainder = futureN > 0 ? remRate - baseShare * futureN : 0;
+
+    return months.map(m => {
+      if (actualMap.has(m)) {
+        return {
+          month: m,
+          rate: actualMap.get(m)!,
+          milestone: '已执行阶段',
+          note: '按系统已有分配实际同步'
+        };
+      }
+      let r = baseShare;
+      if (remainder > 0) { r++; remainder--; }
+      return {
+        month: m,
+        rate: r,
+        milestone: '后续研制与交付',
+        note: '按剩余可用额度平摊'
+      };
+    });
+  }
+
+  if (mode === 'deliverable_focused') {
+    // 稳健交付导向型（防前期把钱分完，重在交付验收）：前期 20%，中期 35%，交付发货期 45%
+    if (n === 1) return [{ month: months[0], rate: totalAllocableRate, milestone: '全周期单月交付', note: '集中考核' }];
+    if (n === 2) {
+      const early = Math.round(totalAllocableRate * 0.35);
+      return [
+        { month: months[0], rate: early, milestone: '前期开发与原型试制', note: '前期研制（控制分配节奏）' },
+        { month: months[1], rate: totalAllocableRate - early, milestone: '终检验收与发货交付', note: '最终发货与交付考核（重头保障）' },
+      ];
+    }
+    const earlyCount = Math.max(1, Math.floor(n / 3));
+    const lateCount = Math.max(1, Math.ceil(n / 3));
+    const midCount = n - earlyCount - lateCount;
+
+    const earlyTotal = Math.round(totalAllocableRate * 0.20);
+    const midTotal = midCount > 0 ? Math.round(totalAllocableRate * 0.35) : 0;
+    const lateTotal = totalAllocableRate - earlyTotal - midTotal;
+
+    const res: ProjectMonthlyQuotaPlan[] = [];
+    const earlyBase = Math.floor(earlyTotal / earlyCount);
+    let earlyRem = earlyTotal - earlyBase * earlyCount;
+    for (let i = 0; i < earlyCount; i++) {
+      let r = earlyBase;
+      if (earlyRem > 0) { r++; earlyRem--; }
+      res.push({
+        month: months[i],
+        rate: r,
+        milestone: i === 0 ? '需求方案评审与系统架构设计' : '模块开发与单元调试',
+        note: '前期研发阶段（严格控制消耗，防前期分完）'
+      });
+    }
+
+    if (midCount > 0) {
+      const midBase = Math.floor(midTotal / midCount);
+      let midRem = midTotal - midBase * midCount;
+      for (let i = 0; i < midCount; i++) {
+        let r = midBase;
+        if (midRem > 0) { r++; midRem--; }
+        res.push({
+          month: months[earlyCount + i],
+          rate: r,
+          milestone: i === midCount - 1 ? '系统综合联调与阶段性试验' : '核心部件攻坚与软硬件集成',
+          note: '中期攻坚研发阶段'
+        });
+      }
+    }
+
+    const lateBase = Math.floor(lateTotal / lateCount);
+    let lateRem = lateTotal - lateBase * lateCount;
+    for (let i = 0; i < lateCount; i++) {
+      let r = lateBase;
+      if (lateRem > 0) { r++; lateRem--; }
+      const isLast = i === lateCount - 1;
+      res.push({
+        month: months[earlyCount + midCount + i],
+        rate: r,
+        milestone: isLast ? '成品检验、发货交付与用户验收' : '整机试验验证与出厂调试',
+        note: '交付发货阶段（保障有货有产出时有充裕额度分配）'
+      });
+    }
+    return res;
+  }
+
+  if (mode === 'middle_heavy') {
+    // 攻坚型：前期 15%，中期 70%，交付 15%
+    if (n <= 2) return generateProjectQuotaSchedule(project, 'even');
+    const earlyCount = Math.max(1, Math.floor(n * 0.25));
+    const lateCount = Math.max(1, Math.floor(n * 0.25));
+    const midCount = n - earlyCount - lateCount;
+    const earlyTotal = Math.round(totalAllocableRate * 0.15);
+    const lateTotal = Math.round(totalAllocableRate * 0.15);
+    const midTotal = totalAllocableRate - earlyTotal - lateTotal;
+
+    const res: ProjectMonthlyQuotaPlan[] = [];
+    const distribute = (mList: string[], tot: number, stageName: string, stageNote: string) => {
+      const base = Math.floor(tot / mList.length);
+      let rem = tot - base * mList.length;
+      for (let i = 0; i < mList.length; i++) {
+        let r = base;
+        if (rem > 0) { r++; rem--; }
+        res.push({ month: mList[i], rate: r, milestone: `${stageName}（第${i + 1}阶段）`, note: stageNote });
+      }
+    };
+    distribute(months.slice(0, earlyCount), earlyTotal, '需求与方案论证', '前期论证');
+    distribute(months.slice(earlyCount, earlyCount + midCount), midTotal, '核心技术攻坚与联调', '中期攻坚');
+    distribute(months.slice(earlyCount + midCount), lateTotal, '验收交付与发货', '后期交付');
+    return res;
+  }
+
+  // 默认 even: 全周期均匀平摊
+  const base = Math.floor(totalAllocableRate / n);
+  let rem = totalAllocableRate - base * n;
+  return months.map((m, idx) => {
+    let r = base;
+    if (rem > 0) { r++; rem--; }
+    return {
+      month: m,
+      rate: r,
+      milestone: `项目第 ${idx + 1} 阶段`,
+      note: '全周期按月平摊'
+    };
+  });
+}
+
+// 获取项目全周期额度规划与实际执行全景透视数据
+export function getProjectQuotaPerspective(state: State, projectId: string) {
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) return null;
+
+  const actualPlans = state.plans.filter(p => p.projectId === projectId);
+  const actualMap = new Map<string, { budget: number; status: 'draft' | 'published'; amount: number; note: string }>();
+  for (const pl of actualPlans) {
+    const amt = monthAmount(project, pl);
+    actualMap.set(pl.month, { budget: pl.budget, status: pl.status, amount: amt, note: pl.note });
+  }
+
+  const schedule = project.quotaSchedule || [];
+  const scheduleMap = new Map<string, ProjectMonthlyQuotaPlan>(schedule.map(s => [s.month, s]));
+
+  const monthSet = new Set<string>();
+  for (const m of getProjectSpanMonths(project.start, project.end)) monthSet.add(m);
+  for (const s of schedule) monthSet.add(s.month);
+  for (const p of actualPlans) monthSet.add(p.month);
+
+  const sortedMonths = Array.from(monthSet).sort((a, b) => a.localeCompare(b));
+
+  let cumPlanned = 0;
+  let cumActual = 0;
+  let overbudgetCount = 0;
+
+  const monthRows = sortedMonths.map(month => {
+    const planItem = scheduleMap.get(month);
+    const plannedRate = planItem?.rate || 0;
+    const plannedAmount = points(project.contract, plannedRate);
+
+    const actualItem = actualMap.get(month);
+    const actualRate = actualItem?.budget || 0;
+    const actualAmount = actualItem?.amount || 0;
+    const actualStatus = actualItem?.status || 'none';
+
+    cumPlanned += plannedRate;
+    cumActual += actualRate;
+
+    const diffRate = actualRate - plannedRate; // > 0 意味着实际超额
+    const isOver = plannedRate > 0 ? actualRate > plannedRate : actualRate > 0;
+    if (isOver && actualRate > 0) overbudgetCount++;
+
+    return {
+      month,
+      plannedRate,
+      plannedPct: pct(plannedRate),
+      plannedAmountWan: (plannedAmount / 1_000_000).toFixed(4),
+      milestone: planItem?.milestone || '',
+      note: planItem?.note || '',
+      actualRate,
+      actualPct: pct(actualRate),
+      actualAmountWan: (actualAmount / 1_000_000).toFixed(4),
+      actualStatus,
+      actualNote: actualItem?.note || '',
+      cumPlannedRate: cumPlanned,
+      cumPlannedPct: pct(cumPlanned),
+      cumActualRate: cumActual,
+      cumActualPct: pct(cumActual),
+      diffRate,
+      diffPct: (diffRate > 0 ? '+' : '') + pct(diffRate),
+      isOver,
+    };
+  });
+
+  const totalPlannedRate = total(monthRows.map(r => r.plannedRate));
+  const totalActualRate = total(monthRows.map(r => r.actualRate));
+  const historyCompletedRate = project.historyCompletedRate || 0;
+  const historyCompletedAmount = project.historyCompletedAmount || 0;
+
+  const maxAllocableRate = Math.max(0, SCALE - historyCompletedRate);
+  const remainingRate = Math.max(0, maxAllocableRate - totalActualRate);
+  const remainingAmount = Math.max(0, project.contract - historyCompletedAmount - monthAmount(project, { budget: totalActualRate } as Plan));
+
+  // 风险评估：透视前期把钱分完导致后续无钱可分配的风险
+  const riskWarnings: string[] = [];
+  let isFrontLoadedRisk = false;
+
+  const totalMonths = sortedMonths.length;
+  const currentM = nowMonth();
+  const pastMonthsCount = sortedMonths.filter(m => m <= currentM).length;
+  const timeProgressRate = totalMonths > 0 ? Math.round((pastMonthsCount * 10000) / totalMonths) : 0;
+  const spendProgressRate = maxAllocableRate > 0 ? Math.round((totalActualRate * 10000) / maxAllocableRate) : 0;
+
+  if (spendProgressRate > 7000 && timeProgressRate < 5000) {
+    isFrontLoadedRisk = true;
+    riskWarnings.push(`前期额度消耗过快风险：时间进度仅 ${pct(timeProgressRate)}，但已分配 ${pct(spendProgressRate)} 额度。后期交付发货阶段面临额度枯竭风险！`);
+  }
+
+  if (remainingRate < 1500 && sortedMonths.filter(m => m > currentM).length >= 2) {
+    isFrontLoadedRisk = true;
+    riskWarnings.push(`后期交付额度储备不足：后续剩余月份仅剩 ${pct(remainingRate)} (${wan(remainingAmount)} 万元)，建议控制前期月度分配节奏，确保发货交付时有钱可分！`);
+  }
+
+  if (overbudgetCount > 0) {
+    riskWarnings.push(`共有 ${overbudgetCount} 个月份的实际分配额度超出了原定的月度规划值。`);
+  }
+
+  if (totalPlannedRate < maxAllocableRate) {
+    riskWarnings.push(`全周期月度额度规划尚有 ${pct(maxAllocableRate - totalPlannedRate)} (${wan(points(project.contract, maxAllocableRate - totalPlannedRate))} 万元) 未安排月度规划。`);
+  }
+
+  return {
+    project,
+    contractWan: wan(project.contract),
+    historyCompletedRate,
+    historyCompletedPct: pct(historyCompletedRate),
+    historyCompletedWan: wan(historyCompletedAmount),
+    monthRows,
+    totalPlannedRate,
+    totalPlannedPct: pct(totalPlannedRate),
+    totalPlannedWan: (points(project.contract, totalPlannedRate) / 1_000_000).toFixed(4),
+    totalActualRate,
+    totalActualPct: pct(totalActualRate),
+    totalActualWan: (monthAmount(project, { budget: totalActualRate } as Plan) / 1_000_000).toFixed(4),
+    remainingRate,
+    remainingPct: pct(remainingRate),
+    remainingWan: wan(remainingAmount),
+    maxAllocableRate,
+    maxAllocablePct: pct(maxAllocableRate),
+    overbudgetCount,
+    isFrontLoadedRisk,
+    riskWarnings,
+  };
+}
+
+// 导出项目周期额度规划与透视 CSV
+export function exportProjectQuotaScheduleCsv(perspective: ReturnType<typeof getProjectQuotaPerspective>): string {
+  if (!perspective) return '';
+  const headers = [
+    '工作令号',
+    '项目名称',
+    '规划月份',
+    '阶段里程碑与交付目标',
+    '规划分配比例(%)',
+    '规划额度(万元)',
+    '实际已分配比例(%)',
+    '实际已分配额度(万元)',
+    '分配状态',
+    '累计规划比例(%)',
+    '累计实际比例(%)',
+    '执行偏差(%)',
+    '规划说明与交付物'
+  ];
+  const rows = perspective.monthRows.map(r => [
+    perspective.project.code,
+    perspective.project.name,
+    r.month,
+    r.milestone || '阶段研制',
+    (r.plannedRate / 100).toFixed(2),
+    r.plannedAmountWan,
+    (r.actualRate / 100).toFixed(2),
+    r.actualAmountWan,
+    r.actualStatus === 'published' ? '已发布' : r.actualStatus === 'draft' ? '草稿待发布' : '未分配',
+    (r.cumPlannedRate / 100).toFixed(2),
+    (r.cumActualRate / 100).toFixed(2),
+    (r.diffRate / 100).toFixed(2),
+    r.note || ''
+  ]);
+  return generateCsv(headers, rows);
+}
+
+// 解析项目额度规划 CSV 文本
+export function parseProjectQuotaScheduleCsvText(csvText: string, project: Project): ProjectMonthlyQuotaPlan[] {
+  const rows = parseCsv(csvText);
+  if (rows.length === 0) return [];
+  const firstRow = rows[0];
+  let monthCol = -1, rateCol = -1, milestoneCol = -1, noteCol = -1;
+
+  for (let i = 0; i < firstRow.length; i++) {
+    const cell = firstRow[i].trim();
+    if (/月份|月度|时间|周期/.test(cell) && monthCol === -1) monthCol = i;
+    else if (/规划比例|分配比例|比例/.test(cell) && rateCol === -1) rateCol = i;
+    else if (/里程碑|阶段|目标|任务/.test(cell) && milestoneCol === -1) milestoneCol = i;
+    else if (/说明|备注|交付物|内容/.test(cell) && noteCol === -1) noteCol = i;
+  }
+
+  const result: ProjectMonthlyQuotaPlan[] = [];
+  const dataRows = rows.slice(1);
+  for (const row of dataRows) {
+    if (!row || row.length === 0 || row.every(c => !c.trim())) continue;
+    const rawMonth = monthCol !== -1 ? (row[monthCol] || '').trim() : '';
+    const normMonth = normalizeMonthInput(rawMonth);
+    if (!normMonth || !monthValid(normMonth)) continue;
+
+    const rawRate = rateCol !== -1 ? (row[rateCol] || '').trim() : '';
+    let parsedRate = 0;
+    if (rawRate) {
+      const num = parseFloat(rawRate.replace('%', '').trim());
+      if (!isNaN(num)) parsedRate = Math.round(num * 100);
+    }
+
+    const milestone = milestoneCol !== -1 ? (row[milestoneCol] || '').trim() : '';
+    const note = noteCol !== -1 ? (row[noteCol] || '').trim() : '';
+
+    result.push({
+      month: normMonth,
+      rate: Math.max(0, Math.min(SCALE, parsedRate)),
+      milestone,
+      note,
+    });
+  }
+
+  return result.sort((a, b) => a.month.localeCompare(b.month));
+}
 export function rangeReport(state: State, options: {
   startMonth?: string;
   endMonth?: string;
