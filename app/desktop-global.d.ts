@@ -12,5 +12,6 @@ declare global { interface Window { meritDesktop: {
   lock(): Promise<boolean>;
   exportCsv(payload: { content: string; defaultPath: string }): Promise<boolean>;
   showData(): Promise<void>;
+  refocusWindow?(): Promise<boolean>;
 } } }
 export {};

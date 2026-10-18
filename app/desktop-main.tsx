@@ -11,6 +11,48 @@ window.addEventListener('unhandledrejection', (event) => {
   console.error('[Unhandled Rejection]', event.reason);
 });
 
+// Windows/Electron 焦点自动恢复：保证点击或输入表单时 WebContents 处于硬件激活对焦状态，避免输入框偶发假死
+if (typeof window !== 'undefined') {
+  window.addEventListener('mousedown', () => {
+    if (window.meritDesktop?.refocusWindow) {
+      window.meritDesktop.refocusWindow();
+    }
+  }, { passive: true });
+
+  document.addEventListener('focusin', (e) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+      if (window.meritDesktop?.refocusWindow) {
+        window.meritDesktop.refocusWindow();
+      }
+    }
+  }, { passive: true });
+
+  // 避免原生 alert/confirm 弹出后 Windows 丢失键盘焦点导致输入框无法输入
+  const origAlert = window.alert;
+  window.alert = function(...args) {
+    const res = origAlert.apply(window, args);
+    setTimeout(() => {
+      window.focus();
+      if (window.meritDesktop?.refocusWindow) {
+        window.meritDesktop.refocusWindow();
+      }
+    }, 50);
+    return res;
+  };
+
+  const origConfirm = window.confirm;
+  window.confirm = function(...args) {
+    const res = origConfirm.apply(window, args);
+    setTimeout(() => {
+      window.focus();
+      if (window.meritDesktop?.refocusWindow) {
+        window.meritDesktop.refocusWindow();
+      }
+    }, 50);
+    return res;
+  };
+}
+
 interface ErrorBoundaryProps {
   children: React.ReactNode;
 }

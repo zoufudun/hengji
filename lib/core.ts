@@ -2293,7 +2293,7 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.5.2';
+export const APP_VERSION = '0.5.3';
 export const APP_BUILD = '20261018';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
@@ -2307,6 +2307,18 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.5.3',
+    date: '2026-10-18',
+    tag: '常规迭代',
+    title: '输入框键盘焦点脱钩修复与数值录入体验优化',
+    items: [
+      '【彻底修复 Windows 键盘焦点脱钩】根治系统模态框（如文件打开/保存对话框、原生提示等）关闭后，Chromium 子窗口失去键盘焦点导致输入框“经常无法输入、必须最小化点击其他软件再激活才可输入”的系统级缺陷。',
+      '【主进程与渲染进程硬件焦点双向保活】新增 workspace:refocus-window 原生 IPC 唤醒机制，在原生对话框返回、窗口激活及点击输入框时主动执行 win.webContents.focus() 恢复硬件按键消息分发。',
+      '【输入框点击命中区与穿透优化】优化百分比输入框 (.suffix-input) 样式，针对后缀百分号 % 设置 pointer-events: none 防遮挡，并在容器点击时自动将光标注入输入框，杜绝边缘命中失败。',
+      '【受控组件录入阻截彻底消除】将月度分配比例、成员占比及规划额度输入框从原生 number 升级为 text (inputMode=\"decimal\")，配合本地缓冲与失焦归一化，支持顺畅输入小数点、0、连续退格与编辑，杜绝数字被截断吞没。'
+    ]
+  },
   {
     version: 'v0.5.2',
     date: '2026-10-18',

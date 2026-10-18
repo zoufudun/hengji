@@ -1811,12 +1811,17 @@ function BatchProjectTeamModal({
                       {emp?.name || empId}
                     </span>
                   </div>
-                  <div className="suffix-input" style={{ width: '82px', height: '28px' }}>
+                  <div
+                    className="suffix-input"
+                    style={{ width: '82px', height: '28px' }}
+                    onClick={e => {
+                      const input = e.currentTarget.querySelector('input');
+                      if (input && document.activeElement !== input) input.focus();
+                    }}
+                  >
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="100"
+                      type="text"
+                      inputMode="decimal"
                       value={rates[empId] || ''}
                       onChange={e => setRates(prev => ({ ...prev, [empId]: e.target.value }))}
                       placeholder="0.00"
@@ -2784,6 +2789,7 @@ function ProjectQuotaModal({
     return generateProjectQuotaSchedule(project, 'deliverable_focused', state);
   });
 
+  const [rateStrings, setRateStrings] = useState<Record<number, string>>({});
   const [newMonth, setNewMonth] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
@@ -2842,6 +2848,7 @@ function ProjectQuotaModal({
   }, [schedule, actualMap, project.contract]);
 
   const handleApplyPreset = (mode: 'deliverable_focused' | 'even' | 'middle_heavy' | 'sync_actual') => {
+    setRateStrings({});
     const generated = generateProjectQuotaSchedule(project, mode, state);
     setSchedule(generated);
     if (mode === 'deliverable_focused') {
@@ -2856,22 +2863,36 @@ function ProjectQuotaModal({
   };
 
   const handleRateChange = (index: number, valStr: string) => {
+    setRateStrings(prev => ({ ...prev, [index]: valStr }));
     const clean = valStr.replace('%', '').trim();
     const num = parseFloat(clean);
-    let newRate = isNaN(num) ? 0 : Math.max(0, Math.min(10000, Math.round(num * 100)));
-    const stageType = getQuotaPlanStageType(schedule[index]);
-    if (stageType === 'bidding' && newRate > BIDDING_MAX_RATE) {
-      newRate = BIDDING_MAX_RATE;
-      setNotice('⚠️ 前期项目争取阶段额度为 0-10% 可调，最高不可超过 10.00%');
+    if (!isNaN(num)) {
+      let newRate = Math.max(0, Math.min(10000, Math.round(num * 100)));
+      const stageType = getQuotaPlanStageType(schedule[index]);
+      if (stageType === 'bidding' && newRate > BIDDING_MAX_RATE) {
+        newRate = BIDDING_MAX_RATE;
+        setNotice('⚠️ 前期项目争取阶段额度为 0-10% 可调，最高不可超过 10.00%');
+      }
+      setSchedule(prev => {
+        const copy = [...prev];
+        copy[index] = { ...copy[index], rate: newRate };
+        return copy;
+      });
+    } else if (clean === '') {
+      setSchedule(prev => {
+        const copy = [...prev];
+        copy[index] = { ...copy[index], rate: 0 };
+        return copy;
+      });
     }
-    setSchedule(prev => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], rate: newRate };
-      return copy;
-    });
   };
 
   const adjustRateStep = (index: number, deltaPct: number) => {
+    setRateStrings(prev => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
     setSchedule(prev => {
       const copy = [...prev];
       const stageType = getQuotaPlanStageType(copy[index]);
@@ -2887,6 +2908,11 @@ function ProjectQuotaModal({
   };
 
   const handleSetRowStageType = (index: number, stageType: ProjectQuotaStageType) => {
+    setRateStrings(prev => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
     setSchedule(prev => {
       const copy = [...prev];
       const cur = copy[index];
@@ -2924,6 +2950,7 @@ function ProjectQuotaModal({
 
   const handleLockMaintenanceAtEnd = () => {
     if (schedule.length === 0) return;
+    setRateStrings({});
     setSchedule(prev => {
       const copy = [...prev];
       const lastIdx = copy.length - 1;
@@ -2941,6 +2968,7 @@ function ProjectQuotaModal({
 
   const handleSetFirstMonthBidding = (ratePct = 5) => {
     if (schedule.length === 0) return;
+    setRateStrings({});
     const targetRate = Math.min(1000, Math.max(0, Math.round(ratePct * 100)));
     setSchedule(prev => {
       const copy = [...prev];
@@ -2973,6 +3001,7 @@ function ProjectQuotaModal({
   };
 
   const handleDeleteMonth = (index: number) => {
+    setRateStrings({});
     setSchedule(prev => prev.filter((_, i) => i !== index));
   };
 
@@ -2986,12 +3015,12 @@ function ProjectQuotaModal({
         const nextM = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
         targetMonth = nextM;
       } else {
-        alert('请输入合法的月份格式，例如 2026-07');
+        setNotice('⚠️ 请输入合法的月份格式，例如 2026-07');
         return;
       }
     }
     if (schedule.some(s => s.month === targetMonth)) {
-      alert(`月份 ${targetMonth} 已存在于规划中`);
+      setNotice(`⚠️ 月份 ${targetMonth} 已存在于规划中`);
       return;
     }
     let defaultRate = 0;
@@ -3006,6 +3035,7 @@ function ProjectQuotaModal({
       milestone = '维保阶段（项目结束）';
       note = '项目结束阶段维保支持（保留5%额度）';
     }
+    setRateStrings({});
     const nextList = [...schedule, { month: targetMonth, rate: defaultRate, milestone, note, stageType }];
     nextList.sort((a, b) => a.month.localeCompare(b.month));
     setSchedule(nextList);
@@ -3019,6 +3049,7 @@ function ProjectQuotaModal({
       setNotice('当前规划已达到或超出可用额度上限，无需补齐');
       return;
     }
+    setRateStrings({});
     setSchedule(prev => {
       const copy = [...prev];
       // 如果最后一期是维保阶段，则补齐到倒数第二期（发货交付阶段），绝不占用维保的5%！
@@ -3073,10 +3104,11 @@ function ProjectQuotaModal({
         const text = evt.target?.result as string;
         const parsed = parseProjectQuotaScheduleCsvText(text, project);
         if (parsed.length === 0) throw new Error('CSV中未找到有效月份额度规划数据');
+        setRateStrings({});
         setSchedule(parsed);
         setNotice(`已从 CSV 导入 ${parsed.length} 个月份的额度规划`);
       } catch (err) {
-        alert(errorText(err));
+        setNotice(`⚠️ ${errorText(err)}`);
       }
     };
     reader.readAsText(file, 'utf-8');
@@ -3085,11 +3117,11 @@ function ProjectQuotaModal({
 
   const handleSave = async () => {
     if (isOverAllocable) {
-      alert(`全周期规划额度总和（${pct(totalPlannedRate)}）不能超过项目可用额度上限（${pct(maxAllocableRate)}），请调减部分月份后再保存`);
+      setNotice(`⚠️ 全周期规划额度总和（${pct(totalPlannedRate)}）不能超过项目可用额度上限（${pct(maxAllocableRate)}），请调减部分月份后再保存`);
       return;
     }
     if (isBiddingOver) {
-      alert(`前期项目争取阶段额度总和（${pct(biddingTotalRate)}）不能超过 10%（0-10%可调），请调整后再保存`);
+      setNotice(`⚠️ 前期项目争取阶段额度总和（${pct(biddingTotalRate)}）不能超过 10%（0-10%可调），请调整后再保存`);
       return;
     }
     setSaving(true);
@@ -3395,14 +3427,26 @@ function ProjectQuotaModal({
                     </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <div className="suffix-input" style={{ width: '85px', height: '30px' }}>
+                        <div
+                          className="suffix-input"
+                          style={{ width: '85px', height: '30px' }}
+                          onClick={e => {
+                            const input = e.currentTarget.querySelector('input');
+                            if (input && document.activeElement !== input) input.focus();
+                          }}
+                        >
                           <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            max={stageType === 'bidding' ? '10' : '100'}
-                            value={item.rate > 0 ? (item.rate / 100).toFixed(2).replace(/\.00$/, '') : ''}
+                            type="text"
+                            inputMode="decimal"
+                            value={rateStrings[index] !== undefined ? rateStrings[index] : (item.rate > 0 ? (item.rate / 100).toFixed(2).replace(/\.00$/, '') : '')}
                             onChange={e => handleRateChange(index, e.target.value)}
+                            onBlur={() => {
+                              setRateStrings(prev => {
+                                const next = { ...prev };
+                                delete next[index];
+                                return next;
+                              });
+                            }}
                             placeholder="0.00"
                             style={{ textAlign: 'right', fontSize: '12px', height: '28px', color: stageType === 'bidding' && item.rate > 1000 ? '#b91c1c' : undefined }}
                           />
@@ -4025,6 +4069,7 @@ function PlansView({
 
   // 行内草稿修改状态：Record<projectId, { budget: number; entries: PlanEntry[]; dirty: boolean }>
   const [draftEdits, setDraftEdits] = useState<Record<string, { budget: number; entries: PlanEntry[]; dirty: boolean }>>({});
+  const [budgetStrings, setBudgetStrings] = useState<Record<string, string>>({});
 
   // 勾选的项目行 ID（对应 plan.id 或 project.id）
   const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
@@ -4130,7 +4175,15 @@ function PlansView({
   };
 
   // 行内预算调整
-  const handleUpdateBudget = (projectId: string, newRate: number) => {
+  const handleUpdateBudget = (projectId: string, newRate: number, clearStr = true) => {
+    if (clearStr) {
+      setBudgetStrings(prev => {
+        if (prev[projectId] === undefined) return prev;
+        const next = { ...prev };
+        delete next[projectId];
+        return next;
+      });
+    }
     const clamped = Math.max(0, Math.min(10000, Math.round(newRate)));
     setDraftEdits(prev => {
       const curEntries = prev[projectId]?.entries || monthPerspective.rows.find(r => r.project.id === projectId)?.entries || [];
@@ -4156,6 +4209,12 @@ function PlansView({
       entries: edit.entries
     }]);
     if (ok) {
+      setBudgetStrings(prev => {
+        if (prev[projectId] === undefined) return prev;
+        const next = { ...prev };
+        delete next[projectId];
+        return next;
+      });
       setDraftEdits(prev => {
         const next = { ...prev };
         delete next[projectId];
@@ -4166,6 +4225,7 @@ function PlansView({
 
   // 一键按规划填充当月额度
   const handleApplyAllPlanned = () => {
+    setBudgetStrings({});
     const nextEdits = { ...draftEdits };
     let count = 0;
     for (const r of monthPerspective.rows) {
@@ -4184,6 +4244,7 @@ function PlansView({
 
   // 一键应用项目组默认比例
   const handleApplyAllTeamDefaults = () => {
+    setBudgetStrings({});
     const nextEdits = { ...draftEdits };
     for (const r of monthPerspective.rows) {
       if (r.project.defaultRates && Object.keys(r.project.defaultRates).length > 0 && r.status !== 'published') {
@@ -4864,13 +4925,28 @@ function PlansView({
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
                             <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              max="100"
+                              type="text"
+                              inputMode="decimal"
                               disabled={row.status === 'published'}
-                              value={(currentBudget / 100).toFixed(2)}
-                              onChange={e => handleUpdateBudget(pId, parseFloat(e.target.value || '0') * 100)}
+                              value={budgetStrings[pId] !== undefined ? budgetStrings[pId] : (currentBudget / 100).toFixed(2).replace(/\.00$/, '')}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setBudgetStrings(prev => ({ ...prev, [pId]: val }));
+                                const clean = val.replace('%', '').trim();
+                                const num = parseFloat(clean);
+                                if (!isNaN(num)) {
+                                  handleUpdateBudget(pId, num * 100, false);
+                                } else if (clean === '') {
+                                  handleUpdateBudget(pId, 0, false);
+                                }
+                              }}
+                              onBlur={() => {
+                                setBudgetStrings(prev => {
+                                  const next = { ...prev };
+                                  delete next[pId];
+                                  return next;
+                                });
+                              }}
                               style={{
                                 width: '68px',
                                 textAlign: 'center',
@@ -5858,12 +5934,17 @@ function GroupEditModal({
                     <span style={{ fontSize: '11.5px', fontWeight: 500, color: '#334155', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                       {isLeader && '👑'} {emp?.name || empId}
                     </span>
-                    <div className="suffix-input" style={{ width: '80px', height: '28px' }}>
+                    <div
+                      className="suffix-input"
+                      style={{ width: '80px', height: '28px' }}
+                      onClick={e => {
+                        const input = e.currentTarget.querySelector('input');
+                        if (input && document.activeElement !== input) input.focus();
+                      }}
+                    >
                       <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max="100"
+                        type="text"
+                        inputMode="decimal"
                         value={rates[empId] || ''}
                         onChange={e => setRates(prev => ({ ...prev, [empId]: e.target.value }))}
                         placeholder="0.00"
@@ -8496,8 +8577,16 @@ function ProjectFormModal({ state, value, initialGroupId, projectGroups, onSaveG
                   />
                 </Field>
                 <Field label="历史已完成比例（%）" hint="占合同总额的历史完成比例，与额度双向联动">
-                  <div className="suffix-input">
+                  <div
+                    className="suffix-input"
+                    onClick={e => {
+                      const input = e.currentTarget.querySelector('input');
+                      if (input && document.activeElement !== input) input.focus();
+                    }}
+                  >
                     <input
+                      type="text"
+                      inputMode="decimal"
                       value={historyCompletedRateStr}
                       onChange={e => handleHistoryCompletedRateChange(e.target.value)}
                       placeholder="例如：43.61"
@@ -8508,6 +8597,8 @@ function ProjectFormModal({ state, value, initialGroupId, projectGroups, onSaveG
                 </Field>
                 <Field label="后续剩余可分配额度（万元）" hint="本系统后续月度方案只能从该剩余额度中分配">
                   <input
+                    type="text"
+                    inputMode="decimal"
                     value={remainingWan}
                     onChange={e => handleRemainingWanChange(e.target.value)}
                     placeholder="例如：77.59"
@@ -8515,8 +8606,16 @@ function ProjectFormModal({ state, value, initialGroupId, projectGroups, onSaveG
                   />
                 </Field>
                 <Field label="后续剩余比例（%）" hint="占合同总额的后续分配限额比例，与额度双向联动">
-                  <div className="suffix-input">
+                  <div
+                    className="suffix-input"
+                    onClick={e => {
+                      const input = e.currentTarget.querySelector('input');
+                      if (input && document.activeElement !== input) input.focus();
+                    }}
+                  >
                     <input
+                      type="text"
+                      inputMode="decimal"
                       value={remainingRateStr}
                       onChange={e => handleRemainingRateChange(e.target.value)}
                       placeholder="例如：56.39"
@@ -9050,8 +9149,21 @@ function PlanFormModal({ state, value, initialProjectId, projectGroups, onSaveGr
               )
             ) : ''}
           >
-            <div className="suffix-input">
-              <input value={budget} onChange={e => setBudget(e.target.value)} placeholder="例如 33.33" required />
+            <div
+              className="suffix-input"
+              onClick={e => {
+                const input = e.currentTarget.querySelector('input');
+                if (input && document.activeElement !== input) input.focus();
+              }}
+            >
+              <input
+                type="text"
+                inputMode="decimal"
+                value={budget}
+                onChange={e => setBudget(e.target.value)}
+                placeholder="例如 33.33"
+                required
+              />
               <span>%</span>
             </div>
           </Field>
@@ -9463,13 +9575,18 @@ function PlanFormModal({ state, value, initialProjectId, projectGroups, onSaveGr
 
                         {/* 分配比例输入列 */}
                         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '0 4px' }}>
-                          <div className="suffix-input" style={{ width: 100, height: Math.min(32, rowHeight - 6) }}>
+                          <div
+                            className="suffix-input"
+                            style={{ width: 100, height: Math.min(32, rowHeight - 6) }}
+                            onClick={e => {
+                              const input = e.currentTarget.querySelector('input');
+                              if (input && document.activeElement !== input) input.focus();
+                            }}
+                          >
                             <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              max="100"
-                              value={rates[empId] || ''}
+                              type="text"
+                              inputMode="decimal"
+                              value={rates[empId] !== undefined ? rates[empId] : ''}
                               onChange={e => setRates(c => ({ ...c, [empId]: e.target.value }))}
                               onBlur={() => {
                                 setPlanMembers(prev => autoSortMembersByRate(prev, rates));

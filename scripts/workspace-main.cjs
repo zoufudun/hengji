@@ -37,6 +37,13 @@ function publicSession() {
   return { open: true, name: session.name, revision: session.revision, actorId: session.actorId, state: session.state, projectGroups: session.projectGroups || [], filePath: session.filePath };
 }
 
+function restoreFocus(win) {
+  if (win && !win.isDestroyed()) {
+    win.focus();
+    win.webContents.focus();
+  }
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1440,
@@ -57,12 +64,19 @@ function createWindow() {
   win.removeMenu();
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('file://')) event.preventDefault(); });
+  win.on('focus', () => { restoreFocus(win); });
   win.loadFile(path.join(__dirname, '..', 'build', 'desktop', 'desktop.html'));
 }
 
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion,MediaRouter');
 app.whenReady().then(() => {
   ipcMain.handle('workspace:status', () => ({ ...publicSession(), hasLegacyData: fs.existsSync(path.join(app.getPath('userData'), 'merit-data.json')) }));
+
+  ipcMain.handle('workspace:refocus-window', (_event) => {
+    const win = BrowserWindow.fromWebContents(_event.sender) || BrowserWindow.getFocusedWindow();
+    restoreFocus(win);
+    return true;
+  });
 
   ipcMain.handle('workspace:choose-open', async (_event) => {
     const win = BrowserWindow.fromWebContents(_event.sender) || BrowserWindow.getFocusedWindow();
@@ -71,6 +85,7 @@ app.whenReady().then(() => {
       properties: ['openFile'],
       filters: [{ name: '衡绩加密工作区', extensions: ['hengji'] }]
     });
+    restoreFocus(win);
     return result.canceled ? null : result.filePaths[0];
   });
 
@@ -106,6 +121,7 @@ app.whenReady().then(() => {
       defaultPath,
       filters: [{ name: '衡绩加密工作区', extensions: ['hengji'] }]
     });
+    restoreFocus(win);
     if (result.canceled || !result.filePath) return null;
     const initial = {
       name: cleanName(payload.name),
@@ -131,6 +147,7 @@ app.whenReady().then(() => {
       defaultPath: path.join(defaultDir, `${cleanName(payload.name || session.name)}.hengji`),
       filters: [{ name: '衡绩加密工作区', extensions: ['hengji'] }]
     });
+    restoreFocus(win);
     if (result.canceled || !result.filePath) return null;
     session.filePath = result.filePath;
     return saveSession({ ...payload, revision: session.revision });
@@ -145,6 +162,7 @@ app.whenReady().then(() => {
       defaultPath: path.join(defaultDir, `${cleanName(session.name)}-共享基础库.hjbase`),
       filters: [{ name: '衡绩共享基础库', extensions: ['hjbase'] }]
     });
+    restoreFocus(win);
     if (result.canceled || !result.filePath) return false;
     const base = {
       format: 'hengji-public-base',
@@ -163,6 +181,7 @@ app.whenReady().then(() => {
       properties: ['openFile'],
       filters: [{ name: '衡绩共享基础库', extensions: ['hjbase'] }]
     });
+    restoreFocus(win);
     if (result.canceled || !result.filePaths || result.filePaths.length === 0) return null;
     const base = JSON.parse(fs.readFileSync(result.filePaths[0], 'utf8'));
     if (base.format !== 'hengji-public-base' || !Array.isArray(base.employees)) throw new Error('共享基础库格式不正确');
@@ -178,6 +197,7 @@ app.whenReady().then(() => {
       defaultPath,
       filters: [{ name: 'CSV 表格', extensions: ['csv'] }]
     });
+    restoreFocus(win);
     if (result.canceled || !result.filePath) return false;
     fs.writeFileSync(result.filePath, `\ufeff${content}`, 'utf8');
     return true;
