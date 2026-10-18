@@ -129,10 +129,11 @@ main { grid-column: 2; min-width: 0; }
 .split { display: grid; grid-template-columns: 1fr 1.3fr; gap: 16px; }
 .panel { background: #fff; border: 1px solid #e0e6e2; border-radius: 14px; padding: 22px; }
 .panel.full { min-height: calc(100vh - 130px); }
-.panel-title, .page-title { display: flex; justify-content: space-between; align-items: flex-start; }
+.panel-title, .page-title { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; }
 .panel-title span { font-size: 11px; color: #82928a; }
 .panel-title h2 { margin: 4px 0 16px; font-size: 17px; color: #152b24; }
 .page-title { padding: 4px 2px 20px; border-bottom: 1px solid #e3e8e5; margin-bottom: 20px; }
+.page-title > div:first-child { flex: 1 1 360px; min-width: 260px; }
 .page-title h1 { font-size: 25px; margin: 4px 0 6px; color: #142822; }
 .page-title p { color: #687971; margin: 0; font-size: 13px; }
 .text-button { border: 0; background: transparent; color: #1e5a47; font-size: 12px; font-weight: 500; }

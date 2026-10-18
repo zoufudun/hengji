@@ -2293,7 +2293,7 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.5.1';
+export const APP_VERSION = '0.5.2';
 export const APP_BUILD = '20261018';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
@@ -2307,6 +2307,18 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.5.2',
+    date: '2026-10-18',
+    tag: '常规迭代',
+    title: '全屏与非全屏自适应布局优化与双层控制台重构',
+    items: [
+      '【非全屏与中窄屏自适应】彻底解决非全屏（中等/窄窗口如 1000px-1366px）下月度分配工具栏与统计指标折行断截、界面凌乱的问题，实现全屏与非全屏无缝平滑自适应。',
+      '【标题与操作区防挤压】优化页面标题与主副视图切换按键布局，设置弹性伸缩与文字防折行保护，杜绝“全项目当月集中管理”等按键文字断词换行。',
+      '【双层响应式控制台重构】将月度分配操作工具栏升级为结构清晰的双层高内聚面板：上层统一承载状态筛选胶囊、自适应搜索框与自动化填充工具；下层专注负责快捷多选工具与“🚀 批量发布 / ↩ 批量撤回”核心执行操作，消除孤行悬挂。',
+      '【指标卡片自适应平整排布】指标概览卡片（项目总计、配置进度、全周期规划、当月分配）优化为紧凑平整排列，自适应伸缩不换行。'
+    ]
+  },
   {
     version: 'v0.5.1',
     date: '2026-10-18',

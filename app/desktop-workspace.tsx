@@ -4362,8 +4362,8 @@ function PlansView({
         title="月底分配与全项目集中管理"
         description="集中查看所有项目当月的分配额度与全周期规划节奏。支持批量微调额度、人员分配与一键批量发布，高效完成月底考核结算。"
         action={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '3px', border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '3px', border: '1px solid #e2e8f0', flexShrink: 0 }}>
               <button
                 type="button"
                 onClick={() => setViewMode('matrix')}
@@ -4373,13 +4373,15 @@ function PlansView({
                   color: viewMode === 'matrix' ? '#166534' : '#64748b',
                   fontWeight: viewMode === 'matrix' ? 700 : 500,
                   boxShadow: viewMode === 'matrix' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  padding: '5px 12px',
+                  padding: '6px 14px',
                   borderRadius: '6px',
                   fontSize: '12px',
                   cursor: 'pointer',
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '5px'
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
                 }}
               >
                 <Table2 size={14} /> 🏢 全项目当月集中管理
@@ -4393,20 +4395,22 @@ function PlansView({
                   color: viewMode === 'single' ? '#166534' : '#64748b',
                   fontWeight: viewMode === 'single' ? 700 : 500,
                   boxShadow: viewMode === 'single' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  padding: '5px 12px',
+                  padding: '6px 14px',
                   borderRadius: '6px',
                   fontSize: '12px',
                   cursor: 'pointer',
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '5px'
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
                 }}
               >
                 <FolderKanban size={14} /> 📁 单项目历史明细
               </button>
             </div>
             {viewMode === 'single' && singleProject && singleProject.status === 'active' && canManageSingleProject && (
-              <button className="primary" onClick={() => onAdd(singleProject.id)}>
+              <button className="primary" style={{ whiteSpace: 'nowrap', flexShrink: 0 }} onClick={() => onAdd(singleProject.id)}>
                 <Plus size={16} />新增月份分配
               </button>
             )}
@@ -4418,13 +4422,23 @@ function PlansView({
       {/* 视图一：全项目当月集中管理 (月底分配与批量发布) */}
       {/* ============================================================== */}
       {viewMode === 'matrix' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* 月份切换器与看板指标横幅 */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>考核结算月份:</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <button type="button" className="secondary" style={{ padding: '4px 8px', fontSize: '11.5px', cursor: 'pointer' }} onClick={() => navigateMonth(-1)} title="切换至上个月">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* 月份切换器与看板指标横幅（自适应换行与卡片排版） */}
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '12px',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            background: '#f8fafc',
+            padding: '10px 14px',
+            borderRadius: '10px',
+            border: '1px solid #e2e8f0'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flexShrink: 0 }}>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>考核结算月份:</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                <button type="button" className="secondary" style={{ padding: '4px 8px', fontSize: '11.5px', cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => navigateMonth(-1)} title="切换至上个月">
                   ◀ 上月
                 </button>
                 <input
@@ -4437,32 +4451,38 @@ function PlansView({
                       setSelectedPlanIds([]);
                     }
                   }}
-                  style={{ padding: '4px 8px', fontSize: '13px', fontWeight: 600, border: '1px solid #cbd5e1', borderRadius: '6px', background: '#ffffff', color: '#166534' }}
+                  style={{ padding: '4px 8px', fontSize: '13px', fontWeight: 600, border: '1px solid #cbd5e1', borderRadius: '6px', background: '#ffffff', color: '#166534', minWidth: '125px' }}
                 />
-                <button type="button" className="secondary" style={{ padding: '4px 8px', fontSize: '11.5px', cursor: 'pointer' }} onClick={() => navigateMonth(1)} title="切换至下个月">
+                <button type="button" className="secondary" style={{ padding: '4px 8px', fontSize: '11.5px', cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => navigateMonth(1)} title="切换至下个月">
                   下月 ▶
                 </button>
-                <button type="button" className="secondary" style={{ padding: '4px 8px', fontSize: '11.5px', cursor: 'pointer' }} onClick={() => navigateMonth(0)} title="回到当前系统月份">
+                <button type="button" className="secondary" style={{ padding: '4px 8px', fontSize: '11.5px', cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => navigateMonth(0)} title="回到当前系统月份">
                   📅 当前月
                 </button>
               </div>
             </div>
 
-            {/* 统计指标卡片 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', fontSize: '12.5px' }}>
-              <div style={{ background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+            {/* 统计指标卡片组（自适应紧凑卡片） */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              flexWrap: 'wrap',
+              fontSize: '12px'
+            }}>
+              <div style={{ background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
                 项目总计: <b>{monthPerspective.totalProjects}</b> 个
               </div>
-              <div style={{ background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+              <div style={{ background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
                 配置进度: <b style={{ color: monthPerspective.allocatedCount === monthPerspective.totalProjects ? '#15803d' : '#b45309' }}>{monthPerspective.allocatedCount}/{monthPerspective.totalProjects}</b>
                 <span style={{ fontSize: '11px', color: '#64748b', marginLeft: '4px' }}>
                   ({monthPerspective.publishedCount}已发布 · {monthPerspective.draftCount}草稿)
                 </span>
               </div>
-              <div style={{ background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+              <div style={{ background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
                 全周期规划: <b>{wan(monthPerspective.totalPlannedAmount)} 万元</b>
               </div>
-              <div style={{ background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+              <div style={{ background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
                 当月分配: <b style={{ color: '#166534' }}>{wan(monthPerspective.totalActualAmount)} 万元</b>
                 {(() => {
                   const diffWan = (monthPerspective.totalActualAmount - monthPerspective.totalPlannedAmount) / 1000000;
@@ -4479,147 +4499,132 @@ function PlansView({
             </div>
           </div>
 
-          {/* 操作工具栏与筛选 */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              {/* 状态过滤 */}
-              <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '2px', border: '1px solid #e2e8f0' }}>
-                {(['all', 'draft', 'unallocated', 'published'] as const).map(key => {
-                  const labelMap = {
-                    all: `全部 (${monthPerspective.totalProjects})`,
-                    draft: `草稿待发布 (${monthPerspective.draftCount})`,
-                    unallocated: `未配置 (${monthPerspective.totalProjects - monthPerspective.allocatedCount})`,
-                    published: `已发布 (${monthPerspective.publishedCount})`
-                  };
-                  const active = statusFilter === key;
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setStatusFilter(key)}
-                      style={{
-                        border: 'none',
-                        background: active ? '#ffffff' : 'transparent',
-                        color: active ? '#166534' : '#64748b',
-                        fontWeight: active ? 700 : 400,
-                        padding: '3px 9px',
-                        borderRadius: '5px',
-                        fontSize: '11.5px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {labelMap[key]}
-                    </button>
-                  );
-                })}
+          {/* 自适应操作控制台（统一卡片式两层排版，告别换行凌乱） */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+            background: '#ffffff',
+            padding: '12px 14px',
+            borderRadius: '10px',
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+          }}>
+            {/* 上层：状态筛选、关键字检索 与 自动化填充/批量保存 */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '10px'
+            }}>
+              {/* 左侧：状态筛选胶囊与搜索框 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: '1 1 auto' }}>
+                <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '2px', border: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
+                  {(['all', 'draft', 'unallocated', 'published'] as const).map(key => {
+                    const labelMap = {
+                      all: `全部 (${monthPerspective.totalProjects})`,
+                      draft: `草稿待发布 (${monthPerspective.draftCount})`,
+                      unallocated: `未配置 (${monthPerspective.totalProjects - monthPerspective.allocatedCount})`,
+                      published: `已发布 (${monthPerspective.publishedCount})`
+                    };
+                    const active = statusFilter === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setStatusFilter(key)}
+                        style={{
+                          border: 'none',
+                          background: active ? '#ffffff' : 'transparent',
+                          color: active ? '#166534' : '#64748b',
+                          fontWeight: active ? 700 : 400,
+                          padding: '3px 9px',
+                          borderRadius: '5px',
+                          fontSize: '11.5px',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {labelMap[key]}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div style={{ position: 'relative', minWidth: '180px', maxWidth: '260px', flex: '1 1 180px' }}>
+                  <input
+                    type="text"
+                    placeholder="搜索令号、项目或负责人..."
+                    value={searchKw}
+                    onChange={e => setSearchKw(e.target.value)}
+                    style={{ width: '100%', padding: '4px 8px', fontSize: '12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                  />
+                </div>
               </div>
 
-              {/* 搜索 */}
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="text"
-                  placeholder="搜索令号、项目或负责人..."
-                  value={searchKw}
-                  onChange={e => setSearchKw(e.target.value)}
-                  style={{ width: '200px', padding: '4px 8px', fontSize: '12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
-                />
-              </div>
-            </div>
-
-            {/* 批量操作按键组 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="secondary"
-                style={{ padding: '4px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
-                onClick={handleApplyAllPlanned}
-                title="自动将所有存在规划且未发布的项目设置为规划比例"
-              >
-                <Sparkles size={13} color="#0284c7" /> 一键按规划填充当月额度
-              </button>
-
-              <button
-                type="button"
-                className="secondary"
-                style={{ padding: '4px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
-                onClick={handleApplyAllTeamDefaults}
-                title="一键将各项目的默认项目组成员与比例载入未发布的分配方案"
-              >
-                <Users size={13} color="#475569" /> 一键应用项目组默认比例
-              </button>
-
-              {dirtyCount > 0 && (
+              {/* 右侧：辅助规划工具 与 保存按钮 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flexShrink: 0 }}>
                 <button
                   type="button"
-                  className="primary"
-                  style={{ padding: '4px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', background: '#0284c7', borderColor: '#0284c7' }}
-                  onClick={handleSaveAllDirty}
-                  disabled={isSavingBatch}
+                  className="secondary"
+                  style={{ padding: '4px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  onClick={handleApplyAllPlanned}
+                  title="自动将所有存在规划且未发布的项目设置为规划比例"
                 >
-                  <Save size={13} /> {isSavingBatch ? '正在保存...' : `💾 批量保存修改 (${dirtyCount} 项待保存)`}
+                  <Sparkles size={13} color="#0284c7" /> 一键按规划填充当月额度
                 </button>
-              )}
 
-              <button
-                type="button"
-                className="primary"
-                style={{ padding: '4px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
-                onClick={handleBatchPublish}
-                disabled={isPublishingBatch || monthPerspective.draftCount === 0}
-                title="将勾选的草稿方案批量正式发布"
-              >
-                <CheckSquare size={13} /> {isPublishingBatch ? '正在发布...' : `🚀 批量发布 (${selectedDraftIds.length > 0 ? `${selectedDraftIds.length} 项草稿` : '全部草稿'})`}
-              </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{ padding: '4px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  onClick={handleApplyAllTeamDefaults}
+                  title="一键将各项目的默认项目组成员与比例载入未发布的分配方案"
+                >
+                  <Users size={13} color="#475569" /> 一键应用项目组默认比例
+                </button>
 
-              <button
-                type="button"
-                className="secondary"
-                style={{
-                  padding: '4px 12px',
-                  fontSize: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  cursor: monthPerspective.publishedCount === 0 ? 'not-allowed' : 'pointer',
-                  color: monthPerspective.publishedCount === 0 ? '#94a3b8' : '#b45309',
-                  borderColor: monthPerspective.publishedCount === 0 ? '#e2e8f0' : '#f59e0b',
-                  background: monthPerspective.publishedCount === 0 ? '#f8fafc' : '#fffbeb'
-                }}
-                onClick={handleBatchReopen}
-                disabled={isReopeningBatch || monthPerspective.publishedCount === 0}
-                title={
-                  monthPerspective.publishedCount === 0
-                    ? `当前月份暂无已发布方案`
-                    : selectedPubPlanIds.length > 0
-                    ? `将勾选的 ${selectedPubPlanIds.length} 个已发布方案批量撤回为草稿`
-                    : `将当月全部 ${monthPerspective.publishedCount} 个已发布方案批量撤回为草稿重新调整`
-                }
-              >
-                <RotateCcw size={13} /> {isReopeningBatch ? '正在撤回...' : `↩ 批量撤回 (${
-                  selectedPubPlanIds.length > 0
-                    ? `${selectedPubPlanIds.length} 项已发布`
-                    : `全部 ${monthPerspective.publishedCount} 项已发布`
-                })`}
-              </button>
+                {dirtyCount > 0 && (
+                  <button
+                    type="button"
+                    className="primary"
+                    style={{ padding: '4px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer', background: '#0284c7', borderColor: '#0284c7', whiteSpace: 'nowrap' }}
+                    onClick={handleSaveAllDirty}
+                    disabled={isSavingBatch}
+                  >
+                    <Save size={13} /> {isSavingBatch ? '正在保存...' : `💾 批量保存修改 (${dirtyCount} 项待保存)`}
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* 快捷勾选工具条 */}
-          {monthPerspective.allocatedCount > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '12px', flexWrap: 'wrap', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{ color: '#64748b', fontWeight: 600 }}>快捷勾选：</span>
+            {/* 下层：快捷批量勾选 与 核心批量发布/批量撤回执行按钮 */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '10px',
+              paddingTop: '8px',
+              borderTop: '1px solid #f1f5f9'
+            }}>
+              {/* 左侧：快捷勾选芯片与勾选计数 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '12px' }}>
+                <span style={{ color: '#475569', fontWeight: 600, whiteSpace: 'nowrap' }}>快捷勾选：</span>
                 <button
                   type="button"
                   style={{
-                    padding: '2px 8px',
+                    padding: '3px 8px',
                     fontSize: '11px',
                     borderRadius: '4px',
                     border: '1px solid #cbd5e1',
-                    background: allDraftsSelected ? '#dbeafe' : '#ffffff',
+                    background: allDraftsSelected ? '#dbeafe' : '#f8fafc',
                     color: allDraftsSelected ? '#1d4ed8' : '#334155',
                     cursor: monthPerspective.draftCount > 0 ? 'pointer' : 'default',
-                    opacity: monthPerspective.draftCount > 0 ? 1 : 0.5
+                    opacity: monthPerspective.draftCount > 0 ? 1 : 0.5,
+                    whiteSpace: 'nowrap',
+                    fontWeight: allDraftsSelected ? 600 : 400
                   }}
                   disabled={monthPerspective.draftCount === 0}
                   onClick={toggleSelectAllDrafts}
@@ -4631,14 +4636,16 @@ function PlansView({
                 <button
                   type="button"
                   style={{
-                    padding: '2px 8px',
+                    padding: '3px 8px',
                     fontSize: '11px',
                     borderRadius: '4px',
                     border: '1px solid #f59e0b',
-                    background: allPublishedSelected ? '#fef3c7' : '#ffffff',
-                    color: allPublishedSelected ? '#b45309' : '#334155',
+                    background: allPublishedSelected ? '#fef3c7' : '#fffbeb',
+                    color: allPublishedSelected ? '#b45309' : '#92400e',
                     cursor: monthPerspective.publishedCount > 0 ? 'pointer' : 'default',
-                    opacity: monthPerspective.publishedCount > 0 ? 1 : 0.5
+                    opacity: monthPerspective.publishedCount > 0 ? 1 : 0.5,
+                    whiteSpace: 'nowrap',
+                    fontWeight: allPublishedSelected ? 600 : 400
                   }}
                   disabled={monthPerspective.publishedCount === 0}
                   onClick={toggleSelectAllPublished}
@@ -4650,43 +4657,89 @@ function PlansView({
                 <button
                   type="button"
                   style={{
-                    padding: '2px 8px',
+                    padding: '3px 8px',
                     fontSize: '11px',
                     borderRadius: '4px',
                     border: '1px solid #cbd5e1',
-                    background: allAllocatedSelected ? '#dcfce7' : '#ffffff',
-                    color: allAllocatedSelected ? '#15803d' : '#334155',
-                    cursor: 'pointer'
+                    background: allAllocatedSelected ? '#dcfce7' : '#f8fafc',
+                    color: allAllocatedSelected ? '#15803d' : '#475569',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    fontWeight: allAllocatedSelected ? 600 : 400
                   }}
                   onClick={allAllocatedSelected ? clearSelection : selectAllAllocated}
                   title="勾选/取消勾选所有已配置方案"
                 >
                   {allAllocatedSelected ? '取消全选' : `全选所有项目 (${monthPerspective.allocatedCount})`}
                 </button>
-              </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {selectedPlanIds.length > 0 ? (
-                  <>
-                    <span style={{ color: '#166534', fontWeight: 600 }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: 4, whiteSpace: 'nowrap' }}>
+                    <span style={{ color: '#166534', fontWeight: 700, fontSize: '12px' }}>
                       已勾选 <b>{selectedPlanIds.length}</b> 项（草稿 {selectedDraftIds.length}，已发布 {selectedPubPlanIds.length}）
                     </span>
                     <button
                       type="button"
-                      style={{ padding: '2px 6px', fontSize: '11px', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#ffffff', color: '#64748b', cursor: 'pointer' }}
+                      style={{ padding: '2px 6px', fontSize: '11px', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#ffffff', color: '#64748b', cursor: 'pointer', whiteSpace: 'nowrap' }}
                       onClick={clearSelection}
                     >
                       清空选择
                     </button>
-                  </>
+                  </div>
                 ) : (
-                  <span style={{ color: '#94a3b8', fontSize: '11.5px' }}>
+                  <span style={{ color: '#94a3b8', fontSize: '11.5px', whiteSpace: 'nowrap' }}>
                     💡 提示：未单独勾选时，点击“🚀 批量发布”发布全部草稿，点击“↩ 批量撤回”撤回全部已发布
                   </span>
                 )}
               </div>
+
+              {/* 右侧：核心执行操作 批量发布 与 批量撤回 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flexShrink: 0 }}>
+                <button
+                  type="button"
+                  className="primary"
+                  style={{ padding: '4px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  onClick={handleBatchPublish}
+                  disabled={isPublishingBatch || monthPerspective.draftCount === 0}
+                  title="将勾选的草稿方案批量正式发布"
+                >
+                  <CheckSquare size={13} /> {isPublishingBatch ? '正在发布...' : `🚀 批量发布 (${selectedDraftIds.length > 0 ? `${selectedDraftIds.length} 项草稿` : '全部草稿'})`}
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{
+                    padding: '4px 12px',
+                    fontSize: '12px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: monthPerspective.publishedCount === 0 ? 'not-allowed' : 'pointer',
+                    color: monthPerspective.publishedCount === 0 ? '#94a3b8' : '#b45309',
+                    borderColor: monthPerspective.publishedCount === 0 ? '#e2e8f0' : '#f59e0b',
+                    background: monthPerspective.publishedCount === 0 ? '#f8fafc' : '#fffbeb',
+                    whiteSpace: 'nowrap'
+                  }}
+                  onClick={handleBatchReopen}
+                  disabled={isReopeningBatch || monthPerspective.publishedCount === 0}
+                  title={
+                    monthPerspective.publishedCount === 0
+                      ? `当前月份暂无已发布方案`
+                      : selectedPubPlanIds.length > 0
+                      ? `将勾选的 ${selectedPubPlanIds.length} 个已发布方案批量撤回为草稿`
+                      : `将当月全部 ${monthPerspective.publishedCount} 个已发布方案批量撤回为草稿重新调整`
+                  }
+                >
+                  <RotateCcw size={13} /> {isReopeningBatch ? '正在撤回...' : `↩ 批量撤回 (${
+                    selectedPubPlanIds.length > 0
+                      ? `${selectedPubPlanIds.length} 项已发布`
+                      : `全部 ${monthPerspective.publishedCount} 项已发布`
+                  })`}
+                </button>
+              </div>
             </div>
-          )}
+          </div>
 
           {/* 全项目当月集中矩阵列表 */}
           <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
