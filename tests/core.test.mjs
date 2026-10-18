@@ -47,6 +47,7 @@ import {
   BIDDING_MAX_RATE,
   BIDDING_DEFAULT_RATE,
   getQuotaPlanStageType,
+  getMonthProjectsAllocPerspective,
 } from '../lib/core.ts';
 
 test('项目创建时只保存成员名单，不需要成员固定系数', () => {
@@ -1035,12 +1036,137 @@ test('企业级全量灾备数据 AES-256-GCM 加密导出与权限口令解密�
   assert.equal(legacyDecrypted.state.projects.length, state.projects.length);
 
   // 6. 版本号与更新历史验证
-  assert.equal(APP_VERSION, '0.4.0');
-  assert.ok(UPDATE_HISTORY.length >= 4);
-  assert.equal(UPDATE_HISTORY[0].version, 'v0.4.0');
-  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('前期项目争取阶段')));
-  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('维保阶段')));
-  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('弹窗防误触')));
+  assert.equal(APP_VERSION, '0.5.0');
+  assert.ok(UPDATE_HISTORY.length >= 5);
+  assert.equal(UPDATE_HISTORY[0].version, 'v0.5.0');
+  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('集中管理')));
+  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('批量发布')));
+});
+
+test('月底分配全项目当月集中透视、每个项目月分配批量修改与一键批量发布/撤回', () => {
+  let state = demoState();
+
+  // 添加第二个测试项目
+  state.projects.push({
+    id: 'project-b',
+    code: 'B-2026-002',
+    name: '智能控制系统研发',
+    client: '测试客户B',
+    contract: 100_000_000,
+    owner: 'yi',
+    start: '2026-01',
+    end: '2026-06',
+    status: 'active',
+    members: ['yi', 'bing'],
+    quotaSchedule: [
+      { month: '2026-03', rate: 2000, milestone: '单元调试', stageType: 'normal' },
+      { month: '2026-04', rate: 3000, milestone: '综合联调', stageType: 'normal' }
+    ]
+  });
+
+  // 1. 验证 getMonthProjectsAllocPerspective 全项目集中透视
+  const perspective202603 = getMonthProjectsAllocPerspective(state, '2026-03', 'admin');
+  assert.equal(perspective202603.month, '2026-03');
+  assert.equal(perspective202603.totalProjects, 2); // project-a 和 project-b
+  assert.equal(perspective202603.rows.length, 2);
+
+  // 验证各行数据
+  const rowA = perspective202603.rows.find(r => r.project.id === 'project-a');
+  const rowB = perspective202603.rows.find(r => r.project.id === 'project-b');
+  assert.ok(rowA && rowB);
+
+  // project-a 在 demoState 中已存在 2026-03 的草稿方案 a-03
+  assert.equal(rowA.status, 'draft');
+  assert.equal(rowA.actualRate, 3334);
+  assert.ok(rowA.plan);
+
+  // project-b 尚未创建 2026-03 分配
+  assert.equal(rowB.status, 'unallocated');
+  assert.equal(rowB.actualRate, 0);
+  assert.equal(rowB.plannedRate, 2000);
+  assert.equal(rowB.diffRate, -2000);
+
+  // 2. 验证 plan.batchSave 批量修改/创建多个项目的月度分配
+  const batchSaveData = {
+    plans: [
+      {
+        projectId: 'project-a',
+        month: '2026-03',
+        budget: 3000,
+        entries: [
+          { employeeId: 'jia', rate: 6000, workContent: '总体联调' },
+          { employeeId: 'yi', rate: 4000, workContent: '接口适配' }
+        ],
+        note: '集中调整3月计划'
+      },
+      {
+        projectId: 'project-b',
+        month: '2026-03',
+        budget: 2000,
+        entries: [
+          { employeeId: 'yi', rate: 5000, workContent: '硬件驱动' },
+          { employeeId: 'bing', rate: 5000, workContent: '算法集成' }
+        ],
+        note: '集中新建3月计划'
+      }
+    ]
+  };
+
+  state = execute(state, 'admin', {
+    type: 'plan.batchSave',
+    data: batchSaveData
+  }, 'batch-save-1', '2026-01-01T00:00:00Z');
+
+  // 验证批量保存后两个项目在 2026-03 均存在且状态为草稿
+  const planA = state.plans.find(p => p.projectId === 'project-a' && p.month === '2026-03');
+  const planB = state.plans.find(p => p.projectId === 'project-b' && p.month === '2026-03');
+  assert.ok(planA && planB);
+  assert.equal(planA.status, 'draft');
+  assert.equal(planA.budget, 3000);
+  assert.equal(planB.status, 'draft');
+  assert.equal(planB.budget, 2000);
+
+  // 3. 验证 plan.batchPublish 一键批量发布选中的项目方案
+  state = execute(state, 'admin', {
+    type: 'plan.batchPublish',
+    data: { planIds: [planA.id, planB.id] }
+  }, 'batch-pub-1', '2026-01-01T00:00:00Z');
+
+  const pubPlanA = state.plans.find(p => p.id === planA.id);
+  const pubPlanB = state.plans.find(p => p.id === planB.id);
+  assert.equal(pubPlanA.status, 'published');
+  assert.equal(pubPlanB.status, 'published');
+
+  // 4. 再次获取全项目集中透视：此时已发布数量应为 2
+  const updatedPerspective = getMonthProjectsAllocPerspective(state, '2026-03', 'admin');
+  assert.equal(updatedPerspective.publishedCount, 2);
+  assert.equal(updatedPerspective.draftCount, 0);
+
+  // 5. 验证 plan.batchReopen 批量撤回月度方案为草稿
+  state = execute(state, 'admin', {
+    type: 'plan.batchReopen',
+    data: { planIds: [planA.id, planB.id] }
+  }, 'batch-reopen-1', '2026-01-01T00:00:00Z');
+
+  const reopenedA = state.plans.find(p => p.id === planA.id);
+  const reopenedB = state.plans.find(p => p.id === planB.id);
+  assert.equal(reopenedA.status, 'draft');
+  assert.equal(reopenedB.status, 'draft');
+
+  // 6. 验证已发布的方案不允许未撤回直接保存
+  const rePubState = execute(state, 'admin', {
+    type: 'plan.batchPublish',
+    data: { planIds: [planA.id] }
+  }, 'batch-pub-again', '2026-01-01T00:00:00Z');
+
+  assert.throws(() => {
+    execute(rePubState, 'admin', {
+      type: 'plan.batchSave',
+      data: {
+        plans: [{ projectId: 'project-a', month: '2026-03', budget: 2500 }]
+      }
+    }, 'fail-edit-pub', '2026-01-01T00:00:00Z');
+  }, /已发布，需先撤回为草稿才能修改/);
 });
 
 

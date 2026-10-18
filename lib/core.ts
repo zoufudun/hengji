@@ -469,6 +469,115 @@ export function execute(current: State, actorId: string, command: Command, id: s
     project.quotaSchedule = schedule;
     action = '制定项目额度规划';
     target = `${project.name} (已规划 ${schedule.length} 个月度，额度规划总额 ${pct(totalRate)})`;
+  } else if (command.type === 'plan.batchPublish') {
+    if (!Array.isArray(data.planIds) || data.planIds.length === 0) fail('未选择要批量发布的方案');
+    const planIdSet = new Set(data.planIds.map(String));
+    let count = 0;
+    const publishedProjects: string[] = [];
+    for (const plan of state.plans) {
+      if (planIdSet.has(plan.id) && plan.status === 'draft') {
+        const prj = state.projects.find(p => p.id === plan.projectId);
+        if (!prj || (actor.role !== 'admin' && prj.owner !== actor.id)) {
+          fail(`无权发布项目【${prj?.name || plan.projectId}】的月度方案`);
+        }
+        plan.status = 'published';
+        count++;
+        if (prj && !publishedProjects.includes(prj.name)) publishedProjects.push(prj.name);
+      }
+    }
+    if (count === 0) fail('所选方案中没有处于草稿状态的可发布记录');
+    action = '批量发布月度方案';
+    target = `已成功发布 ${count} 个项目的月度方案${publishedProjects.length > 0 ? `（${publishedProjects.slice(0, 3).join('、')}${publishedProjects.length > 3 ? '等' : ''}）` : ''}`;
+  } else if (command.type === 'plan.batchReopen') {
+    if (!Array.isArray(data.planIds) || data.planIds.length === 0) fail('未选择要批量撤回的方案');
+    const planIdSet = new Set(data.planIds.map(String));
+    let count = 0;
+    const reopenedProjects: string[] = [];
+    for (const plan of state.plans) {
+      if (planIdSet.has(plan.id) && plan.status === 'published') {
+        const prj = state.projects.find(p => p.id === plan.projectId);
+        if (!prj || (actor.role !== 'admin' && prj.owner !== actor.id)) {
+          fail(`无权撤回项目【${prj?.name || plan.projectId}】的月度方案`);
+        }
+        plan.status = 'draft';
+        count++;
+        if (prj && !reopenedProjects.includes(prj.name)) reopenedProjects.push(prj.name);
+      }
+    }
+    if (count === 0) fail('所选方案中没有处于已发布状态的可撤回记录');
+    action = '批量撤回月度方案';
+    target = `已撤回 ${count} 个项目的月度方案为草稿${reopenedProjects.length > 0 ? `（${reopenedProjects.slice(0, 3).join('、')}${reopenedProjects.length > 3 ? '等' : ''}）` : ''}`;
+  } else if (command.type === 'plan.batchSave') {
+    if (!Array.isArray(data.plans) || data.plans.length === 0) fail('未提供待保存的月度方案数据');
+    let savedCount = 0;
+    const modifiedProjects: string[] = [];
+    for (const item of data.plans) {
+      const project = state.projects.find(p => p.id === item.projectId);
+      if (!project || (actor.role !== 'admin' && project.owner !== actor.id)) {
+        fail(`无权维护项目【${project?.name || item.projectId}】的月度分配`);
+      }
+      if (project.status === 'archived') {
+        fail(`已结项项目【${project.name}】不能调整月度分配`);
+      }
+      const monthStr = text(item.month, '分配月份');
+      const budget = integer(item.budget, '月度额度比例', 1, SCALE);
+
+      const existing = state.plans.find(p => (item.id && p.id === item.id) || (p.projectId === project.id && p.month === monthStr));
+      if (existing && existing.status === 'published') {
+        fail(`项目【${project.name}】在 ${monthStr} 的方案已发布，需先撤回为草稿才能修改`);
+      }
+
+      // 成员分配比例条目
+      const entries: PlanEntry[] = Array.isArray(item.entries) ? item.entries.map((entry: any) => ({
+        employeeId: String(entry.employeeId),
+        rate: integer(entry.rate, '成员分配比例', 0, SCALE),
+        workContent: typeof entry.workContent === 'string' ? entry.workContent.slice(0, 500) : ''
+      })) : [];
+
+      // 若未提供 entries 或 entries 为空，但项目有默认比例或成员，自动兜底
+      if (entries.length === 0) {
+        if (project.defaultRates && Object.keys(project.defaultRates).length > 0) {
+          for (const [empId, r] of Object.entries(project.defaultRates)) {
+            entries.push({ employeeId: empId, rate: Number(r), workContent: '' });
+          }
+        } else if (project.members.length > 0) {
+          const baseRate = Math.floor(SCALE / project.members.length);
+          let remRate = SCALE - baseRate * project.members.length;
+          for (const empId of project.members) {
+            let r = baseRate;
+            if (remRate > 0) { r++; remRate--; }
+            entries.push({ employeeId: empId, rate: r, workContent: '' });
+          }
+        }
+      }
+
+      // 确保成员被包含在项目成员列表中
+      for (const entry of entries) {
+        if (!project.members.includes(entry.employeeId)) {
+          project.members.push(entry.employeeId);
+        }
+      }
+
+      const plan: Plan = {
+        id: existing?.id || item.id || `plan_${crypto.randomUUID().slice(0, 8)}`,
+        projectId: project.id,
+        month: monthStr,
+        budget,
+        entries,
+        status: 'draft',
+        note: typeof item.note === 'string' ? item.note.slice(0, 500) : (existing?.note || '')
+      };
+
+      if (existing) {
+        state.plans[state.plans.indexOf(existing)] = plan;
+      } else {
+        state.plans.push(plan);
+      }
+      savedCount++;
+      if (!modifiedProjects.includes(project.name)) modifiedProjects.push(project.name);
+    }
+    action = '批量保存月度方案';
+    target = `已成功保存 ${savedCount} 个项目的月度分配草稿${modifiedProjects.length > 0 ? `（${modifiedProjects.slice(0, 3).join('、')}${modifiedProjects.length > 3 ? '等' : ''}）` : ''}`;
   } else if (command.type.startsWith('plan.')) {
     const old = state.plans.find(plan => plan.id === data.id);
     const project = state.projects.find(item => item.id === (old?.projectId || data.projectId));
@@ -1085,6 +1194,152 @@ export function getProjectQuotaPerspective(state: State, projectId: string) {
     overbudgetCount,
     isFrontLoadedRisk,
     riskWarnings,
+  };
+}
+
+// -------------------------------------------------------------
+// 月底分配：全项目当月集中管理透视与批量修改辅助函数
+// -------------------------------------------------------------
+export type MonthProjectAllocRow = {
+  project: Project;
+  plan?: Plan;
+  status: 'published' | 'draft' | 'unallocated';
+  plannedRate: number; // bps from quotaSchedule for this month
+  plannedAmount: number; // money
+  plannedAmountWan: string;
+  plannedMilestone: string;
+  plannedStageType: ProjectQuotaStageType;
+  actualRate: number; // bps from plan.budget (or 0 if unallocated)
+  actualAmount: number; // money
+  actualAmountWan: string;
+  diffRate: number; // actualRate - plannedRate
+  diffAmount: number; // actualAmount - plannedAmount
+  allocableRemainingRate: number; // remaining rate for project excluding current month draft
+  allocableRemainingAmount: number; // remaining amount for project
+  isHistorical: boolean;
+  entries: PlanEntry[];
+  memberCount: number;
+  canManage: boolean;
+};
+
+export function getMonthProjectsAllocPerspective(state: State, month: string, actorId?: string) {
+  const normMonth = text(month, '查询月份');
+  const actor = actorId ? state.employees.find(e => e.id === actorId) : undefined;
+  const isAdmin = !actor || actor.role === 'admin';
+
+  // 筛选出在该月份执行或有分配记录或处在生命周期内的项目
+  const relevantProjects = state.projects.filter(p => {
+    // 包含已有该月分配的项目
+    const hasPlan = state.plans.some(pl => pl.projectId === p.id && pl.month === normMonth);
+    if (hasPlan) return true;
+    // 活跃项目且开始月份 <= 该月份
+    if (p.status !== 'active') return false;
+    if (p.start && p.start > normMonth) return false;
+    if (p.end && p.end < normMonth) return false;
+    return true;
+  }).sort((a, b) => a.code.localeCompare(b.code));
+
+  let totalPlannedAmount = 0;
+  let totalPlannedRate = 0;
+  let totalActualAmount = 0;
+  let totalActualRate = 0;
+  let allocatedCount = 0;
+  let draftCount = 0;
+  let publishedCount = 0;
+
+  const rows: MonthProjectAllocRow[] = relevantProjects.map(project => {
+    const plan = state.plans.find(pl => pl.projectId === project.id && pl.month === normMonth);
+    const quotaItem = project.quotaSchedule?.find(s => s.month === normMonth);
+
+    const plannedRate = quotaItem?.rate || 0;
+    const plannedAmount = points(project.contract, plannedRate);
+    const plannedMilestone = quotaItem?.milestone || '';
+    const plannedStageType = quotaItem?.stageType || (quotaItem ? getQuotaPlanStageType(quotaItem) : 'normal');
+
+    const actualRate = plan ? plan.budget : 0;
+    const actualAmount = plan ? monthAmount(project, plan) : 0;
+    const status: 'published' | 'draft' | 'unallocated' = plan
+      ? (plan.status === 'published' ? 'published' : 'draft')
+      : 'unallocated';
+
+    const diffRate = actualRate - plannedRate;
+    const diffAmount = actualAmount - plannedAmount;
+
+    totalPlannedAmount += plannedAmount;
+    totalPlannedRate += plannedRate;
+    totalActualAmount += actualAmount;
+    totalActualRate += actualRate;
+
+    if (plan) {
+      allocatedCount++;
+      if (plan.status === 'published') publishedCount++;
+      else draftCount++;
+    }
+
+    // 计算项目剩余可用额度（不含当前月草稿）
+    const otherPlans = state.plans.filter(pl => pl.projectId === project.id && pl.id !== plan?.id);
+    const otherBudgetRate = total(otherPlans.map(pl => pl.budget));
+    const historyCompletedRate = project.historyCompletedRate || 0;
+    const maxAllocableRate = Math.max(0, SCALE - historyCompletedRate);
+    const allocableRemainingRate = Math.max(0, maxAllocableRate - otherBudgetRate);
+    const allocableRemainingAmount = points(project.contract, allocableRemainingRate);
+
+    // 默认或已有成员分配条目
+    let entries: PlanEntry[] = plan?.entries ? [...plan.entries] : [];
+    if (entries.length === 0) {
+      if (project.defaultRates && Object.keys(project.defaultRates).length > 0) {
+        entries = Object.entries(project.defaultRates).map(([empId, r]) => ({
+          employeeId: empId,
+          rate: Number(r),
+          workContent: ''
+        }));
+      } else if (project.members.length > 0) {
+        const base = Math.floor(SCALE / project.members.length);
+        let rem = SCALE - base * project.members.length;
+        entries = project.members.map(empId => {
+          let r = base;
+          if (rem > 0) { r++; rem--; }
+          return { employeeId: empId, rate: r, workContent: '' };
+        });
+      }
+    }
+
+    const canManage = isAdmin || (actor && project.owner === actor.id);
+
+    return {
+      project,
+      plan,
+      status,
+      plannedRate,
+      plannedAmount,
+      plannedAmountWan: wan(plannedAmount),
+      plannedMilestone,
+      plannedStageType,
+      actualRate,
+      actualAmount,
+      actualAmountWan: wan(actualAmount),
+      diffRate,
+      diffAmount,
+      allocableRemainingRate,
+      allocableRemainingAmount,
+      isHistorical: Boolean(project.historyCompletedRate && project.historyCompletedRate > 0),
+      entries,
+      memberCount: project.members.length,
+      canManage: Boolean(canManage),
+    };
+  });
+
+  return {
+    month: normMonth,
+    rows,
+    totalProjects: relevantProjects.length,
+    allocatedCount,
+    draftCount,
+    publishedCount,
+    totalPlannedAmount,
+    totalPlannedRate,
+    totalActualAmount,
+    totalActualRate,
   };
 }
 
@@ -2038,7 +2293,7 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.4.0';
+export const APP_VERSION = '0.5.0';
 export const APP_BUILD = '20261018';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
@@ -2052,6 +2307,18 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.5.0',
+    date: '2026-10-18',
+    tag: '重大更新',
+    title: '月底分配全项目集中管理与批量修改发布',
+    items: [
+      '【全项目月度集中管理】新增“全项目当月集中管理”透视看板，在一个界面集中呈现当月全部项目的合同额、规划额度、当月分配额度与状态，彻底免除逐个项目来回切换弹窗的繁琐操作。',
+      '【各项目月度分配批量修改】支持在集中面板中行内直接调整各项目的月度分配比例与折合金额，提供增减微调、规划额度偏差对比与一键批量保存所有修改。',
+      '【一键批量发布与撤回】支持勾选多个项目或全选当月所有草稿方案，一键批量发布入库生效，并记录审计日志；同时支持批量撤回草稿，极大提升月末结算效率。',
+      '【规划额度与团队模板一键联动】支持“⚡ 一键按全周期规划填充当月额度”与“👥 一键套用项目组默认成员分配”，高效完成初稿配置后只需微调即可直接发布。'
+    ]
+  },
   {
     version: 'v0.4.0',
     date: '2026-10-18',

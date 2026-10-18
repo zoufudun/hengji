@@ -140,10 +140,13 @@ import {
   type ProjectGroupType,
   type ProjectMonthlyQuotaPlan,
   type ProjectQuotaStageType,
+  type PlanEntry,
+  type MonthProjectAllocRow,
   MAINTENANCE_QUOTA_RATE,
   BIDDING_MAX_RATE,
   BIDDING_DEFAULT_RATE,
   getQuotaPlanStageType,
+  getMonthProjectsAllocPerspective,
 } from '../lib/core';
 
 type Tab = 'dashboard' | 'projects' | 'plans' | 'groups' | 'employees' | 'analytics' | 'stars' | 'reports' | 'rules' | 'data_io';
@@ -841,6 +844,15 @@ export default function DesktopWorkspace() {
               onEdit={setPlanEdit}
               onOpenQuotaSchedule={setProjectQuotaModalId}
               onAction={(type, plan) => command(type, { id: plan.id }, type === 'plan.publish' ? '月度绩点已发布' : type === 'plan.reopen' ? '月度绩点已撤回' : '月度草稿已删除')}
+              onBatchPublish={async (planIds) => {
+                return await command('plan.batchPublish', { planIds }, `已成功批量发布 ${planIds.length} 个项目的月度方案`);
+              }}
+              onBatchReopen={async (planIds) => {
+                return await command('plan.batchReopen', { planIds }, `已成功批量撤回 ${planIds.length} 个项目的月度方案为草稿`);
+              }}
+              onBatchSave={async (plans) => {
+                return await command('plan.batchSave', { plans }, `已成功批量保存 ${plans.length} 个项目的月度分配方案`);
+              }}
             />
           )}
           {tab === 'groups' && (
@@ -3739,9 +3751,249 @@ function RulesView() {
 }
 
 // -------------------------------------------------------------
-// 3. Plans View (月度分配)
+// 3. Plans View (月度分配与全项目集中管理)
 // -------------------------------------------------------------
-function PlansView({ state, isAdmin, isManager, currentActorId, onAdd, onEdit, onAction, onOpenQuotaSchedule }: {
+function QuickMemberAllocModal({
+  project,
+  month,
+  budgetRate,
+  initialEntries,
+  employees,
+  onClose,
+  onSave,
+}: {
+  project: Project;
+  month: string;
+  budgetRate: number; // bps e.g. 500 = 5%
+  initialEntries: PlanEntry[];
+  employees: Employee[];
+  onClose(): void;
+  onSave(entries: PlanEntry[]): void;
+}) {
+  const memberIds = useMemo(() => {
+    const set = new Set(project.members);
+    for (const e of initialEntries) set.add(e.employeeId);
+    return Array.from(set);
+  }, [project.members, initialEntries]);
+
+  const [rates, setRates] = useState<Record<string, number>>(() => {
+    const map: Record<string, number> = {};
+    for (const mId of memberIds) {
+      const existing = initialEntries.find(e => e.employeeId === mId);
+      map[mId] = existing ? existing.rate : 0;
+    }
+    // 若初始全是0且成员数大于0，自动默认均摊
+    const totalInit = Object.values(map).reduce((s, r) => s + r, 0);
+    if (totalInit === 0 && memberIds.length > 0) {
+      if (project.defaultRates && Object.keys(project.defaultRates).length > 0) {
+        for (const mId of memberIds) {
+          map[mId] = project.defaultRates[mId] || 0;
+        }
+      } else {
+        const base = Math.floor(10000 / memberIds.length);
+        let rem = 10000 - base * memberIds.length;
+        for (const mId of memberIds) {
+          let r = base;
+          if (rem > 0) { r++; rem--; }
+          map[mId] = r;
+        }
+      }
+    }
+    return map;
+  });
+
+  const totalAllocated = useMemo(() => {
+    return Object.values(rates).reduce((s, r) => s + (Number(r) || 0), 0);
+  }, [rates]);
+
+  const isValid = totalAllocated === 10000;
+  const projectAmt = monthAmount(project, { budget: budgetRate } as Plan);
+
+  const handleRateChange = (empId: string, val: number) => {
+    setRates(prev => ({
+      ...prev,
+      [empId]: Math.max(0, Math.min(10000, Math.round(val)))
+    }));
+  };
+
+  const adjustRate = (empId: string, delta: number) => {
+    setRates(prev => {
+      const cur = prev[empId] || 0;
+      return {
+        ...prev,
+        [empId]: Math.max(0, Math.min(10000, cur + delta))
+      };
+    });
+  };
+
+  // 一键全员均摊
+  const handleSplitEvenly = () => {
+    if (memberIds.length === 0) return;
+    const base = Math.floor(10000 / memberIds.length);
+    let rem = 10000 - base * memberIds.length;
+    const next: Record<string, number> = {};
+    for (const mId of memberIds) {
+      let r = base;
+      if (rem > 0) { r++; rem--; }
+      next[mId] = r;
+    }
+    setRates(next);
+  };
+
+  // 一键套用项目组默认比例
+  const handleApplyDefaults = () => {
+    if (project.defaultRates && Object.keys(project.defaultRates).length > 0) {
+      const next: Record<string, number> = {};
+      for (const mId of memberIds) {
+        next[mId] = project.defaultRates[mId] || 0;
+      }
+      setRates(next);
+    } else {
+      handleSplitEvenly();
+    }
+  };
+
+  // 负责人主导（60% / 其余均摊）
+  const handleOwnerDominant = () => {
+    if (memberIds.length === 0) return;
+    if (memberIds.length === 1) {
+      setRates({ [memberIds[0]]: 10000 });
+      return;
+    }
+    const ownerId = project.owner && memberIds.includes(project.owner) ? project.owner : memberIds[0];
+    const otherMembers = memberIds.filter(id => id !== ownerId);
+    const ownerShare = 6000; // 60%
+    const otherTotal = 4000; // 40%
+    const base = Math.floor(otherTotal / otherMembers.length);
+    let rem = otherTotal - base * otherMembers.length;
+    const next: Record<string, number> = { [ownerId]: ownerShare };
+    for (const mId of otherMembers) {
+      let r = base;
+      if (rem > 0) { r++; rem--; }
+      next[mId] = r;
+    }
+    setRates(next);
+  };
+
+  const handleConfirm = () => {
+    if (!isValid) return;
+    const resultEntries: PlanEntry[] = memberIds.map(empId => ({
+      employeeId: empId,
+      rate: rates[empId] || 0,
+      workContent: initialEntries.find(e => e.employeeId === empId)?.workContent || ''
+    }));
+    onSave(resultEntries);
+    onClose();
+  };
+
+  return (
+    <Modal
+      title={`快速配置项目成员分配比例 · ${month}`}
+      subtitle={`【${project.name}】(${project.code}) · 合同金额: ${wan(project.contract)}万元 · 当月预算比例: ${pct(budgetRate)} (${wan(projectAmt)}万元)`}
+      onClose={onClose}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {/* 快捷预设按键 */}
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', background: '#f8fafc', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+          <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>快捷预设:</span>
+          <button type="button" className="secondary" style={{ padding: '3px 9px', fontSize: '11.5px', cursor: 'pointer' }} onClick={handleSplitEvenly}>
+            ⚡ 全员均摊
+          </button>
+          {project.defaultRates && Object.keys(project.defaultRates).length > 0 && (
+            <button type="button" className="secondary" style={{ padding: '3px 9px', fontSize: '11.5px', cursor: 'pointer' }} onClick={handleApplyDefaults}>
+              👥 套用项目组默认比例
+            </button>
+          )}
+          <button type="button" className="secondary" style={{ padding: '3px 9px', fontSize: '11.5px', cursor: 'pointer' }} onClick={handleOwnerDominant}>
+            👑 负责人主导 (60% / 其余均摊)
+          </button>
+        </div>
+
+        {/* 成员比例配置列表 */}
+        <div style={{ maxHeight: '360px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+          <table style={{ width: '100%', margin: 0, fontSize: '13px' }}>
+            <thead style={{ position: 'sticky', top: 0, background: '#f1f5f9', zIndex: 1 }}>
+              <tr>
+                <th style={{ width: '32%' }}>成员姓名</th>
+                <th style={{ width: '22%' }}>专业组</th>
+                <th style={{ width: '28%', textAlign: 'center' }}>分配比例 (%)</th>
+                <th style={{ width: '18%', textAlign: 'right' }}>对应额度</th>
+              </tr>
+            </thead>
+            <tbody>
+              {memberIds.map(empId => {
+                const emp = employees.find(e => e.id === empId);
+                const curRate = rates[empId] || 0;
+                const memberAmt = projectAmt ? Math.round((projectAmt * curRate) / 10000) : 0;
+                const isOwner = empId === project.owner;
+                return (
+                  <tr key={empId}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <b>{emp?.name || empId}</b>
+                        {isOwner && <span title="项目负责人">👑</span>}
+                      </div>
+                    </td>
+                    <td><GroupTag group={emp?.group} /></td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                        <button type="button" style={{ padding: '2px 5px', fontSize: '11px', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#ffffff', cursor: 'pointer' }} onClick={() => adjustRate(empId, -100)}>-1</button>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          value={(curRate / 100).toFixed(2)}
+                          onChange={e => handleRateChange(empId, parseFloat(e.target.value || '0') * 100)}
+                          style={{ width: '65px', textAlign: 'center', padding: '3px 4px', fontSize: '12px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                        />
+                        <button type="button" style={{ padding: '2px 5px', fontSize: '11px', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#ffffff', cursor: 'pointer' }} onClick={() => adjustRate(empId, 100)}>+1</button>
+                        <button type="button" style={{ padding: '2px 5px', fontSize: '11px', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#ffffff', cursor: 'pointer' }} onClick={() => adjustRate(empId, 500)}>+5</button>
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 600, color: curRate > 0 ? '#166534' : '#94a3b8' }}>
+                      {score(memberAmt)} 元
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* 底部合计与校验 */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 4px' }}>
+          <div>
+            比例合计: <b style={{ fontSize: '15px', color: isValid ? '#166534' : '#dc2626' }}>{(totalAllocated / 100).toFixed(2)}%</b> / 100%
+            {!isValid && (
+              <span style={{ marginLeft: '10px', fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>
+                {totalAllocated > 10000 ? `⚠️ 超额 ${((totalAllocated - 10000) / 100).toFixed(2)}%` : `⚠️ 还差 ${((10000 - totalAllocated) / 100).toFixed(2)}% 未分配`}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button type="button" className="secondary" onClick={onClose}>取消</button>
+            <button type="button" className="primary" disabled={!isValid} onClick={handleConfirm}>确定应用比例</button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function PlansView({
+  state,
+  isAdmin,
+  isManager,
+  currentActorId,
+  onAdd,
+  onEdit,
+  onAction,
+  onOpenQuotaSchedule,
+  onBatchPublish,
+  onBatchReopen,
+  onBatchSave,
+}: {
   state: State;
   isAdmin: boolean;
   isManager: boolean;
@@ -3750,26 +4002,58 @@ function PlansView({ state, isAdmin, isManager, currentActorId, onAdd, onEdit, o
   onEdit(plan: Plan): void;
   onAction(type: string, plan: Plan): void;
   onOpenQuotaSchedule?(projectId: string): void;
+  onBatchPublish?(planIds: string[]): Promise<boolean>;
+  onBatchReopen?(planIds: string[]): Promise<boolean>;
+  onBatchSave?(plans: any[]): Promise<boolean>;
 }) {
-  const [projectId, setProjectId] = useState(state.projects.find(p => p.status === 'active')?.id || state.projects[0]?.id || '');
-  const project = state.projects.find(p => p.id === projectId);
-  const plans = useMemo(() => state.plans.filter(p => p.projectId === projectId).sort((a, b) => a.month.localeCompare(b.month)), [state.plans, projectId]);
-  const detail = project ? projectAllocDetail(state, project.id) : null;
-  const perspective = project ? getProjectQuotaPerspective(state, project.id) : null;
-  const canManageThisProject = isAdmin || (project && project.owner === currentActorId);
+  // 视图模式：'matrix' (全项目当月集中管理与批量修改发布) vs 'single' (单项目全周期历史明细)
+  const [viewMode, setViewMode] = useState<'matrix' | 'single'>('matrix');
 
-  // 需求：选中查看工作内容的月份计划
+  // 当月集中管理月份选择
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    if (state.plans.length > 0) {
+      const sorted = [...state.plans].map(p => p.month).sort();
+      return sorted[sorted.length - 1];
+    }
+    return nowMonth();
+  });
+
+  // 全项目当月透视数据
+  const monthPerspective = useMemo(() => {
+    return getMonthProjectsAllocPerspective(state, selectedMonth, currentActorId);
+  }, [state, selectedMonth, currentActorId]);
+
+  // 行内草稿修改状态：Record<projectId, { budget: number; entries: PlanEntry[]; dirty: boolean }>
+  const [draftEdits, setDraftEdits] = useState<Record<string, { budget: number; entries: PlanEntry[]; dirty: boolean }>>({});
+
+  // 勾选的项目行 ID（对应 plan.id 或 project.id）
+  const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
+
+  // 状态筛选
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'unallocated' | 'published'>('all');
+  const [searchKw, setSearchKw] = useState<string>('');
+
+  // 快速配置人员比例弹窗
+  const [quickAllocProject, setQuickAllocProject] = useState<{ project: Project; budgetRate: number; entries: PlanEntry[] } | null>(null);
+  const [isSavingBatch, setIsSavingBatch] = useState(false);
+  const [isPublishingBatch, setIsPublishingBatch] = useState(false);
+
+  // 单项目明细视图状态
+  const [singleProjectId, setSingleProjectId] = useState(state.projects.find(p => p.status === 'active')?.id || state.projects[0]?.id || '');
+  const singleProject = state.projects.find(p => p.id === singleProjectId);
+  const singlePlans = useMemo(() => state.plans.filter(p => p.projectId === singleProjectId).sort((a, b) => a.month.localeCompare(b.month)), [state.plans, singleProjectId]);
+  const singleDetail = singleProject ? projectAllocDetail(state, singleProject.id) : null;
+  const singlePerspective = singleProject ? getProjectQuotaPerspective(state, singleProject.id) : null;
+  const canManageSingleProject = isAdmin || (singleProject && singleProject.owner === currentActorId);
+
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
   useEffect(() => {
-    if (plans.length > 0 && (!selectedPlanId || !plans.some(p => p.id === selectedPlanId))) {
-      setSelectedPlanId(plans[plans.length - 1].id);
+    if (singlePlans.length > 0 && (!selectedPlanId || !singlePlans.some(p => p.id === selectedPlanId))) {
+      setSelectedPlanId(singlePlans[singlePlans.length - 1].id);
     }
-  }, [plans, selectedPlanId]);
+  }, [singlePlans, selectedPlanId]);
 
-  // 需求：人员分配展示形式切换（表格明细 vs 紧凑胶囊）
   const [memberViewMode, setMemberViewMode] = useState<'table' | 'compact'>('table');
-
-  // 需求：列宽拖拽调节
   const [colWidths, setColWidths] = useState<Record<string, number>>({
     month: 110,
     budget: 110,
@@ -3795,31 +4079,28 @@ function PlansView({ state, isAdmin, isManager, currentActorId, onAdd, onEdit, o
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // 需求：行拖拽操作与排序
   const [orderedPlanIds, setOrderedPlanIds] = useState<string[]>([]);
   const [draggedPlanId, setDraggedPlanId] = useState<string | null>(null);
 
-  const displayedPlans = useMemo(() => {
-    if (orderedPlanIds.length === 0) return plans;
-    const map = new Map(plans.map(p => [p.id, p]));
+  const displayedSinglePlans = useMemo(() => {
+    if (orderedPlanIds.length === 0) return singlePlans;
+    const map = new Map(singlePlans.map(p => [p.id, p]));
     const list: Plan[] = [];
     for (const id of orderedPlanIds) {
       const p = map.get(id);
       if (p) list.push(p);
     }
-    for (const p of plans) {
+    for (const p of singlePlans) {
       if (!orderedPlanIds.includes(p.id)) list.push(p);
     }
     return list;
-  }, [plans, orderedPlanIds]);
+  }, [singlePlans, orderedPlanIds]);
 
-  const handleDragStart = (id: string) => {
-    setDraggedPlanId(id);
-  };
+  const handleDragStart = (id: string) => setDraggedPlanId(id);
   const handleDragOver = (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
     if (!draggedPlanId || draggedPlanId === targetId) return;
-    const curIds = orderedPlanIds.length > 0 ? [...orderedPlanIds] : plans.map(p => p.id);
+    const curIds = orderedPlanIds.length > 0 ? [...orderedPlanIds] : singlePlans.map(p => p.id);
     const fromIndex = curIds.indexOf(draggedPlanId);
     const toIndex = curIds.indexOf(targetId);
     if (fromIndex !== -1 && toIndex !== -1) {
@@ -3828,442 +4109,1177 @@ function PlansView({ state, isAdmin, isManager, currentActorId, onAdd, onEdit, o
       setOrderedPlanIds(curIds);
     }
   };
-  const handleDragEnd = () => {
-    setDraggedPlanId(null);
+  const handleDragEnd = () => setDraggedPlanId(null);
+
+  const selectedPlan = singlePlans.find(p => p.id === selectedPlanId) || singlePlans[0];
+
+  // 月份切换函数
+  const navigateMonth = (direction: -1 | 1 | 0) => {
+    if (direction === 0) {
+      setSelectedMonth(nowMonth());
+      return;
+    }
+    const [y, m] = selectedMonth.split('-').map(Number);
+    let ny = y;
+    let nm = m + direction;
+    if (nm < 1) { nm = 12; ny--; }
+    if (nm > 12) { nm = 1; ny++; }
+    setSelectedMonth(`${ny}-${String(nm).padStart(2, '0')}`);
+    setDraftEdits({});
+    setSelectedPlanIds([]);
   };
 
-  const selectedPlan = plans.find(p => p.id === selectedPlanId) || plans[0];
+  // 行内预算调整
+  const handleUpdateBudget = (projectId: string, newRate: number) => {
+    const clamped = Math.max(0, Math.min(10000, Math.round(newRate)));
+    setDraftEdits(prev => {
+      const curEntries = prev[projectId]?.entries || monthPerspective.rows.find(r => r.project.id === projectId)?.entries || [];
+      return {
+        ...prev,
+        [projectId]: {
+          budget: clamped,
+          entries: curEntries,
+          dirty: true
+        }
+      };
+    });
+  };
+
+  // 单行保存
+  const handleSaveSingleRow = async (projectId: string) => {
+    const edit = draftEdits[projectId];
+    if (!edit || !onBatchSave) return;
+    const ok = await onBatchSave([{
+      projectId,
+      month: selectedMonth,
+      budget: edit.budget,
+      entries: edit.entries
+    }]);
+    if (ok) {
+      setDraftEdits(prev => {
+        const next = { ...prev };
+        delete next[projectId];
+        return next;
+      });
+    }
+  };
+
+  // 一键按规划填充当月额度
+  const handleApplyAllPlanned = () => {
+    const nextEdits = { ...draftEdits };
+    let count = 0;
+    for (const r of monthPerspective.rows) {
+      if (r.plannedRate > 0 && r.status !== 'published') {
+        const curEdit = nextEdits[r.project.id];
+        nextEdits[r.project.id] = {
+          budget: r.plannedRate,
+          entries: curEdit?.entries || r.entries,
+          dirty: true
+        };
+        count++;
+      }
+    }
+    setDraftEdits(nextEdits);
+  };
+
+  // 一键应用项目组默认比例
+  const handleApplyAllTeamDefaults = () => {
+    const nextEdits = { ...draftEdits };
+    for (const r of monthPerspective.rows) {
+      if (r.project.defaultRates && Object.keys(r.project.defaultRates).length > 0 && r.status !== 'published') {
+        const entries = Object.entries(r.project.defaultRates).map(([empId, rate]) => ({
+          employeeId: empId,
+          rate: Number(rate),
+          workContent: ''
+        }));
+        const curBudget = nextEdits[r.project.id]?.budget ?? (r.plan?.budget || r.plannedRate || 0);
+        nextEdits[r.project.id] = {
+          budget: curBudget,
+          entries,
+          dirty: true
+        };
+      }
+    }
+    setDraftEdits(nextEdits);
+  };
+
+  // 批量保存全部已修改
+  const handleSaveAllDirty = async () => {
+    if (!onBatchSave) return;
+    const toSave: any[] = [];
+    for (const [pId, edit] of Object.entries(draftEdits)) {
+      if (edit.dirty && edit.budget > 0) {
+        toSave.push({
+          projectId: pId,
+          month: selectedMonth,
+          budget: edit.budget,
+          entries: edit.entries
+        });
+      }
+    }
+    if (toSave.length === 0) return;
+    setIsSavingBatch(true);
+    try {
+      const ok = await onBatchSave(toSave);
+      if (ok) {
+        setDraftEdits({});
+      }
+    } finally {
+      setIsSavingBatch(false);
+    }
+  };
+
+  // 批量发布
+  const handleBatchPublish = async () => {
+    if (!onBatchPublish) return;
+    const draftPlanIds: string[] = [];
+    for (const r of monthPerspective.rows) {
+      if (r.plan && r.plan.status === 'draft' && selectedPlanIds.includes(r.plan.id)) {
+        draftPlanIds.push(r.plan.id);
+      }
+    }
+    if (draftPlanIds.length === 0) {
+      const allDrafts = monthPerspective.rows.filter(r => r.plan?.status === 'draft').map(r => r.plan!.id);
+      if (allDrafts.length === 0) return;
+      if (window.confirm(`当前未勾选特定项目，是否一键批量发布当月全部 ${allDrafts.length} 个待发布的项目草稿方案？`)) {
+        setIsPublishingBatch(true);
+        try {
+          await onBatchPublish(allDrafts);
+          setSelectedPlanIds([]);
+        } finally {
+          setIsPublishingBatch(false);
+        }
+      }
+      return;
+    }
+    setIsPublishingBatch(true);
+    try {
+      await onBatchPublish(draftPlanIds);
+      setSelectedPlanIds([]);
+    } finally {
+      setIsPublishingBatch(false);
+    }
+  };
+
+  // 批量撤回
+  const handleBatchReopen = async () => {
+    if (!onBatchReopen) return;
+    const pubPlanIds: string[] = [];
+    for (const r of monthPerspective.rows) {
+      if (r.plan && r.plan.status === 'published' && selectedPlanIds.includes(r.plan.id)) {
+        pubPlanIds.push(r.plan.id);
+      }
+    }
+    if (pubPlanIds.length === 0) return;
+    if (window.confirm(`确认批量撤回选中的 ${pubPlanIds.length} 个项目方案为草稿状态？`)) {
+      await onBatchReopen(pubPlanIds);
+      setSelectedPlanIds([]);
+    }
+  };
+
+  // 过滤后的行列表
+  const filteredMatrixRows = useMemo(() => {
+    return monthPerspective.rows.filter(r => {
+      if (statusFilter === 'draft' && r.status !== 'draft') return false;
+      if (statusFilter === 'published' && r.status !== 'published') return false;
+      if (statusFilter === 'unallocated' && r.status !== 'unallocated') return false;
+      if (searchKw.trim()) {
+        const q = searchKw.trim().toLowerCase();
+        const codeMatch = r.project.code.toLowerCase().includes(q);
+        const nameMatch = r.project.name.toLowerCase().includes(q);
+        const ownerMatch = (state.employees.find(e => e.id === r.project.owner)?.name || '').toLowerCase().includes(q);
+        if (!codeMatch && !nameMatch && !ownerMatch) return false;
+      }
+      return true;
+    });
+  }, [monthPerspective.rows, statusFilter, searchKw, state.employees]);
+
+  const dirtyCount = Object.values(draftEdits).filter(e => e.dirty).length;
+  const draftRows = monthPerspective.rows.filter(r => r.status === 'draft');
+  const allDraftsSelected = draftRows.length > 0 && draftRows.every(r => r.plan && selectedPlanIds.includes(r.plan.id));
+
+  const toggleSelectAllDrafts = () => {
+    if (allDraftsSelected) {
+      setSelectedPlanIds([]);
+    } else {
+      setSelectedPlanIds(draftRows.map(r => r.plan!.id));
+    }
+  };
 
   return (
     <section className="panel full">
       <PageTitle
-        eyebrow="MONTHLY ALLOCATION"
-        title="月度分配管理"
-        description="选择项目按月规划额度。当月额度从合同总额划出，并在全部项目成员间按贡献分配。"
+        eyebrow="MONTHLY ALLOCATION & BATCH WORKSPACE"
+        title="月底分配与全项目集中管理"
+        description="集中查看所有项目当月的分配额度与全周期规划节奏。支持批量微调额度、人员分配与一键批量发布，高效完成月底考核结算。"
         action={
-          project && project.status === 'active' && canManageThisProject ? (
-            <button className="primary" onClick={() => onAdd(project.id)}>
-              <Plus size={16} />新增月份分配
-            </button>
-          ) : undefined
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '3px', border: '1px solid #e2e8f0' }}>
+              <button
+                type="button"
+                onClick={() => setViewMode('matrix')}
+                style={{
+                  border: 'none',
+                  background: viewMode === 'matrix' ? '#ffffff' : 'transparent',
+                  color: viewMode === 'matrix' ? '#166534' : '#64748b',
+                  fontWeight: viewMode === 'matrix' ? 700 : 500,
+                  boxShadow: viewMode === 'matrix' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+              >
+                <Table2 size={14} /> 🏢 全项目当月集中管理
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('single')}
+                style={{
+                  border: 'none',
+                  background: viewMode === 'single' ? '#ffffff' : 'transparent',
+                  color: viewMode === 'single' ? '#166534' : '#64748b',
+                  fontWeight: viewMode === 'single' ? 700 : 500,
+                  boxShadow: viewMode === 'single' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+              >
+                <FolderKanban size={14} /> 📁 单项目历史明细
+              </button>
+            </div>
+            {viewMode === 'single' && singleProject && singleProject.status === 'active' && canManageSingleProject && (
+              <button className="primary" onClick={() => onAdd(singleProject.id)}>
+                <Plus size={16} />新增月份分配
+              </button>
+            )}
+          </div>
         }
       />
 
-      <div className="toolbar" style={{ flexWrap: 'wrap', gap: '12px', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-          <Field label="选择项目">
-            <select value={projectId} onChange={e => setProjectId(e.target.value)} style={{ minWidth: 320 }}>
-              {state.projects.map(p => (
-                <option value={p.id} key={p.id}>
-                  {p.code} · {p.name} ({p.status === 'active' ? '执行中' : '已结项'})
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          {/* 明细展示风格切换 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>人员明细排版方式</span>
-            <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '6px', padding: '2px' }}>
-              <button
-                type="button"
-                onClick={() => setMemberViewMode('table')}
-                style={{
-                  border: 'none',
-                  background: memberViewMode === 'table' ? '#ffffff' : 'transparent',
-                  color: memberViewMode === 'table' ? '#166534' : '#64748b',
-                  fontWeight: memberViewMode === 'table' ? 700 : 400,
-                  boxShadow: memberViewMode === 'table' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  padding: '4px 10px',
-                  borderRadius: '5px',
-                  fontSize: '11.5px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-              >
-                <Table2 size={13} /> 表格明细
-              </button>
-              <button
-                type="button"
-                onClick={() => setMemberViewMode('compact')}
-                style={{
-                  border: 'none',
-                  background: memberViewMode === 'compact' ? '#ffffff' : 'transparent',
-                  color: memberViewMode === 'compact' ? '#166534' : '#64748b',
-                  fontWeight: memberViewMode === 'compact' ? 700 : 400,
-                  boxShadow: memberViewMode === 'compact' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  padding: '4px 10px',
-                  borderRadius: '5px',
-                  fontSize: '11.5px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-              >
-                <LayoutGrid size={13} /> 紧凑胶囊
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {detail && (
-          <div className="quota-summary" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <span>合同总额: <b>{detail.contractWan} 万元</b></span>
-            <span>已分配: <b>{detail.totalBudgetPct}</b> ({detail.totalAllocatedWan}万)</span>
-            <span>剩余: <b style={{ color: detail.remainingRate > 0 ? '#b45309' : '#15803d' }}>{detail.remainingPct}</b> ({detail.remainingWan}万)</span>
-            {perspective && (
-              <span>交付储备金: <b style={{ color: perspective.deliveryStageReserveRate >= 3500 ? '#166534' : '#b45309' }}>{wan(perspective.deliveryStageReserveAmount)}万 ({pct(perspective.deliveryStageReserveRate)})</b></span>
-            )}
-            {perspective?.isFrontLoadedRisk && (
-              <Badge tone="amber">⚠️ 前期透支风险</Badge>
-            )}
-            {onOpenQuotaSchedule && (
-              <button
-                type="button"
-                className="secondary"
-                style={{ padding: '3px 9px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
-                onClick={() => onOpenQuotaSchedule(projectId)}
-                title="打开全周期额度规划与各月交付节点透视"
-              >
-                <CalendarRange size={13} /> 周期额度规划
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {detail && (
-        <div className="quota-meter" style={{ margin: '-4px 0 18px' }}>
-          <div className="quota-bar-track">
-            <div className="quota-bar-fill quota-bar-published" style={{ width: `${detail.publishedBudgetRate / 100}%` }} />
-            <div className="quota-bar-fill quota-bar-draft" style={{ width: `${detail.draftBudgetRate / 100}%` }} />
-            <div className="quota-bar-fill quota-bar-remaining" style={{ width: `${detail.remainingRate / 100}%` }} />
-          </div>
-        </div>
-      )}
-
-      {/* 交互式表格（支持拖拽调宽列、拖拽排序列/行、按分配比例从大到小排列） */}
-      <table style={{ marginTop: '16px', tableLayout: 'fixed', width: '100%' }}>
-        <thead>
-          <tr>
-            <th style={{ width: colWidths.month, position: 'relative' }}>
-              <span>分配月份</span>
-              <div
-                className="col-resize-handle"
-                onMouseDown={e => { e.preventDefault(); handleColResize('month', e.clientX, colWidths.month); }}
-                title="拖动调整列宽"
-              />
-            </th>
-            <th style={{ width: colWidths.budget, position: 'relative' }}>
-              <span>月度预算比例</span>
-              <div
-                className="col-resize-handle"
-                onMouseDown={e => { e.preventDefault(); handleColResize('budget', e.clientX, colWidths.budget); }}
-                title="拖动调整列宽"
-              />
-            </th>
-            <th style={{ width: colWidths.amount, position: 'relative' }}>
-              <span>当月额度</span>
-              <div
-                className="col-resize-handle"
-                onMouseDown={e => { e.preventDefault(); handleColResize('amount', e.clientX, colWidths.amount); }}
-                title="拖动调整列宽"
-              />
-            </th>
-            <th style={{ width: colWidths.detail, position: 'relative' }}>
-              <span>成员分配明细（按分配比例从大到小排列）</span>
-              <div
-                className="col-resize-handle"
-                onMouseDown={e => { e.preventDefault(); handleColResize('detail', e.clientX, colWidths.detail); }}
-                title="拖动调整列宽"
-              />
-            </th>
-            <th style={{ width: colWidths.status, position: 'relative' }}>
-              <span>状态</span>
-              <div
-                className="col-resize-handle"
-                onMouseDown={e => { e.preventDefault(); handleColResize('status', e.clientX, colWidths.status); }}
-                title="拖动调整列宽"
-              />
-            </th>
-            <th className="actions" style={{ width: colWidths.actions, position: 'relative' }}>
-              <span>操作</span>
-              <div
-                className="col-resize-handle"
-                onMouseDown={e => { e.preventDefault(); handleColResize('actions', e.clientX, colWidths.actions); }}
-                title="拖动调整列宽"
-              />
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {displayedPlans.map(plan => {
-            const amt = project ? monthAmount(project, plan) : 0;
-            // 需求1：按比例从大到小排序
-            const sortedEntries = [...plan.entries].sort((a, b) => b.rate - a.rate);
-            const contentCount = plan.entries.filter(e => e.workContent?.trim()).length;
-            const isSelected = selectedPlan?.id === plan.id;
-            return (
-              <tr
-                key={plan.id}
-                draggable
-                onDragStart={() => handleDragStart(plan.id)}
-                onDragOver={e => handleDragOver(e, plan.id)}
-                onDragEnd={handleDragEnd}
-                onClick={() => setSelectedPlanId(plan.id)}
-                className={`draggable-plan-row ${draggedPlanId === plan.id ? 'dragging' : ''}`}
-                style={{
-                  cursor: 'pointer',
-                  background: isSelected ? '#f6fbf8' : undefined,
-                  borderLeft: isSelected ? '4px solid #166534' : undefined
-                }}
-              >
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <span className="row-drag-handle" title="按住拖拽调整行顺序"><GripVertical size={14} /></span>
-                    <b>{plan.month}</b>
-                  </div>
-                </td>
-                <td>
-                  <div><b>{pct(plan.budget)}</b></div>
-                  {(() => {
-                    const plannedQuota = project?.quotaSchedule?.find(s => s.month === plan.month);
-                    if (!plannedQuota) return null;
-                    const diff = plan.budget - plannedQuota.rate;
-                    return (
-                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', lineHeight: 1.3 }}>
-                        <div>规划: {pct(plannedQuota.rate)}</div>
-                        <div>
-                          偏差: {diff > 0 ? (
-                            <span style={{ color: '#b45309', fontWeight: 600 }}>+{pct(diff)}</span>
-                          ) : diff < 0 ? (
-                            <span style={{ color: '#0284c7', fontWeight: 600 }}>-{pct(-diff)}</span>
-                          ) : (
-                            <span style={{ color: '#166534', fontWeight: 600 }}>持平</span>
-                          )}
-                        </div>
-                        {plannedQuota.milestone && (
-                          <div style={{ marginTop: '2px' }}>
-                            <span style={{ fontSize: '10px', background: '#e0f2fe', color: '#0369a1', padding: '1px 5px', borderRadius: '4px' }}>
-                              {plannedQuota.milestone}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </td>
-                <td><b>{wan(amt)} 万元</b></td>
-                <td>
-                  {memberViewMode === 'table' ? (
-                    <table className="plan-member-mini-table">
-                      <thead>
-                        <tr>
-                          <th style={{ width: '80px' }}>成员姓名</th>
-                          <th style={{ width: '70px' }}>专业组</th>
-                          <th style={{ width: '75px', textAlign: 'right' }}>分配比例</th>
-                          <th style={{ width: '95px', textAlign: 'right' }}>当月额度</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedEntries.map(e => {
-                          const emp = state.employees.find(x => x.id === e.employeeId);
-                          const memberAmount = amt ? Math.round((amt * e.rate) / 10000) : 0;
-                          return (
-                            <tr key={e.employeeId}>
-                              <td>
-                                <b>{emp?.name || e.employeeId}</b>
-                                {emp?.id === project?.owner && <span title="项目负责人" style={{ marginLeft: 3, fontSize: 10 }}>👑</span>}
-                              </td>
-                              <td><GroupTag group={emp?.group} /></td>
-                              <td style={{ textAlign: 'right', fontWeight: 600, color: e.rate > 0 ? '#166534' : '#94a3b8' }}>
-                                {pct(e.rate)}
-                              </td>
-                              <td style={{ textAlign: 'right', color: '#1e293b', fontWeight: e.rate > 0 ? 600 : 400 }}>
-                                {score(memberAmount)} 元
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div className="compact-member-capsules">
-                      {sortedEntries.map(e => {
-                        const emp = state.employees.find(x => x.id === e.employeeId);
-                        const memberAmount = amt ? Math.round((amt * e.rate) / 10000) : 0;
-                        const isOwner = emp?.id === project?.owner;
-                        return (
-                          <div
-                            key={e.employeeId}
-                            className={`member-capsule ${e.rate > 0 ? (e.rate >= 2000 ? 'high' : 'normal') : 'zero'}`}
-                            title={`${emp?.name} (${emp?.group || '未分组'}): 分配比例 ${pct(e.rate)}，折合额度 ${score(memberAmount)} 元${e.workContent ? `\n工作内容：${e.workContent}` : ''}`}
-                          >
-                            <span className="capsule-name">
-                              {emp?.name || e.employeeId}
-                              {isOwner && <span style={{ fontSize: 10, marginLeft: 2 }}>👑</span>}
-                            </span>
-                            <span className="capsule-rate">{pct(e.rate)}</span>
-                            <span className="capsule-amount">{score(memberAmount)}元</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  <div style={{ marginTop: '6px' }}>
-                    <button
-                      type="button"
-                      className="text-button"
-                      style={{ fontSize: '11px', color: contentCount > 0 ? '#166534' : '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                      onClick={e => {
-                        e.stopPropagation();
-                        setSelectedPlanId(plan.id);
-                        const el = document.getElementById('work-content-section');
-                        if (el) el.scrollIntoView({ behavior: 'smooth' });
-                      }}
-                      title="点击跳转至下方独立区域查看该月完整工作内容描述"
-                    >
-                      <FileText size={12} /> 查看工作内容描述 ({contentCount}/{plan.entries.length} 人已填)
-                    </button>
-                  </div>
-                </td>
-                <td>
-                  <Badge tone={plan.status === 'published' ? 'green' : 'amber'}>
-                    {plan.status === 'published' ? '已发布' : '草稿待发布'}
-                  </Badge>
-                </td>
-                <td className="actions" onClick={e => e.stopPropagation()}>
-                  {canManageThisProject ? (
-                    plan.status === 'draft' ? (
-                      <>
-                        <button onClick={() => onEdit(plan)}><Pencil size={13} />编辑</button>
-                        <button onClick={() => onAction('plan.publish', plan)}><Check size={13} />发布</button>
-                        <button className="danger-link" onClick={() => onAction('plan.delete', plan)}><Trash2 size={13} />删除</button>
-                      </>
-                    ) : (
-                      <button onClick={() => onAction('plan.reopen', plan)}><RotateCcw size={13} />撤回草稿</button>
-                    )
-                  ) : (
-                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>只读查看</span>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-          {plans.length === 0 && (
-            <tr><td colSpan={6}><Empty text="当前项目还没有配置任何月度分配" /></td></tr>
-          )}
-        </tbody>
-      </table>
-
-      {/* 需求1：工作内容放置于该界面专门一个独立的区域进行显示 */}
-      {selectedPlan && (
-        <div className="work-content-showcase-panel" id="work-content-section" style={{ marginTop: '24px' }}>
-          <div className="work-showcase-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div className="work-showcase-icon">
-                <FileText size={18} color="#166534" />
+      {/* ============================================================== */}
+      {/* 视图一：全项目当月集中管理 (月底分配与批量发布) */}
+      {/* ============================================================== */}
+      {viewMode === 'matrix' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* 月份切换器与看板指标横幅 */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>考核结算月份:</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <button type="button" className="secondary" style={{ padding: '4px 8px', fontSize: '11.5px', cursor: 'pointer' }} onClick={() => navigateMonth(-1)} title="切换至上个月">
+                  ◀ 上月
+                </button>
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={e => {
+                    if (e.target.value) {
+                      setSelectedMonth(e.target.value);
+                      setDraftEdits({});
+                      setSelectedPlanIds([]);
+                    }
+                  }}
+                  style={{ padding: '4px 8px', fontSize: '13px', fontWeight: 600, border: '1px solid #cbd5e1', borderRadius: '6px', background: '#ffffff', color: '#166534' }}
+                />
+                <button type="button" className="secondary" style={{ padding: '4px 8px', fontSize: '11.5px', cursor: 'pointer' }} onClick={() => navigateMonth(1)} title="切换至下个月">
+                  下月 ▶
+                </button>
+                <button type="button" className="secondary" style={{ padding: '4px 8px', fontSize: '11.5px', cursor: 'pointer' }} onClick={() => navigateMonth(0)} title="回到当前系统月份">
+                  📅 当前月
+                </button>
               </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '15px', color: '#14532d', fontWeight: 700 }}>
-                  【{selectedPlan.month}】项目成员当月工作内容与执行记录
-                </h3>
-                <span style={{ fontSize: '12px', color: '#64748b' }}>
-                  共 {selectedPlan.entries.length} 位成员 · 已登记工作内容 {selectedPlan.entries.filter(e => e.workContent?.trim()).length} 人 · 当月额度 {wan(project ? monthAmount(project, selectedPlan) : 0)} 万元
+            </div>
+
+            {/* 统计指标卡片 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', fontSize: '12.5px' }}>
+              <div style={{ background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                项目总计: <b>{monthPerspective.totalProjects}</b> 个
+              </div>
+              <div style={{ background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                配置进度: <b style={{ color: monthPerspective.allocatedCount === monthPerspective.totalProjects ? '#15803d' : '#b45309' }}>{monthPerspective.allocatedCount}/{monthPerspective.totalProjects}</b>
+                <span style={{ fontSize: '11px', color: '#64748b', marginLeft: '4px' }}>
+                  ({monthPerspective.publishedCount}已发布 · {monthPerspective.draftCount}草稿)
                 </span>
               </div>
+              <div style={{ background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                全周期规划: <b>{wan(monthPerspective.totalPlannedAmount)} 万元</b>
+              </div>
+              <div style={{ background: '#ffffff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                当月分配: <b style={{ color: '#166534' }}>{wan(monthPerspective.totalActualAmount)} 万元</b>
+                {(() => {
+                  const diffWan = (monthPerspective.totalActualAmount - monthPerspective.totalPlannedAmount) / 1000000;
+                  if (Math.abs(diffWan) < 0.0001) {
+                    return <span style={{ marginLeft: 4, fontSize: '11px', color: '#166534', fontWeight: 600 }}>持平</span>;
+                  }
+                  return (
+                    <span style={{ marginLeft: 4, fontSize: '11px', fontWeight: 600, color: diffWan > 0 ? '#b45309' : '#0284c7' }}>
+                      ({diffWan > 0 ? `+${diffWan.toFixed(4)}` : diffWan.toFixed(4)}万)
+                    </span>
+                  );
+                })()}
+              </div>
             </div>
+          </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {plans.length > 1 && (
-                <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '6px', padding: '2px' }}>
-                  {plans.map(p => (
+          {/* 操作工具栏与筛选 */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {/* 状态过滤 */}
+              <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '2px', border: '1px solid #e2e8f0' }}>
+                {(['all', 'draft', 'unallocated', 'published'] as const).map(key => {
+                  const labelMap = {
+                    all: `全部 (${monthPerspective.totalProjects})`,
+                    draft: `草稿待发布 (${monthPerspective.draftCount})`,
+                    unallocated: `未配置 (${monthPerspective.totalProjects - monthPerspective.allocatedCount})`,
+                    published: `已发布 (${monthPerspective.publishedCount})`
+                  };
+                  const active = statusFilter === key;
+                  return (
                     <button
-                      key={p.id}
+                      key={key}
                       type="button"
-                      onClick={() => setSelectedPlanId(p.id)}
+                      onClick={() => setStatusFilter(key)}
                       style={{
                         border: 'none',
-                        background: p.id === selectedPlan.id ? '#ffffff' : 'transparent',
-                        color: p.id === selectedPlan.id ? '#166534' : '#64748b',
-                        fontWeight: p.id === selectedPlan.id ? 700 : 400,
-                        boxShadow: p.id === selectedPlan.id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                        padding: '4px 10px',
+                        background: active ? '#ffffff' : 'transparent',
+                        color: active ? '#166534' : '#64748b',
+                        fontWeight: active ? 700 : 400,
+                        padding: '3px 9px',
                         borderRadius: '5px',
                         fontSize: '11.5px',
                         cursor: 'pointer'
                       }}
                     >
-                      {p.month}
+                      {labelMap[key]}
                     </button>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
+
+              {/* 搜索 */}
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  placeholder="搜索令号、项目或负责人..."
+                  value={searchKw}
+                  onChange={e => setSearchKw(e.target.value)}
+                  style={{ width: '200px', padding: '4px 8px', fontSize: '12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                />
+              </div>
+            </div>
+
+            {/* 批量操作按键组 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="secondary"
+                style={{ padding: '4px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                onClick={handleApplyAllPlanned}
+                title="自动将所有存在规划且未发布的项目设置为规划比例"
+              >
+                <Sparkles size={13} color="#0284c7" /> 一键按规划填充当月额度
+              </button>
 
               <button
                 type="button"
                 className="secondary"
-                style={{ padding: '4px 10px', fontSize: '12px', gap: '4px' }}
-                onClick={() => {
-                  const lines = ['成员姓名,专业组,分配比例,当月折合额度(元),当月工作内容描述'];
-                  const amt = project ? monthAmount(project, selectedPlan) : 0;
-                  const sorted = [...selectedPlan.entries].sort((a, b) => b.rate - a.rate);
-                  for (const e of sorted) {
-                    const emp = state.employees.find(x => x.id === e.employeeId);
-                    const mAmount = amt ? Math.round((amt * e.rate) / 10000) : 0;
-                    lines.push(`"${emp?.name || e.employeeId}","${emp?.group || ''}","${pct(e.rate)}","${score(mAmount)}","${(e.workContent || '').replace(/"/g, '""')}"`);
-                  }
-                  triggerDownload(lines.join('\n'), `${project?.code || '项目'}_${selectedPlan.month}_成员工作内容明细.csv`);
-                }}
-                title="导出当月成员分配及工作内容描述为 CSV"
+                style={{ padding: '4px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                onClick={handleApplyAllTeamDefaults}
+                title="一键将各项目的默认项目组成员与比例载入未发布的分配方案"
               >
-                <Download size={13} /> 导出工作内容 CSV
+                <Users size={13} color="#475569" /> 一键应用项目组默认比例
               </button>
+
+              {dirtyCount > 0 && (
+                <button
+                  type="button"
+                  className="primary"
+                  style={{ padding: '4px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', background: '#0284c7', borderColor: '#0284c7' }}
+                  onClick={handleSaveAllDirty}
+                  disabled={isSavingBatch}
+                >
+                  <Save size={13} /> {isSavingBatch ? '正在保存...' : `💾 批量保存修改 (${dirtyCount} 项待保存)`}
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="primary"
+                style={{ padding: '4px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                onClick={handleBatchPublish}
+                disabled={isPublishingBatch || monthPerspective.draftCount === 0}
+                title="将勾选的草稿方案批量正式发布"
+              >
+                <CheckSquare size={13} /> {isPublishingBatch ? '正在发布...' : `🚀 批量发布 (${selectedPlanIds.length > 0 ? selectedPlanIds.length : '全部草稿'})`}
+              </button>
+
+              {selectedPlanIds.some(id => monthPerspective.rows.some(r => r.plan?.id === id && r.plan.status === 'published')) && (
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{ padding: '4px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', color: '#b45309' }}
+                  onClick={handleBatchReopen}
+                  title="将选中的已发布方案批量撤回为草稿"
+                >
+                  <RotateCcw size={13} /> 批量撤回草稿
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="work-cards-grid">
-            {[...selectedPlan.entries].sort((a, b) => b.rate - a.rate).map(e => {
-              const emp = state.employees.find(x => x.id === e.employeeId);
-              const amt = project ? monthAmount(project, selectedPlan) : 0;
-              const memberAmount = amt ? Math.round((amt * e.rate) / 10000) : 0;
-              const isOwner = emp?.id === project?.owner;
-              const hasContent = !!e.workContent?.trim();
-              return (
-                <div key={e.employeeId} className={`work-card-item ${hasContent ? 'has-content' : 'empty-content'}`}>
-                  <div className="work-card-top">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <b style={{ fontSize: '13.5px', color: '#1e293b' }}>
-                        {emp?.name || e.employeeId}
-                      </b>
-                      {isOwner && <span title="项目负责人" style={{ fontSize: '12px' }}>👑</span>}
-                      <GroupTag group={emp?.group} />
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: e.rate > 0 ? '#166534' : '#94a3b8' }}>
-                        {pct(e.rate)}
-                      </span>
-                      <span style={{ fontSize: '12px', color: '#64748b' }}>
-                        {score(memberAmount)} 元
-                      </span>
-                    </div>
-                  </div>
+          {/* 全项目当月集中矩阵列表 */}
+          <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+            <table style={{ width: '100%', minWidth: '1080px', margin: 0 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  <th style={{ width: '40px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={allDraftsSelected}
+                      onChange={toggleSelectAllDrafts}
+                      title="全选/取消全选当月所有草稿方案"
+                    />
+                  </th>
+                  <th style={{ width: '22%' }}>项目令号与名称</th>
+                  <th style={{ width: '18%' }}>全周期规划参考 ({selectedMonth})</th>
+                  <th style={{ width: '24%' }}>当月分配额度 (可直接行内调整)</th>
+                  <th style={{ width: '18%' }}>项目成员分配预览</th>
+                  <th style={{ width: '10%', textAlign: 'center' }}>当前状态</th>
+                  <th style={{ width: '8%', textAlign: 'center' }}>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMatrixRows.map(row => {
+                  const pId = row.project.id;
+                  const currentBudget = draftEdits[pId] !== undefined
+                    ? draftEdits[pId].budget
+                    : (row.plan ? row.plan.budget : (row.plannedRate || 0));
+                  const currentEntries = draftEdits[pId]?.entries || row.entries;
+                  const isDirty = Boolean(draftEdits[pId]?.dirty);
+                  const isPlanChecked = row.plan ? selectedPlanIds.includes(row.plan.id) : false;
 
-                  <div className="work-card-body">
-                    {hasContent ? (
-                      <p className="work-content-text">{e.workContent}</p>
-                    ) : (
-                      <span className="work-content-placeholder">（当月暂无工作内容记录）</span>
-                    )}
+                  const calculatedAmt = monthAmount(row.project, { budget: currentBudget } as Plan);
+                  const diffRate = currentBudget - row.plannedRate;
+                  const isOverRemaining = currentBudget > row.allocableRemainingRate;
+                  const ownerEmp = state.employees.find(e => e.id === row.project.owner);
+
+                  return (
+                    <tr
+                      key={row.project.id}
+                      style={{
+                        background: isDirty ? '#f0fdf4' : undefined,
+                        borderLeft: isDirty ? '4px solid #16a34a' : undefined
+                      }}
+                    >
+                      {/* Checkbox */}
+                      <td style={{ textAlign: 'center' }}>
+                        {row.plan ? (
+                          <input
+                            type="checkbox"
+                            checked={isPlanChecked}
+                            onChange={() => {
+                              setSelectedPlanIds(prev =>
+                                isPlanChecked ? prev.filter(id => id !== row.plan!.id) : [...prev, row.plan!.id]
+                              );
+                            }}
+                          />
+                        ) : (
+                          <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>
+                        )}
+                      </td>
+
+                      {/* 项目令号与名称 */}
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '11px', background: '#f1f5f9', color: '#475569', padding: '1px 5px', borderRadius: '4px', fontWeight: 600 }}>
+                              {row.project.code}
+                            </span>
+                            <b style={{ fontSize: '13.5px', color: '#1e293b' }}>{row.project.name}</b>
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: '#64748b' }}>
+                            合同总额: <b>{wan(row.project.contract)} 万元</b> · 负责人: <b>{ownerEmp?.name || '未设置'}</b> 👑
+                            {row.isHistorical && <span style={{ marginLeft: 4, color: '#b45309', fontWeight: 600 }}>(历史项目)</span>}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* 全周期规划参考 */}
+                      <td>
+                        {row.plannedRate > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontWeight: 700, color: '#0369a1', fontSize: '13px' }}>
+                                {pct(row.plannedRate)}
+                              </span>
+                              <span style={{ fontSize: '12px', color: '#475569' }}>
+                                ({row.plannedAmountWan} 万元)
+                              </span>
+                            </div>
+                            <div>
+                              {row.plannedStageType === 'bidding' ? (
+                                <span style={{ fontSize: '10.5px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                  🤝 前期争取 ({pct(row.plannedRate)})
+                                </span>
+                              ) : row.plannedStageType === 'maintenance' ? (
+                                <span style={{ fontSize: '10.5px', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                  🔒 维保阶段 (保留5%)
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: '10.5px', background: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: '4px' }}>
+                                  {row.plannedMilestone || '研制交付阶段'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '12px', color: '#94a3b8' }}>未预设规划</span>
+                        )}
+                      </td>
+
+                      {/* 当月分配额度 (可直接行内调整) */}
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="100"
+                              disabled={row.status === 'published'}
+                              value={(currentBudget / 100).toFixed(2)}
+                              onChange={e => handleUpdateBudget(pId, parseFloat(e.target.value || '0') * 100)}
+                              style={{
+                                width: '68px',
+                                textAlign: 'center',
+                                padding: '3px 4px',
+                                fontSize: '13px',
+                                fontWeight: 700,
+                                borderRadius: '5px',
+                                border: isOverRemaining ? '1px solid #ef4444' : isDirty ? '1px solid #16a34a' : '1px solid #cbd5e1',
+                                background: row.status === 'published' ? '#f8fafc' : '#ffffff',
+                                color: isOverRemaining ? '#ef4444' : '#166534'
+                              }}
+                            />
+                            <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>%</span>
+
+                            {row.status !== 'published' && (
+                              <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                                <button type="button" style={{ padding: '2px 5px', fontSize: '10.5px', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#ffffff', cursor: 'pointer' }} onClick={() => handleUpdateBudget(pId, currentBudget - 100)}>-1%</button>
+                                <button type="button" style={{ padding: '2px 5px', fontSize: '10.5px', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#ffffff', cursor: 'pointer' }} onClick={() => handleUpdateBudget(pId, currentBudget + 100)}>+1%</button>
+                                <button type="button" style={{ padding: '2px 5px', fontSize: '10.5px', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#ffffff', cursor: 'pointer' }} onClick={() => handleUpdateBudget(pId, currentBudget + 500)}>+5%</button>
+                              </div>
+                            )}
+
+                            {row.status !== 'published' && row.plannedRate > 0 && currentBudget !== row.plannedRate && (
+                              <button
+                                type="button"
+                                style={{ padding: '2px 6px', fontSize: '10.5px', border: '1px solid #bae6fd', borderRadius: '4px', background: '#f0f9ff', color: '#0369a1', cursor: 'pointer' }}
+                                onClick={() => handleUpdateBudget(pId, row.plannedRate)}
+                                title={`一键套用全周期规划预设值 ${pct(row.plannedRate)}`}
+                              >
+                                ⚡ 套用规划
+                              </button>
+                            )}
+                          </div>
+
+                          <div style={{ fontSize: '11.5px', color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>折合: <b>{wan(calculatedAmt)} 万元</b></span>
+                            {row.plannedRate > 0 && (
+                              <span style={{ fontSize: '11px', color: diffRate > 0 ? '#b45309' : diffRate < 0 ? '#0284c7' : '#166534', fontWeight: 600 }}>
+                                偏差: {diffRate > 0 ? `+${pct(diffRate)}` : diffRate < 0 ? `-${pct(-diffRate)}` : '持平'}
+                              </span>
+                            )}
+                          </div>
+
+                          {isOverRemaining && (
+                            <span style={{ fontSize: '11px', color: '#dc2626', fontWeight: 600 }}>
+                              ⚠️ 超过剩余可用额度 ({pct(row.allocableRemainingRate)})
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 项目成员分配预览与快捷调整 */}
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            {currentEntries.slice(0, 3).map(e => {
+                              const emp = state.employees.find(x => x.id === e.employeeId);
+                              return (
+                                <span
+                                  key={e.employeeId}
+                                  style={{
+                                    fontSize: '11px',
+                                    background: '#f1f5f9',
+                                    color: '#334155',
+                                    padding: '1px 5px',
+                                    borderRadius: '4px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                  }}
+                                >
+                                  {emp?.name || e.employeeId}: <b>{pct(e.rate)}</b>
+                                </span>
+                              );
+                            })}
+                            {currentEntries.length > 3 && (
+                              <span style={{ fontSize: '11px', color: '#64748b' }}>
+                                等共 {currentEntries.length} 人
+                              </span>
+                            )}
+                          </div>
+
+                          {row.status !== 'published' && (
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{ padding: '2px 7px', fontSize: '11px', alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}
+                              onClick={() => {
+                                setQuickAllocProject({
+                                  project: row.project,
+                                  budgetRate: currentBudget,
+                                  entries: currentEntries
+                                });
+                              }}
+                            >
+                              <Users size={12} /> 👥 快速配置成员比例
+                            </button>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 当前状态 */}
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                          {isDirty ? (
+                            <span style={{ fontSize: '11px', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                              ✏️ 待保存
+                            </span>
+                          ) : row.status === 'published' ? (
+                            <Badge tone="green">已发布</Badge>
+                          ) : row.status === 'draft' ? (
+                            <Badge tone="amber">草稿待发布</Badge>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: '#94a3b8', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>未配置</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 操作 */}
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                          {isDirty && (
+                            <button
+                              type="button"
+                              className="primary"
+                              style={{ padding: '2px 7px', fontSize: '11px', cursor: 'pointer' }}
+                              onClick={() => handleSaveSingleRow(pId)}
+                              title="单独保存该项目的修改"
+                            >
+                              保存
+                            </button>
+                          )}
+
+                          {row.status === 'draft' && row.plan && (
+                            <button
+                              type="button"
+                              style={{ padding: '2px 7px', fontSize: '11px', border: '1px solid #86efac', background: '#f0fdf4', color: '#166534', borderRadius: '4px', cursor: 'pointer' }}
+                              onClick={() => onAction('plan.publish', row.plan!)}
+                              title="发布该项目月度方案"
+                            >
+                              发布
+                            </button>
+                          )}
+
+                          {row.status === 'published' && row.plan && (
+                            <button
+                              type="button"
+                              style={{ padding: '2px 7px', fontSize: '11px', border: '1px solid #cbd5e1', background: '#ffffff', color: '#475569', borderRadius: '4px', cursor: 'pointer' }}
+                              onClick={() => onAction('plan.reopen', row.plan!)}
+                              title="撤回为草稿"
+                            >
+                              撤回
+                            </button>
+                          )}
+
+                          {row.plan ? (
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{ padding: '2px 6px', fontSize: '11px', cursor: 'pointer' }}
+                              onClick={() => onEdit(row.plan!)}
+                              title="打开完整编辑弹窗（含工作内容描述与精细评审）"
+                            >
+                              明细
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{ padding: '2px 6px', fontSize: '11px', cursor: 'pointer' }}
+                              onClick={() => onAdd(row.project.id)}
+                              title="新建月度分配"
+                            >
+                              创建
+                            </button>
+                          )}
+
+                          {onOpenQuotaSchedule && (
+                            <button
+                              type="button"
+                              style={{ padding: '2px 5px', fontSize: '11px', border: 'none', background: 'transparent', color: '#0284c7', cursor: 'pointer' }}
+                              onClick={() => onOpenQuotaSchedule(row.project.id)}
+                              title="查看该项目的全周期额度规划"
+                            >
+                              规划
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {filteredMatrixRows.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      未找到符合条件的项目方案记录
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 快速配置成员比例弹窗 */}
+          {quickAllocProject && (
+            <QuickMemberAllocModal
+              project={quickAllocProject.project}
+              month={selectedMonth}
+              budgetRate={quickAllocProject.budgetRate}
+              initialEntries={quickAllocProject.entries}
+              employees={state.employees}
+              onClose={() => setQuickAllocProject(null)}
+              onSave={entries => {
+                setDraftEdits(prev => ({
+                  ...prev,
+                  [quickAllocProject.project.id]: {
+                    budget: quickAllocProject.budgetRate,
+                    entries,
+                    dirty: true
+                  }
+                }));
+              }}
+            />
+          )}
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 视图二：单项目全周期历史明细 (原有独立项目排期与工作内容展板) */}
+      {/* ============================================================== */}
+      {viewMode === 'single' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="toolbar" style={{ flexWrap: 'wrap', gap: '12px', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <Field label="选择项目">
+                <select value={singleProjectId} onChange={e => setSingleProjectId(e.target.value)} style={{ minWidth: 320 }}>
+                  {state.projects.map(p => (
+                    <option value={p.id} key={p.id}>
+                      {p.code} · {p.name} ({p.status === 'active' ? '执行中' : '已结项'})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>人员明细排版方式</span>
+                <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '6px', padding: '2px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setMemberViewMode('table')}
+                    style={{
+                      border: 'none',
+                      background: memberViewMode === 'table' ? '#ffffff' : 'transparent',
+                      color: memberViewMode === 'table' ? '#166534' : '#64748b',
+                      fontWeight: memberViewMode === 'table' ? 700 : 400,
+                      boxShadow: memberViewMode === 'table' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                      padding: '4px 10px',
+                      borderRadius: '5px',
+                      fontSize: '11.5px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Table2 size={13} /> 表格明细
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMemberViewMode('compact')}
+                    style={{
+                      border: 'none',
+                      background: memberViewMode === 'compact' ? '#ffffff' : 'transparent',
+                      color: memberViewMode === 'compact' ? '#166534' : '#64748b',
+                      fontWeight: memberViewMode === 'compact' ? 700 : 400,
+                      boxShadow: memberViewMode === 'compact' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                      padding: '4px 10px',
+                      borderRadius: '5px',
+                      fontSize: '11.5px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <LayoutGrid size={13} /> 紧凑胶囊
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {singleDetail && (
+              <div className="quota-summary" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <span>合同总额: <b>{singleDetail.contractWan} 万元</b></span>
+                <span>已分配: <b>{singleDetail.totalBudgetPct}</b> ({singleDetail.totalAllocatedWan}万)</span>
+                <span>剩余: <b style={{ color: singleDetail.remainingRate > 0 ? '#b45309' : '#15803d' }}>{singleDetail.remainingPct}</b> ({singleDetail.remainingWan}万)</span>
+                {singlePerspective && (
+                  <span>交付储备金: <b style={{ color: singlePerspective.deliveryStageReserveRate >= 3500 ? '#166534' : '#b45309' }}>{wan(singlePerspective.deliveryStageReserveAmount)}万 ({pct(singlePerspective.deliveryStageReserveRate)})</b></span>
+                )}
+                {singlePerspective?.isFrontLoadedRisk && (
+                  <Badge tone="amber">⚠️ 前期透支风险</Badge>
+                )}
+                {onOpenQuotaSchedule && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ padding: '3px 9px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                    onClick={() => onOpenQuotaSchedule(singleProjectId)}
+                    title="打开全周期额度规划与各月交付节点透视"
+                  >
+                    <CalendarRange size={13} /> 周期额度规划
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {singleDetail && (
+            <div className="quota-meter" style={{ margin: '-4px 0 18px' }}>
+              <div className="quota-bar-track">
+                <div className="quota-bar-fill quota-bar-published" style={{ width: `${singleDetail.publishedBudgetRate / 100}%` }} />
+                <div className="quota-bar-fill quota-bar-draft" style={{ width: `${singleDetail.draftBudgetRate / 100}%` }} />
+                <div className="quota-bar-fill quota-bar-remaining" style={{ width: `${singleDetail.remainingRate / 100}%` }} />
+              </div>
+            </div>
+          )}
+
+          <table style={{ marginTop: '16px', tableLayout: 'fixed', width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={{ width: colWidths.month, position: 'relative' }}>
+                  <span>分配月份</span>
+                  <div className="col-resize-handle" onMouseDown={e => { e.preventDefault(); handleColResize('month', e.clientX, colWidths.month); }} title="拖动调整列宽" />
+                </th>
+                <th style={{ width: colWidths.budget, position: 'relative' }}>
+                  <span>月度预算比例</span>
+                  <div className="col-resize-handle" onMouseDown={e => { e.preventDefault(); handleColResize('budget', e.clientX, colWidths.budget); }} title="拖动调整列宽" />
+                </th>
+                <th style={{ width: colWidths.amount, position: 'relative' }}>
+                  <span>当月额度</span>
+                  <div className="col-resize-handle" onMouseDown={e => { e.preventDefault(); handleColResize('amount', e.clientX, colWidths.amount); }} title="拖动调整列宽" />
+                </th>
+                <th style={{ width: colWidths.detail, position: 'relative' }}>
+                  <span>成员分配明细（按分配比例从大到小排列）</span>
+                  <div className="col-resize-handle" onMouseDown={e => { e.preventDefault(); handleColResize('detail', e.clientX, colWidths.detail); }} title="拖动调整列宽" />
+                </th>
+                <th style={{ width: colWidths.status, position: 'relative' }}>
+                  <span>状态</span>
+                  <div className="col-resize-handle" onMouseDown={e => { e.preventDefault(); handleColResize('status', e.clientX, colWidths.status); }} title="拖动调整列宽" />
+                </th>
+                <th className="actions" style={{ width: colWidths.actions, position: 'relative' }}>
+                  <span>操作</span>
+                  <div className="col-resize-handle" onMouseDown={e => { e.preventDefault(); handleColResize('actions', e.clientX, colWidths.actions); }} title="拖动调整列宽" />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayedSinglePlans.map(plan => {
+                const amt = singleProject ? monthAmount(singleProject, plan) : 0;
+                const sortedEntries = [...plan.entries].sort((a, b) => b.rate - a.rate);
+                const contentCount = plan.entries.filter(e => e.workContent?.trim()).length;
+                const isSelected = selectedPlan?.id === plan.id;
+                return (
+                  <tr
+                    key={plan.id}
+                    draggable
+                    onDragStart={() => handleDragStart(plan.id)}
+                    onDragOver={e => handleDragOver(e, plan.id)}
+                    onDragEnd={handleDragEnd}
+                    onClick={() => setSelectedPlanId(plan.id)}
+                    className={`draggable-plan-row ${draggedPlanId === plan.id ? 'dragging' : ''}`}
+                    style={{
+                      cursor: 'pointer',
+                      background: isSelected ? '#f6fbf8' : undefined,
+                      borderLeft: isSelected ? '4px solid #166534' : undefined
+                    }}
+                  >
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <span className="row-drag-handle" title="按住拖拽调整行顺序"><GripVertical size={14} /></span>
+                        <b>{plan.month}</b>
+                      </div>
+                    </td>
+                    <td>
+                      <div><b>{pct(plan.budget)}</b></div>
+                      {(() => {
+                        const plannedQuota = singleProject?.quotaSchedule?.find(s => s.month === plan.month);
+                        if (!plannedQuota) return null;
+                        const diff = plan.budget - plannedQuota.rate;
+                        return (
+                          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', lineHeight: 1.3 }}>
+                            <div>规划: {pct(plannedQuota.rate)}</div>
+                            <div>
+                              偏差: {diff > 0 ? (
+                                <span style={{ color: '#b45309', fontWeight: 600 }}>+{pct(diff)}</span>
+                              ) : diff < 0 ? (
+                                <span style={{ color: '#0284c7', fontWeight: 600 }}>-{pct(-diff)}</span>
+                              ) : (
+                                <span style={{ color: '#166534', fontWeight: 600 }}>持平</span>
+                              )}
+                            </div>
+                            {plannedQuota.milestone && (
+                              <div style={{ marginTop: '2px' }}>
+                                <span style={{ fontSize: '10px', background: '#e0f2fe', color: '#0369a1', padding: '1px 5px', borderRadius: '4px' }}>
+                                  {plannedQuota.milestone}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td><b>{wan(amt)} 万元</b></td>
+                    <td>
+                      {memberViewMode === 'table' ? (
+                        <table className="plan-member-mini-table">
+                          <thead>
+                            <tr>
+                              <th style={{ width: '80px' }}>成员姓名</th>
+                              <th style={{ width: '70px' }}>专业组</th>
+                              <th style={{ width: '75px', textAlign: 'right' }}>分配比例</th>
+                              <th style={{ width: '95px', textAlign: 'right' }}>当月额度</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sortedEntries.map(e => {
+                              const emp = state.employees.find(x => x.id === e.employeeId);
+                              const memberAmount = amt ? Math.round((amt * e.rate) / 10000) : 0;
+                              return (
+                                <tr key={e.employeeId}>
+                                  <td>
+                                    <b>{emp?.name || e.employeeId}</b>
+                                    {emp?.id === singleProject?.owner && <span title="项目负责人" style={{ marginLeft: 3, fontSize: 10 }}>👑</span>}
+                                  </td>
+                                  <td><GroupTag group={emp?.group} /></td>
+                                  <td style={{ textAlign: 'right', fontWeight: 600, color: e.rate > 0 ? '#166534' : '#94a3b8' }}>
+                                    {pct(e.rate)}
+                                  </td>
+                                  <td style={{ textAlign: 'right', color: '#1e293b', fontWeight: e.rate > 0 ? 600 : 400 }}>
+                                    {score(memberAmount)} 元
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div className="compact-member-capsules">
+                          {sortedEntries.map(e => {
+                            const emp = state.employees.find(x => x.id === e.employeeId);
+                            const memberAmount = amt ? Math.round((amt * e.rate) / 10000) : 0;
+                            const isOwner = emp?.id === singleProject?.owner;
+                            return (
+                              <div
+                                key={e.employeeId}
+                                className={`member-capsule ${e.rate > 0 ? (e.rate >= 2000 ? 'high' : 'normal') : 'zero'}`}
+                                title={`${emp?.name} (${emp?.group || '未分组'}): 分配比例 ${pct(e.rate)}，折合额度 ${score(memberAmount)} 元${e.workContent ? `\n工作内容：${e.workContent}` : ''}`}
+                              >
+                                <span className="capsule-name">
+                                  {emp?.name || e.employeeId}
+                                  {isOwner && <span style={{ fontSize: 10, marginLeft: 2 }}>👑</span>}
+                                </span>
+                                <span className="capsule-rate">{pct(e.rate)}</span>
+                                <span className="capsule-amount">{score(memberAmount)}元</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <div style={{ marginTop: '6px' }}>
+                        <button
+                          type="button"
+                          className="text-button"
+                          style={{ fontSize: '11px', color: contentCount > 0 ? '#166534' : '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                          onClick={e => {
+                            e.stopPropagation();
+                            setSelectedPlanId(plan.id);
+                            const el = document.getElementById('work-content-section');
+                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          }}
+                          title="点击跳转至下方独立区域查看该月完整工作内容描述"
+                        >
+                          <FileText size={12} /> 查看工作内容描述 ({contentCount}/{plan.entries.length} 人已填)
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <Badge tone={plan.status === 'published' ? 'green' : 'amber'}>
+                        {plan.status === 'published' ? '已发布' : '草稿待发布'}
+                      </Badge>
+                    </td>
+                    <td className="actions" onClick={e => e.stopPropagation()}>
+                      {canManageSingleProject ? (
+                        plan.status === 'draft' ? (
+                          <>
+                            <button onClick={() => onEdit(plan)}><Pencil size={13} />编辑</button>
+                            <button onClick={() => onAction('plan.publish', plan)}><Check size={13} />发布</button>
+                            <button className="danger-link" onClick={() => onAction('plan.delete', plan)}><Trash2 size={13} />删除</button>
+                          </>
+                        ) : (
+                          <button onClick={() => onAction('plan.reopen', plan)}><RotateCcw size={13} />撤回草稿</button>
+                        )
+                      ) : (
+                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>只读查看</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {singlePlans.length === 0 && (
+                <tr><td colSpan={6}><Empty text="当前项目还没有配置任何月度分配" /></td></tr>
+              )}
+            </tbody>
+          </table>
+
+          {selectedPlan && (
+            <div className="work-content-showcase-panel" id="work-content-section" style={{ marginTop: '24px' }}>
+              <div className="work-showcase-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div className="work-showcase-icon">
+                    <FileText size={18} color="#166534" />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '15px', color: '#14532d', fontWeight: 700 }}>
+                      【{selectedPlan.month}】项目成员当月工作内容与执行记录
+                    </h3>
+                    <span style={{ fontSize: '12px', color: '#64748b' }}>
+                      共 {selectedPlan.entries.length} 位成员 · 已登记工作内容 {selectedPlan.entries.filter(e => e.workContent?.trim()).length} 人 · 当月额度 {wan(singleProject ? monthAmount(singleProject, selectedPlan) : 0)} 万元
+                    </span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {singlePlans.length > 1 && (
+                    <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '6px', padding: '2px' }}>
+                      {singlePlans.map(p => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setSelectedPlanId(p.id)}
+                          style={{
+                            border: 'none',
+                            background: p.id === selectedPlan.id ? '#ffffff' : 'transparent',
+                            color: p.id === selectedPlan.id ? '#166534' : '#64748b',
+                            fontWeight: p.id === selectedPlan.id ? 700 : 400,
+                            boxShadow: p.id === selectedPlan.id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                            padding: '4px 10px',
+                            borderRadius: '5px',
+                            fontSize: '11.5px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {p.month}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ padding: '4px 10px', fontSize: '12px', gap: '4px' }}
+                    onClick={() => {
+                      const lines = ['成员姓名,专业组,分配比例,当月折合额度(元),当月工作内容描述'];
+                      const amt = singleProject ? monthAmount(singleProject, selectedPlan) : 0;
+                      const sorted = [...selectedPlan.entries].sort((a, b) => b.rate - a.rate);
+                      for (const e of sorted) {
+                        const emp = state.employees.find(x => x.id === e.employeeId);
+                        const mAmount = amt ? Math.round((amt * e.rate) / 10000) : 0;
+                        lines.push(`"${emp?.name || e.employeeId}","${emp?.group || ''}","${pct(e.rate)}","${score(mAmount)}","${(e.workContent || '').replace(/"/g, '""')}"`);
+                      }
+                      triggerDownload(lines.join('\n'), `${singleProject?.code || '项目'}_${selectedPlan.month}_成员工作内容明细.csv`);
+                    }}
+                    title="导出当月成员分配及工作内容描述为 CSV"
+                  >
+                    <Download size={13} /> 导出工作内容 CSV
+                  </button>
+                </div>
+              </div>
+
+              <div className="work-cards-grid">
+                {[...selectedPlan.entries].sort((a, b) => b.rate - a.rate).map(e => {
+                  const emp = state.employees.find(x => x.id === e.employeeId);
+                  const amt = singleProject ? monthAmount(singleProject, selectedPlan) : 0;
+                  const memberAmount = amt ? Math.round((amt * e.rate) / 10000) : 0;
+                  const isOwner = emp?.id === singleProject?.owner;
+                  const hasContent = !!e.workContent?.trim();
+                  return (
+                    <div key={e.employeeId} className={`work-card-item ${hasContent ? 'has-content' : 'empty-content'}`}>
+                      <div className="work-card-top">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <b style={{ fontSize: '13.5px', color: '#1e293b' }}>
+                            {emp?.name || e.employeeId}
+                          </b>
+                          {isOwner && <span title="项目负责人" style={{ fontSize: '12px' }}>👑</span>}
+                          <GroupTag group={emp?.group} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: e.rate > 0 ? '#166534' : '#94a3b8' }}>
+                            {pct(e.rate)}
+                          </span>
+                          <span style={{ fontSize: '12px', color: '#64748b' }}>
+                            {score(memberAmount)} 元
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="work-card-body">
+                        {hasContent ? (
+                          <p className="work-content-text">{e.workContent}</p>
+                        ) : (
+                          <span className="work-content-placeholder">（当月暂无工作内容记录）</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>
