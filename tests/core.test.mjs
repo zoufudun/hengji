@@ -43,6 +43,10 @@ import {
   isEncryptedBackup,
   APP_VERSION,
   UPDATE_HISTORY,
+  MAINTENANCE_QUOTA_RATE,
+  BIDDING_MAX_RATE,
+  BIDDING_DEFAULT_RATE,
+  getQuotaPlanStageType,
 } from '../lib/core.ts';
 
 test('项目创建时只保存成员名单，不需要成员固定系数', () => {
@@ -869,24 +873,61 @@ EA5 S部 月度项目组,项目组,邹富墩,"邹富墩、杨健",2,"邹富墩:3
   assert.equal(singleRes.groups[0].members.length, 2);
 });
 
-test('项目周期额度规划与全周期透视功能（防前期把钱分完、全景透视）', () => {
+test('项目周期额度规划与全周期透视功能（前期争取阶段0-10%可调、维保阶段保留5%、全景透视）', () => {
   let state = demoState();
   const project = state.projects[0]; // project-a (120万, 2026-01 至 2026-03)
 
-  // 1. 验证根据周期生成月份跨度
+  // 1. 验证常量定义
+  assert.equal(MAINTENANCE_QUOTA_RATE, 500); // 5%
+  assert.equal(BIDDING_MAX_RATE, 1000); // 10%
+  assert.equal(BIDDING_DEFAULT_RATE, 500); // 5%
+
+  // 2. 验证根据周期生成月份跨度
   const months = getProjectSpanMonths(project.start, project.end);
   assert.deepEqual(months, ['2026-01', '2026-02', '2026-03']);
 
-  // 2. 验证生成“稳健交付型（防前期分完）”规划模板：后期交付阶段占 45% 左右，防止后期发货无钱可分
+  // 3. 验证生成“稳健交付型”规划模板：
+  // 首月为前期项目争取阶段 (0-10%可调，默认5%)，末月为维保阶段 (保留5%)，中间主体研制分配剩余90%
   const deliverablePlan = generateProjectQuotaSchedule(project, 'deliverable_focused');
   assert.equal(deliverablePlan.length, 3);
   const totalRate = deliverablePlan.reduce((s, p) => s + p.rate, 0);
   assert.equal(totalRate, 10000); // 100%
-  // 最后一期（发货交付期）规划比例明显高于前期
-  assert.ok(deliverablePlan[2].rate >= 4500, '交付发货期应保留至少 45% 额度');
-  assert.ok(deliverablePlan[0].rate <= 2500, '前期规划比例控制在 20%~25%');
 
-  // 3. 验证保存项目额度规划
+  // 首月：前期项目争取阶段 (500 bps = 5%)
+  assert.equal(deliverablePlan[0].stageType, 'bidding');
+  assert.equal(deliverablePlan[0].rate, 500);
+  assert.ok(deliverablePlan[0].milestone.includes('前期项目争取'));
+
+  // 中间月：主体研制阶段 (9000 bps = 90%)
+  assert.equal(deliverablePlan[1].stageType, 'normal');
+  assert.equal(deliverablePlan[1].rate, 9000);
+
+  // 末月：维保阶段（保留 5% 额度）
+  assert.equal(deliverablePlan[2].stageType, 'maintenance');
+  assert.equal(deliverablePlan[2].rate, 500);
+  assert.ok(deliverablePlan[2].milestone.includes('维保阶段'));
+
+  // 4. 验证多月份项目（如6个月）：首月前期争取(5%)，末月维保保留(5%)，中间发货交付大头保障
+  const longProject = {
+    ...project,
+    start: '2026-09',
+    end: '2027-02'
+  };
+  const longPlan = generateProjectQuotaSchedule(longProject, 'deliverable_focused');
+  assert.equal(longPlan.length, 6);
+  assert.equal(longPlan.reduce((s, p) => s + p.rate, 0), 10000);
+  assert.equal(longPlan[0].stageType, 'bidding');
+  assert.equal(longPlan[0].rate, 500);
+  assert.equal(longPlan[5].stageType, 'maintenance');
+  assert.equal(longPlan[5].rate, 500);
+
+  // 5. 验证自定义前期争取阶段比例（如调整为 8% = 800 bps）
+  const customBiddingPlan = generateProjectQuotaSchedule(longProject, 'deliverable_focused', { biddingRate: 800 });
+  assert.equal(customBiddingPlan[0].rate, 800);
+  assert.equal(customBiddingPlan[5].rate, 500);
+  assert.equal(customBiddingPlan.reduce((s, p) => s + p.rate, 0), 10000);
+
+  // 6. 验证保存项目额度规划及阶段合规校验
   state = execute(state, 'admin', {
     type: 'project.saveQuotaSchedule',
     data: {
@@ -898,26 +939,49 @@ test('项目周期额度规划与全周期透视功能（防前期把钱分完�
   const updatedPrj = state.projects.find(p => p.id === project.id);
   assert.ok(updatedPrj.quotaSchedule);
   assert.equal(updatedPrj.quotaSchedule.length, 3);
-  assert.equal(updatedPrj.quotaSchedule[0].month, '2026-01');
+  assert.equal(updatedPrj.quotaSchedule[0].stageType, 'bidding');
+  assert.equal(updatedPrj.quotaSchedule[2].stageType, 'maintenance');
 
-  // 4. 验证获取全周期透视数据（规划 vs 实际、偏差、进度）
+  // 尝试将前期争取阶段设为超过 10%（例如 1200 bps = 12%），系统必须严格抛错拦截
+  assert.throws(() => {
+    execute(state, 'admin', {
+      type: 'project.saveQuotaSchedule',
+      data: {
+        projectId: project.id,
+        quotaSchedule: [
+          { month: '2026-01', rate: 1200, milestone: '前期项目争取阶段', stageType: 'bidding' },
+          { month: '2026-02', rate: 8300, milestone: '模块开发', stageType: 'normal' },
+          { month: '2026-03', rate: 500, milestone: '维保阶段', stageType: 'maintenance' }
+        ]
+      }
+    }, 'save-quota-invalid', '2026-01-01T00:00:00Z');
+  }, /前期项目争取阶段.*不能超过 10%/);
+
+  // 7. 验证获取全周期透视数据（规划 vs 实际、偏差、进度）
   const perspective = getProjectQuotaPerspective(state, project.id);
   assert.ok(perspective);
   assert.equal(perspective.totalPlannedRate, 10000);
   assert.equal(perspective.monthRows.length, 3);
-  // demoState 中 2026-01, 2026-02 已有分配（各 3333 bps，2026-03 有 3334）
   assert.ok(perspective.totalActualRate > 0);
 
-  // 5. 验证 CSV 导出与导入
+  // 8. 验证 CSV 导出与导入（包含阶段类型识别与保留）
   const csvText = exportProjectQuotaScheduleCsv(perspective);
   assert.ok(csvText.includes('工作令号'));
   assert.ok(csvText.includes('规划分配比例(%)'));
-  assert.ok(csvText.includes('2026-01'));
+  assert.ok(csvText.includes('前期项目争取'));
+  assert.ok(csvText.includes('维保阶段'));
 
   const parsedSchedule = parseProjectQuotaScheduleCsvText(csvText, project);
   assert.equal(parsedSchedule.length, 3);
   assert.equal(parsedSchedule[0].month, '2026-01');
   assert.equal(parsedSchedule[0].rate, deliverablePlan[0].rate);
+  assert.equal(parsedSchedule[0].stageType, 'bidding');
+  assert.equal(parsedSchedule[2].stageType, 'maintenance');
+
+  // 9. 验证智能阶段类型识别 getQuotaPlanStageType
+  assert.equal(getQuotaPlanStageType({ milestone: '前期项目争取与技术方案论证' }), 'bidding');
+  assert.equal(getQuotaPlanStageType({ milestone: '维保阶段（项目结束）' }), 'maintenance');
+  assert.equal(getQuotaPlanStageType({ milestone: '核心模块开发与联调' }), 'normal');
 });
 
 test('企业级全量灾备数据 AES-256-GCM 加密导出与权限口令解密验证', async () => {
@@ -971,11 +1035,12 @@ test('企业级全量灾备数据 AES-256-GCM 加密导出与权限口令解密�
   assert.equal(legacyDecrypted.state.projects.length, state.projects.length);
 
   // 6. 版本号与更新历史验证
-  assert.equal(APP_VERSION, '0.3.0');
-  assert.ok(UPDATE_HISTORY.length >= 3);
-  assert.equal(UPDATE_HISTORY[0].version, 'v0.3.0');
-  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('全周期额度规划')));
-  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('加密')));
+  assert.equal(APP_VERSION, '0.4.0');
+  assert.ok(UPDATE_HISTORY.length >= 4);
+  assert.equal(UPDATE_HISTORY[0].version, 'v0.4.0');
+  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('前期项目争取阶段')));
+  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('维保阶段')));
+  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('弹窗防误触')));
 });
 
 

@@ -138,7 +138,12 @@ import {
   type BackupData,
   type ProjectGroup,
   type ProjectGroupType,
-  type ProjectMonthlyQuotaPlan
+  type ProjectMonthlyQuotaPlan,
+  type ProjectQuotaStageType,
+  MAINTENANCE_QUOTA_RATE,
+  BIDDING_MAX_RATE,
+  BIDDING_DEFAULT_RATE,
+  getQuotaPlanStageType,
 } from '../lib/core';
 
 type Tab = 'dashboard' | 'projects' | 'plans' | 'groups' | 'employees' | 'analytics' | 'stars' | 'reports' | 'rules' | 'data_io';
@@ -150,16 +155,38 @@ function Field({ label, children, hint }: { label: string; children: React.React
   return <label className="field"><span>{label}</span>{children}{hint && <small>{hint}</small>}</label>;
 }
 
-function Modal({ title, subtitle, children, onClose, wide = false }: { title: string; subtitle?: string; children: React.ReactNode; onClose(): void; wide?: boolean }) {
+function Modal({
+  title,
+  subtitle,
+  children,
+  onClose,
+  wide = false,
+  closeOnBackdrop = false,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  onClose(): void;
+  wide?: boolean;
+  closeOnBackdrop?: boolean;
+}) {
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      onClick={() => {
+        // 需求1：点击框体外部默认不退出弹窗，防止用户误触导致正在输入的数据丢失；需通过右上角关闭或取消按钮退出
+        if (closeOnBackdrop) {
+          onClose();
+        }
+      }}
+    >
       <section className={`modal ${wide ? 'wide' : ''}`} onClick={e => e.stopPropagation()}>
         <header>
           <div>
             <h2>{title}</h2>
             {subtitle && <p>{subtitle}</p>}
           </div>
-          <button className="icon-button" onClick={onClose}><X size={20} /></button>
+          <button type="button" className="icon-button" onClick={onClose} title="关闭"><X size={20} /></button>
         </header>
         {children}
       </section>
@@ -2757,6 +2784,22 @@ function ProjectQuotaModal({
   const remainingWan = (points(project.contract, remainingRate) / 1_000_000).toFixed(4);
   const isOverAllocable = totalPlannedRate > maxAllocableRate;
 
+  // 需求2：阶段额度统计与约束（前期项目争取阶段 0-10% 可调，维保阶段保留 5% 额度）
+  const biddingTotalRate = schedule
+    .filter(s => getQuotaPlanStageType(s) === 'bidding')
+    .reduce((sum, s) => sum + s.rate, 0);
+  const maintenanceTotalRate = schedule
+    .filter(s => getQuotaPlanStageType(s) === 'maintenance')
+    .reduce((sum, s) => sum + s.rate, 0);
+  const midTotalRate = Math.max(0, totalPlannedRate - biddingTotalRate - maintenanceTotalRate);
+
+  const biddingWan = (points(project.contract, biddingTotalRate) / 1_000_000).toFixed(4);
+  const maintenanceWan = (points(project.contract, maintenanceTotalRate) / 1_000_000).toFixed(4);
+  const midWan = (points(project.contract, midTotalRate) / 1_000_000).toFixed(4);
+
+  const isBiddingOver = biddingTotalRate > BIDDING_MAX_RATE;
+  const isMaintenanceInsufficient = maxAllocableRate >= MAINTENANCE_QUOTA_RATE && maintenanceTotalRate < MAINTENANCE_QUOTA_RATE;
+
   // Actual plans mapped by month
   const actualPlans = useMemo(() => state.plans.filter(p => p.projectId === projectId), [state.plans, projectId]);
   const actualMap = useMemo(() => {
@@ -2790,20 +2833,25 @@ function ProjectQuotaModal({
     const generated = generateProjectQuotaSchedule(project, mode, state);
     setSchedule(generated);
     if (mode === 'deliverable_focused') {
-      setNotice('🎯 已应用【稳健交付型】策略：锁定 45% 以上额度于后期发货交付，防止前期分完！');
+      setNotice('🎯 已应用【稳健交付型】策略：首月前期争取（0-10%可调）、中间主体研制与发货交付、末月维保阶段锁定保留 5% 额度！');
     } else if (mode === 'even') {
-      setNotice('⚖️ 已应用【全周期平摊】策略：平均分配至各个月份');
+      setNotice('⚖️ 已应用【全周期平摊】策略：包含前期争取与末尾维保保留，其余平摊');
     } else if (mode === 'middle_heavy') {
-      setNotice('🚀 已应用【中期攻坚型】策略：重点倾斜于中期核心研制');
+      setNotice('🚀 已应用【中期攻坚型】策略：包含前期争取与末尾维保保留，重点倾斜中期攻坚');
     } else if (mode === 'sync_actual') {
-      setNotice('🔄 已同步【已有实际分配】：已发生月份采用实际分配值，剩余额度平摊到剩余月份');
+      setNotice('🔄 已同步【已有实际分配】：已发生月份采用实际分配值，剩余额度平摊到剩余月份（末月保留5%维保）');
     }
   };
 
   const handleRateChange = (index: number, valStr: string) => {
     const clean = valStr.replace('%', '').trim();
     const num = parseFloat(clean);
-    const newRate = isNaN(num) ? 0 : Math.max(0, Math.min(10000, Math.round(num * 100)));
+    let newRate = isNaN(num) ? 0 : Math.max(0, Math.min(10000, Math.round(num * 100)));
+    const stageType = getQuotaPlanStageType(schedule[index]);
+    if (stageType === 'bidding' && newRate > BIDDING_MAX_RATE) {
+      newRate = BIDDING_MAX_RATE;
+      setNotice('⚠️ 前期项目争取阶段额度为 0-10% 可调，最高不可超过 10.00%');
+    }
     setSchedule(prev => {
       const copy = [...prev];
       copy[index] = { ...copy[index], rate: newRate };
@@ -2814,11 +2862,86 @@ function ProjectQuotaModal({
   const adjustRateStep = (index: number, deltaPct: number) => {
     setSchedule(prev => {
       const copy = [...prev];
+      const stageType = getQuotaPlanStageType(copy[index]);
       const curPct = copy[index].rate / 100;
-      const nextPct = Math.max(0, Math.min(100, Math.round((curPct + deltaPct) * 100) / 100));
+      let nextPct = Math.max(0, Math.min(100, Math.round((curPct + deltaPct) * 100) / 100));
+      if (stageType === 'bidding' && nextPct > 10) {
+        nextPct = 10;
+        setNotice('⚠️ 前期项目争取阶段额度为 0-10% 可调，最高不可超过 10%');
+      }
       copy[index] = { ...copy[index], rate: Math.round(nextPct * 100) };
       return copy;
     });
+  };
+
+  const handleSetRowStageType = (index: number, stageType: ProjectQuotaStageType) => {
+    setSchedule(prev => {
+      const copy = [...prev];
+      const cur = copy[index];
+      if (stageType === 'bidding') {
+        const rate = Math.min(BIDDING_MAX_RATE, cur.rate > 0 ? cur.rate : BIDDING_DEFAULT_RATE);
+        copy[index] = {
+          ...cur,
+          stageType: 'bidding',
+          rate,
+          milestone: cur.milestone && !cur.milestone.includes('阶段') ? cur.milestone : '前期项目争取阶段',
+          note: cur.note || '前期项目争取与客户方案对接（0-10%额度可调）'
+        };
+        setNotice('🤝 已将该月份设置为【前期项目争取阶段】（0-10%额度可调）');
+      } else if (stageType === 'maintenance') {
+        copy[index] = {
+          ...cur,
+          stageType: 'maintenance',
+          rate: MAINTENANCE_QUOTA_RATE,
+          milestone: '维保阶段（项目结束）',
+          note: '项目结束阶段维保支持（保留5%额度）'
+        };
+        setNotice('🔒 已将该月份设置为【维保阶段】（保留5%额度）');
+      } else {
+        copy[index] = {
+          ...cur,
+          stageType: 'normal',
+          milestone: cur.milestone?.includes('争取') || cur.milestone?.includes('维保') ? '阶段研制与交付' : cur.milestone,
+          note: cur.note?.includes('争取') || cur.note?.includes('维保') ? '' : cur.note
+        };
+        setNotice('📝 已将该月份设置为【常规执行阶段】');
+      }
+      return copy;
+    });
+  };
+
+  const handleLockMaintenanceAtEnd = () => {
+    if (schedule.length === 0) return;
+    setSchedule(prev => {
+      const copy = [...prev];
+      const lastIdx = copy.length - 1;
+      copy[lastIdx] = {
+        ...copy[lastIdx],
+        stageType: 'maintenance',
+        rate: MAINTENANCE_QUOTA_RATE,
+        milestone: '维保阶段（项目结束）',
+        note: '项目结束阶段维保支持（保留5%额度）'
+      };
+      return copy;
+    });
+    setNotice('🔒 已为项目最后阶段锁定并保留 5% 维保额度');
+  };
+
+  const handleSetFirstMonthBidding = (ratePct = 5) => {
+    if (schedule.length === 0) return;
+    const targetRate = Math.min(1000, Math.max(0, Math.round(ratePct * 100)));
+    setSchedule(prev => {
+      const copy = [...prev];
+      copy[0] = {
+        ...copy[0],
+        stageType: 'bidding',
+        rate: targetRate,
+        milestone: '前期项目争取阶段',
+        note: '前期项目争取与客户方案对接（0-10%额度可调）'
+      };
+      return copy;
+    });
+    setNotice(`🤝 已将首月配置为【前期项目争取阶段】，规划额度 ${ratePct}% (0-10%可调)`);
   };
 
   const handleMilestoneChange = (index: number, milestone: string) => {
@@ -2841,22 +2964,44 @@ function ProjectQuotaModal({
     setSchedule(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleAddMonth = () => {
-    if (!newMonth || !/^\d{4}-\d{2}$/.test(newMonth)) {
-      alert('请输入合法的月份格式，例如 2026-07');
+  const handleAddCustomMonth = (stageType: ProjectQuotaStageType = 'normal') => {
+    let targetMonth = newMonth;
+    if (!targetMonth || !/^\d{4}-\d{2}$/.test(targetMonth)) {
+      if (stageType === 'maintenance' && schedule.length > 0) {
+        // 自动计算最后一个月份的下一个月
+        const lastM = schedule[schedule.length - 1].month;
+        const [y, m] = lastM.split('-').map(Number);
+        const nextM = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+        targetMonth = nextM;
+      } else {
+        alert('请输入合法的月份格式，例如 2026-07');
+        return;
+      }
+    }
+    if (schedule.some(s => s.month === targetMonth)) {
+      alert(`月份 ${targetMonth} 已存在于规划中`);
       return;
     }
-    if (schedule.some(s => s.month === newMonth)) {
-      alert(`月份 ${newMonth} 已存在于规划中`);
-      return;
+    let defaultRate = 0;
+    let milestone = '新规划阶段';
+    let note = '';
+    if (stageType === 'bidding') {
+      defaultRate = BIDDING_DEFAULT_RATE;
+      milestone = '前期项目争取阶段';
+      note = '前期项目争取与客户方案对接（0-10%额度可调）';
+    } else if (stageType === 'maintenance') {
+      defaultRate = MAINTENANCE_QUOTA_RATE;
+      milestone = '维保阶段（项目结束）';
+      note = '项目结束阶段维保支持（保留5%额度）';
     }
-    const nextList = [...schedule, { month: newMonth, rate: 0, milestone: '新规划阶段', note: '' }];
+    const nextList = [...schedule, { month: targetMonth, rate: defaultRate, milestone, note, stageType }];
     nextList.sort((a, b) => a.month.localeCompare(b.month));
     setSchedule(nextList);
     setNewMonth('');
+    setNotice(`已追加月份 ${targetMonth} (${stageType === 'bidding' ? '前期项目争取阶段' : stageType === 'maintenance' ? '维保阶段' : '常规阶段'})`);
   };
 
-  const handleFillRemainingToLast = () => {
+  const handleFillRemainingToDelivery = () => {
     if (schedule.length === 0) return;
     if (remainingRate <= 0) {
       setNotice('当前规划已达到或超出可用额度上限，无需补齐');
@@ -2864,11 +3009,15 @@ function ProjectQuotaModal({
     }
     setSchedule(prev => {
       const copy = [...prev];
-      const lastIdx = copy.length - 1;
-      copy[lastIdx] = { ...copy[lastIdx], rate: copy[lastIdx].rate + remainingRate };
+      // 如果最后一期是维保阶段，则补齐到倒数第二期（发货交付阶段），绝不占用维保的5%！
+      let targetIdx = copy.length - 1;
+      if (copy.length >= 2 && getQuotaPlanStageType(copy[targetIdx]) === 'maintenance') {
+        targetIdx = copy.length - 2;
+      }
+      copy[targetIdx] = { ...copy[targetIdx], rate: copy[targetIdx].rate + remainingRate };
       return copy;
     });
-    setNotice(`🎯 已将剩余 ${pct(remainingRate)} (${remainingWan} 万元) 储备金自动填入最后发货交付阶段`);
+    setNotice(`🎯 已将剩余 ${pct(remainingRate)} (${remainingWan} 万元) 储备金自动填入发货交付主体阶段`);
   };
 
   const handleExportCsv = () => {
@@ -2927,6 +3076,10 @@ function ProjectQuotaModal({
       alert(`全周期规划额度总和（${pct(totalPlannedRate)}）不能超过项目可用额度上限（${pct(maxAllocableRate)}），请调减部分月份后再保存`);
       return;
     }
+    if (isBiddingOver) {
+      alert(`前期项目争取阶段额度总和（${pct(biddingTotalRate)}）不能超过 10%（0-10%可调），请调整后再保存`);
+      return;
+    }
     setSaving(true);
     try {
       await onSaveQuotaSchedule(projectId, schedule);
@@ -2938,13 +3091,13 @@ function ProjectQuotaModal({
   return (
     <Modal
       title={`${project.name} · 全周期月度额度规划与执行透视`}
-      subtitle={`工作令号: ${project.code} · 合同金额: ${wan(project.contract)} 万元 · 周期: ${project.start} 至 ${project.end || '待定/持续'} · 科学规划各月分配节奏，防止前期超支、保障后期发货交付有钱可分`}
+      subtitle={`工作令号: ${project.code} · 合同金额: ${wan(project.contract)} 万元 · 周期: ${project.start} 至 ${project.end || '待定/持续'} · 科学规划各月分配节奏，前期争取0-10%可调，末尾维保保留5%，保障发货与交付`}
       wide
       onClose={onClose}
     >
       <div className="modal-body" style={{ maxHeight: '82vh', overflowY: 'auto' }}>
         {/* 全景透视核心指标卡片 */}
-        <div className="metrics" style={{ margin: '0 0 16px', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+        <div className="metrics" style={{ margin: '0 0 16px', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
           <article>
             <span>合同总额</span>
             <strong>{wan(project.contract)}<i> 万元</i></strong>
@@ -2963,21 +3116,33 @@ function ProjectQuotaModal({
             </small>
           </article>
 
-          <article style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-            <span>实际已分配消耗</span>
-            <strong style={{ color: '#0f172a' }}>
-              {perspective ? perspective.totalActualWan : '0'}<i> 万元</i>
+          <article style={{ background: '#fffbeb', border: '1px solid #fef08a' }}>
+            <span>🤝 前期项目争取阶段</span>
+            <strong style={{ color: isBiddingOver ? '#b91c1c' : '#b45309' }}>
+              {biddingWan}<i> 万元</i>
             </strong>
-            <small>实际占比: {perspective ? perspective.totalActualPct : '0%'}</small>
+            <small style={{ color: isBiddingOver ? '#b91c1c' : '#92400e' }}>
+              占比: {pct(biddingTotalRate)} {isBiddingOver ? '⚠️ 超10%上限' : '(0-10%可调)'}
+            </small>
+          </article>
+
+          <article style={{ background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
+            <span>🔒 维保阶段保留额度</span>
+            <strong style={{ color: isMaintenanceInsufficient ? '#b45309' : '#065f46' }}>
+              {maintenanceWan}<i> 万元</i>
+            </strong>
+            <small style={{ color: isMaintenanceInsufficient ? '#b45309' : '#047857' }}>
+              占比: {pct(maintenanceTotalRate)} {isMaintenanceInsufficient ? '⚠️ 不足5%' : '(末位保留5%)'}
+            </small>
           </article>
 
           <article style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
-            <span>后期发货交付储备金</span>
+            <span>主体交付与储备金</span>
             <strong style={{ color: remainingRate > 0 ? '#1d4ed8' : '#64748b' }}>
               {remainingWan}<i> 万元</i>
             </strong>
-            <small style={{ color: remainingRate < 1500 ? '#b91c1c' : '#1e40af' }}>
-              储备占比: {pct(remainingRate)} {remainingRate < 1500 && '⚠️ 储备不足'}
+            <small style={{ color: remainingRate < 1000 ? '#b91c1c' : '#1e40af' }}>
+              剩余储备: {pct(remainingRate)} {remainingRate < 1000 && '⚠️ 储备紧张'}
             </small>
           </article>
 
@@ -3002,10 +3167,33 @@ function ProjectQuotaModal({
           </div>
         )}
 
+        {isBiddingOver && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '9px 14px', marginBottom: '12px', fontSize: '12.5px', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertTriangle size={16} />
+            <span><strong>前期项目争取阶段超限：</strong>当前前期争取额度合计为 <b>{pct(biddingTotalRate)}</b>，已超过 10% 可调上限，请调减后再保存。</span>
+          </div>
+        )}
+
+        {isMaintenanceInsufficient && (
+          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '9px 14px', marginBottom: '12px', fontSize: '12.5px', color: '#92400e', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Info size={16} />
+              <span><strong>维保阶段额度提示：</strong>维保阶段目前仅配置 <b>{pct(maintenanceTotalRate)}</b>（建议在项目结束阶段至少保留 5% 额度）。</span>
+            </div>
+            <button
+              type="button"
+              style={{ border: '1px solid #d97706', background: '#fff', color: '#b45309', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
+              onClick={handleLockMaintenanceAtEnd}
+            >
+              🔒 一键末尾保留 5% 维保
+            </button>
+          </div>
+        )}
+
         {notice && (
           <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '8px', padding: '8px 14px', marginBottom: '14px', fontSize: '12.5px', color: '#065f46', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>{notice}</span>
-            <button className="icon-button" style={{ width: 20, height: 20 }} onClick={() => setNotice('')}><X size={12} /></button>
+            <button type="button" className="icon-button" style={{ width: 20, height: 20 }} onClick={() => setNotice('')}><X size={12} /></button>
           </div>
         )}
 
@@ -3020,15 +3208,15 @@ function ProjectQuotaModal({
                 type="button"
                 style={{ border: '1px solid #0284c7', background: '#f0f9ff', color: '#0369a1', borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', cursor: 'pointer', fontWeight: 600 }}
                 onClick={() => handleApplyPreset('deliverable_focused')}
-                title="前期20%、中期35%、后期交付发货45%：最适合工程研发，杜绝前期把钱分完导致交付无钱"
+                title="首月前期争取（5%·0-10%可调）、中间攻坚、交付大头、末月维保保留5%"
               >
-                🎯 稳健交付型（前低后高·防分完）
+                🎯 稳健交付型（含前期争取与维保保留5%）
               </button>
               <button
                 type="button"
                 style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#334155', borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', cursor: 'pointer' }}
                 onClick={() => handleApplyPreset('even')}
-                title="全周期按月平摊额度"
+                title="首月前期争取，末月维保保留5%，其余按月平摊"
               >
                 ⚖️ 全周期平摊
               </button>
@@ -3036,7 +3224,7 @@ function ProjectQuotaModal({
                 type="button"
                 style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#334155', borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', cursor: 'pointer' }}
                 onClick={() => handleApplyPreset('middle_heavy')}
-                title="重点倾斜在中间核心研制攻坚"
+                title="首月前期争取，末月维保保留5%，重点倾斜在中间核心研制攻坚"
               >
                 🚀 中期攻坚型
               </button>
@@ -3044,15 +3232,23 @@ function ProjectQuotaModal({
                 type="button"
                 style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#334155', borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', cursor: 'pointer' }}
                 onClick={() => handleApplyPreset('sync_actual')}
-                title="将已发生月份同步为系统实际值，并将剩余可用额度平摊到剩余月份"
+                title="已发生月份采用实际分配值，剩余平摊且末月保留5%维保"
               >
                 🔄 同步实际 + 平摊剩余
               </button>
               <button
                 type="button"
+                style={{ border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', cursor: 'pointer', fontWeight: 600 }}
+                onClick={handleLockMaintenanceAtEnd}
+                title="为最后一个月份锁定设置为维保阶段并保留5%额度"
+              >
+                🔒 末尾锁定5%维保
+              </button>
+              <button
+                type="button"
                 style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#047857', borderRadius: '6px', padding: '4px 10px', fontSize: '11.5px', cursor: 'pointer' }}
-                onClick={handleFillRemainingToLast}
-                title="将剩余可用额度全额追加到最后一期发货交付阶段"
+                onClick={handleFillRemainingToDelivery}
+                title="将剩余可用额度全额追加到发货交付阶段（避开维保保留额度）"
               >
                 🎯 补齐剩余至发货期
               </button>
@@ -3118,9 +3314,9 @@ function ProjectQuotaModal({
           <table style={{ margin: 0 }}>
             <thead>
               <tr style={{ background: '#f8fafc' }}>
-                <th style={{ width: '100px' }}>规划月份</th>
-                <th style={{ width: '190px' }}>阶段里程碑 / 交付目标</th>
-                <th style={{ width: '170px' }}>规划分配比例 (%)</th>
+                <th style={{ width: '130px' }}>规划月份与阶段</th>
+                <th style={{ width: '180px' }}>阶段里程碑 / 交付目标</th>
+                <th style={{ width: '190px' }}>规划分配比例 (%)</th>
                 <th style={{ width: '110px' }}>规划额度</th>
                 <th style={{ width: '130px' }}>实际分配额度</th>
                 <th style={{ width: '90px' }}>执行偏差</th>
@@ -3130,6 +3326,7 @@ function ProjectQuotaModal({
             </thead>
             <tbody>
               {schedule.map((item, index) => {
+                const stageType = getQuotaPlanStageType(item);
                 const act = actualMap.get(item.month);
                 const actualRate = act ? act.budget : 0;
                 const actualAmount = act ? act.amount : 0;
@@ -3140,7 +3337,40 @@ function ProjectQuotaModal({
                 return (
                   <tr key={item.month} style={{ background: isOver && actualRate > 0 ? '#fff1f2' : undefined }}>
                     <td>
-                      <b style={{ color: '#0f172a', fontSize: '13px' }}>{item.month}</b>
+                      <div>
+                        <b style={{ color: '#0f172a', fontSize: '13px' }}>{item.month}</b>
+                      </div>
+                      {/* 阶段属性标签与快速切换 */}
+                      <div style={{ marginTop: '3px' }}>
+                        {stageType === 'bidding' && (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: '4px', padding: '1px 5px', fontSize: '10px', fontWeight: 600 }}>
+                            <span>🤝 前期争取</span>
+                            <span style={{ fontSize: '9px', color: '#b45309' }}>(0-10%可调)</span>
+                          </div>
+                        )}
+                        {stageType === 'maintenance' && (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', borderRadius: '4px', padding: '1px 5px', fontSize: '10px', fontWeight: 600 }}>
+                            <Lock size={10} />
+                            <span>维保阶段</span>
+                            <span style={{ fontSize: '9px', color: '#047857' }}>(保留5%)</span>
+                          </div>
+                        )}
+                        {stageType === 'normal' && (
+                          <span style={{ fontSize: '10.5px', color: '#64748b' }}>主体研制交付</span>
+                        )}
+                      </div>
+                      <div style={{ marginTop: '2px' }}>
+                        <select
+                          value={stageType}
+                          onChange={e => handleSetRowStageType(index, e.target.value as ProjectQuotaStageType)}
+                          style={{ height: '20px', fontSize: '10px', padding: '0 3px', border: '1px solid #cbd5e1', borderRadius: '3px', background: '#fff', color: '#475569', cursor: 'pointer' }}
+                          title="切换该月份所属的项目阶段类型"
+                        >
+                          <option value="normal">⚙️ 主体研制</option>
+                          <option value="bidding">🤝 前期争取 (0-10%)</option>
+                          <option value="maintenance">🔒 维保阶段 (保留5%)</option>
+                        </select>
+                      </div>
                     </td>
                     <td>
                       <input
@@ -3158,11 +3388,11 @@ function ProjectQuotaModal({
                             type="number"
                             step="0.01"
                             min="0"
-                            max="100"
+                            max={stageType === 'bidding' ? '10' : '100'}
                             value={item.rate > 0 ? (item.rate / 100).toFixed(2).replace(/\.00$/, '') : ''}
                             onChange={e => handleRateChange(index, e.target.value)}
                             placeholder="0.00"
-                            style={{ textAlign: 'right', fontSize: '12px', height: '28px' }}
+                            style={{ textAlign: 'right', fontSize: '12px', height: '28px', color: stageType === 'bidding' && item.rate > 1000 ? '#b91c1c' : undefined }}
                           />
                           <span>%</span>
                         </div>
@@ -3203,6 +3433,39 @@ function ProjectQuotaModal({
                           </button>
                         </div>
                       </div>
+
+                      {/* 阶段专属微调快捷按键 */}
+                      {stageType === 'bidding' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '4px' }}>
+                          <span style={{ fontSize: '9.5px', color: '#b45309' }}>快捷:</span>
+                          {[0, 3, 5, 8, 10].map(pVal => (
+                            <button
+                              key={pVal}
+                              type="button"
+                              style={{ border: '1px solid #fde68a', background: item.rate === pVal * 100 ? '#fef08a' : '#fff', color: '#92400e', borderRadius: '2px', padding: '0 3px', fontSize: '9.5px', height: '16px', lineHeight: '14px', cursor: 'pointer' }}
+                              onClick={() => handleRateChange(index, String(pVal))}
+                            >
+                              {pVal}%
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {stageType === 'maintenance' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                          <button
+                            type="button"
+                            style={{ border: '1px solid #a7f3d0', background: item.rate === 500 ? '#d1fae5' : '#fff', color: '#065f46', borderRadius: '2px', padding: '0 5px', fontSize: '9.5px', height: '16px', lineHeight: '14px', cursor: 'pointer', fontWeight: 600 }}
+                            onClick={() => handleRateChange(index, '5')}
+                            title="锁定为标准的 5% 维保额度"
+                          >
+                            🔒 锁定5%
+                          </button>
+                          {item.rate < 500 && (
+                            <span style={{ fontSize: '9.5px', color: '#d97706' }}>⚠️ 建议保留5%</span>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td>
                       <b style={{ color: '#0369a1', fontSize: '12.5px' }}>
@@ -3259,10 +3522,18 @@ function ProjectQuotaModal({
             <tfoot>
               <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
                 <td>合计 ({schedule.length} 个月)</td>
-                <td>—</td>
+                <td>
+                  <div style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ color: '#92400e' }}>🤝 前期争取: {(biddingTotalRate / 100).toFixed(2)}%</span>
+                    <span style={{ color: '#047857' }}>🔒 维保保留: {(maintenanceTotalRate / 100).toFixed(2)}%</span>
+                    <span style={{ color: '#0369a1' }}>⚙️ 中间研制: {(midTotalRate / 100).toFixed(2)}%</span>
+                  </div>
+                </td>
                 <td style={{ color: totalPlannedRate === maxAllocableRate ? '#166534' : isOverAllocable ? '#b91c1c' : '#0369a1' }}>
-                  {(totalPlannedRate / 100).toFixed(2)}% / {pct(maxAllocableRate)}
-                  {isOverAllocable ? ' (⚠️超额)' : totalPlannedRate < maxAllocableRate ? ` (尚余${pct(remainingRate)})` : ' (满额)'}
+                  <div>{(totalPlannedRate / 100).toFixed(2)}% / {pct(maxAllocableRate)}</div>
+                  <div style={{ fontSize: '11px', fontWeight: 500 }}>
+                    {isOverAllocable ? ' (⚠️超额)' : totalPlannedRate < maxAllocableRate ? ` (尚余${pct(remainingRate)})` : ' (满额)'}
+                  </div>
                 </td>
                 <td style={{ color: '#0369a1' }}>{totalPlannedWan} 万元</td>
                 <td style={{ color: '#166534' }}>
@@ -3277,20 +3548,39 @@ function ProjectQuotaModal({
           </table>
 
           {/* 追加月份输入行 */}
-          <div style={{ background: '#f8fafc', padding: '8px 14px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '12px', color: '#64748b' }}>追加规划月份：</span>
-            <input
-              type="month"
-              value={newMonth}
-              onChange={e => setNewMonth(e.target.value)}
-              style={{ width: '140px', height: '28px', fontSize: '12px' }}
-            />
+          <div style={{ background: '#f8fafc', padding: '10px 14px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12px', color: '#475569', fontWeight: 600 }}>追加规划月份：</span>
+              <input
+                type="month"
+                value={newMonth}
+                onChange={e => setNewMonth(e.target.value)}
+                style={{ width: '135px', height: '28px', fontSize: '12px' }}
+              />
+              <button
+                type="button"
+                style={{ border: '1px solid #cbd5e1', background: '#fff', borderRadius: '4px', padding: '3px 9px', fontSize: '11.5px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                onClick={() => handleAddCustomMonth('normal')}
+              >
+                <Plus size={12} /> 添加常规月份
+              </button>
+              <button
+                type="button"
+                style={{ border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e', borderRadius: '4px', padding: '3px 9px', fontSize: '11.5px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                onClick={() => handleAddCustomMonth('bidding')}
+                title="添加为前期项目争取阶段（0-10%额度可调）"
+              >
+                🤝 设为前期争取月份
+              </button>
+            </div>
+
             <button
               type="button"
-              style={{ border: '1px solid #cbd5e1', background: '#fff', borderRadius: '4px', padding: '3px 10px', fontSize: '11.5px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-              onClick={handleAddMonth}
+              style={{ border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', borderRadius: '4px', padding: '3px 10px', fontSize: '11.5px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}
+              onClick={() => handleAddCustomMonth('maintenance')}
+              title="在末尾自动追加维保阶段月份（保留5%额度）"
             >
-              <Plus size={12} /> 添加月份
+              🔒 追加维保阶段月份（置底保留5%）
             </button>
           </div>
         </div>
@@ -3308,7 +3598,7 @@ function ProjectQuotaModal({
             type="button"
             className="primary"
             onClick={handleSave}
-            disabled={saving || isOverAllocable}
+            disabled={saving || isOverAllocable || isBiddingOver}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
           >
             <Save size={15} />

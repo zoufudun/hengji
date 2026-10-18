@@ -14,12 +14,27 @@ export type Employee = {
   active: boolean;
 };
 
+export type ProjectQuotaStageType = 'bidding' | 'normal' | 'maintenance';
+
+export const MAINTENANCE_QUOTA_RATE = 500; // 维保阶段保留 5% 额度 (500 基点)
+export const BIDDING_MAX_RATE = 1000;       // 前期项目争取阶段额度上限 10% (1000 基点)
+export const BIDDING_DEFAULT_RATE = 500;   // 前期项目争取阶段默认额度 5% (500 基点)
+
 export type ProjectMonthlyQuotaPlan = {
   month: string;      // 规划月份 YYYY-MM
   rate: number;       // 规划分配比例（基点 0-10000）
   milestone?: string; // 阶段里程碑 / 交付目标（如：方案设计、初样研制、联调测试、最终发货交付）
   note?: string;      // 规划说明 / 交付成果
+  stageType?: ProjectQuotaStageType; // 阶段类型：bidding(前期项目争取阶段, 0-10%可调) | normal(正常研制交付阶段) | maintenance(维保阶段, 放置在最后保留5%额度)
 };
+
+export function getQuotaPlanStageType(plan: Partial<ProjectMonthlyQuotaPlan>): ProjectQuotaStageType {
+  if (plan.stageType) return plan.stageType;
+  const combined = `${plan.milestone || ''} ${plan.note || ''}`;
+  if (combined.includes('争取') || combined.includes('招投标') || combined.includes('商务方案')) return 'bidding';
+  if (combined.includes('维保') || combined.includes('质保') || combined.includes('售后')) return 'maintenance';
+  return 'normal';
+}
 
 export type Project = {
   id: string;
@@ -425,12 +440,25 @@ export function execute(current: State, actorId: string, command: Command, id: s
     if (project.status === 'archived') fail('已结项项目不能调整额度规划');
     if (!Array.isArray(data.quotaSchedule)) fail('规划数据格式不正确');
 
-    const schedule: ProjectMonthlyQuotaPlan[] = data.quotaSchedule.map((item: any) => ({
-      month: text(item.month, '规划月份'),
-      rate: integer(item.rate, '规划比例', 0, SCALE),
-      milestone: typeof item.milestone === 'string' ? item.milestone.slice(0, 200) : '',
-      note: typeof item.note === 'string' ? item.note.slice(0, 200) : '',
-    })).sort((a, b) => a.month.localeCompare(b.month));
+    const schedule: ProjectMonthlyQuotaPlan[] = data.quotaSchedule.map((item: any) => {
+      const milestone = typeof item.milestone === 'string' ? item.milestone.slice(0, 200) : '';
+      const note = typeof item.note === 'string' ? item.note.slice(0, 200) : '';
+      const rawStage = item.stageType;
+      const stageType = (rawStage === 'bidding' || rawStage === 'maintenance' || rawStage === 'normal')
+        ? rawStage
+        : getQuotaPlanStageType({ milestone, note });
+      const rate = integer(item.rate, '规划比例', 0, SCALE);
+      if (stageType === 'bidding' && rate > BIDDING_MAX_RATE) {
+        fail(`前期项目争取阶段规划额度（${pct(rate)}）不能超过 10%（0-10%可调）`);
+      }
+      return {
+        month: text(item.month, '规划月份'),
+        rate,
+        milestone,
+        note,
+        stageType,
+      };
+    }).sort((a, b) => a.month.localeCompare(b.month));
 
     const totalRate = total(schedule.map(s => s.rate));
     const maxAllocable = Math.max(0, SCALE - (project.historyCompletedRate || 0));
@@ -658,159 +686,280 @@ export function getProjectSpanMonths(startMonth: string, endMonth?: string, fall
   return result;
 }
 
-// 自动生成项目周期额度规划策略模板（支持：防前期分光的稳健交付型、全周期平摊、中期攻坚型、同步实际平摊剩余）
+export type GenerateQuotaScheduleOptions = {
+  biddingRate?: number;
+  maintenanceRate?: number;
+  state?: State;
+};
+
+// 自动生成项目周期额度规划策略模板（支持：前期争取与维保保留、防前期分光的稳健交付型、全周期平摊、中期攻坚型、同步实际平摊剩余）
 export function generateProjectQuotaSchedule(
   project: Project,
   mode: 'deliverable_focused' | 'even' | 'middle_heavy' | 'sync_actual',
-  state?: State
+  stateOrOptions?: State | GenerateQuotaScheduleOptions
 ): ProjectMonthlyQuotaPlan[] {
+  let state: State | undefined;
+  let customBiddingRate: number | undefined;
+  let customMaintenanceRate: number | undefined;
+
+  if (stateOrOptions) {
+    if ('projects' in stateOrOptions && 'plans' in stateOrOptions) {
+      state = stateOrOptions as State;
+    } else {
+      const opts = stateOrOptions as GenerateQuotaScheduleOptions;
+      state = opts.state;
+      customBiddingRate = opts.biddingRate;
+      customMaintenanceRate = opts.maintenanceRate;
+    }
+  }
+
   const months = getProjectSpanMonths(project.start, project.end);
   const totalAllocableRate = Math.max(0, SCALE - (project.historyCompletedRate || 0));
   const n = months.length;
   if (n === 0) return [];
 
+  // 前期项目争取阶段：0-10% 可调，默认 5%
+  const defaultBidding = totalAllocableRate > 0 ? Math.min(BIDDING_DEFAULT_RATE, Math.round(totalAllocableRate * 0.1)) : 0;
+  const biddingRate = customBiddingRate !== undefined
+    ? Math.max(0, Math.min(BIDDING_MAX_RATE, customBiddingRate))
+    : defaultBidding;
+
+  // 维保阶段（放置在最后，项目结束阶段）：保留 5% 额度
+  const defaultMaint = totalAllocableRate >= MAINTENANCE_QUOTA_RATE ? MAINTENANCE_QUOTA_RATE : totalAllocableRate;
+  const maintenanceRate = customMaintenanceRate !== undefined
+    ? Math.max(0, Math.min(totalAllocableRate, customMaintenanceRate))
+    : defaultMaint;
+
+  if (n === 1) {
+    return [{
+      month: months[0],
+      rate: totalAllocableRate,
+      milestone: '全周期研制交付与维保',
+      note: '集中考核（含交付验收与维保保留）',
+      stageType: 'normal'
+    }];
+  }
+
+  if (n === 2) {
+    const early = Math.min(biddingRate, totalAllocableRate);
+    const late = Math.max(0, totalAllocableRate - early);
+    return [
+      {
+        month: months[0],
+        rate: early,
+        milestone: '前期项目争取阶段',
+        note: '前期项目争取与客户方案对接（0-10%额度可调）',
+        stageType: 'bidding'
+      },
+      {
+        month: months[1],
+        rate: late,
+        milestone: '交付验收与维保阶段（项目结束）',
+        note: '发货交付与项目结束阶段维保支持（保留5%额度）',
+        stageType: 'maintenance'
+      },
+    ];
+  }
+
+  // n >= 3: 首月前期争取，末月末位维保保留5%，中间月份分配剩余研制交付额度
+  const midAllocable = Math.max(0, totalAllocableRate - biddingRate - maintenanceRate);
+  const midMonths = months.slice(1, n - 1);
+  const midCount = midMonths.length;
+
   if (mode === 'sync_actual' && state) {
-    // 同步现有实际分配月份并平摊后续剩余额度
     const actualPlans = state.plans.filter(p => p.projectId === project.id);
     const actualMap = new Map(actualPlans.map(p => [p.month, p.budget]));
     let usedRate = 0;
-    const futureMonths: string[] = [];
+    const futureMidMonths: string[] = [];
 
-    for (const m of months) {
+    // 首月（争取阶段）实际
+    const m0 = months[0];
+    const m0Actual = actualMap.get(m0);
+    const m0Rate = m0Actual !== undefined ? m0Actual : biddingRate;
+    usedRate += m0Rate;
+
+    // 末月（维保阶段）实际
+    const mLast = months[n - 1];
+    const mLastActual = actualMap.get(mLast);
+    const mLastRate = mLastActual !== undefined ? mLastActual : maintenanceRate;
+    usedRate += mLastRate;
+
+    // 中间月份
+    for (const m of midMonths) {
       if (actualMap.has(m)) {
         usedRate += actualMap.get(m)!;
       } else {
-        futureMonths.push(m);
+        futureMidMonths.push(m);
       }
     }
 
-    const remRate = Math.max(0, totalAllocableRate - usedRate);
-    const futureN = futureMonths.length;
-    const baseShare = futureN > 0 ? Math.floor(remRate / futureN) : 0;
-    let remainder = futureN > 0 ? remRate - baseShare * futureN : 0;
+    const remMidRate = Math.max(0, totalAllocableRate - usedRate);
+    const fCount = futureMidMonths.length;
+    const baseShare = fCount > 0 ? Math.floor(remMidRate / fCount) : 0;
+    let remShare = fCount > 0 ? remMidRate - baseShare * fCount : 0;
 
-    return months.map(m => {
+    const res: ProjectMonthlyQuotaPlan[] = [];
+    // 首月
+    res.push({
+      month: m0,
+      rate: m0Rate,
+      milestone: '前期项目争取阶段',
+      note: m0Actual !== undefined ? '按系统已有分配实际同步' : '前期项目争取与客户方案对接（0-10%额度可调）',
+      stageType: 'bidding'
+    });
+    // 中间月份
+    for (const m of midMonths) {
       if (actualMap.has(m)) {
-        return {
+        res.push({
           month: m,
           rate: actualMap.get(m)!,
           milestone: '已执行阶段',
-          note: '按系统已有分配实际同步'
-        };
+          note: '按系统已有分配实际同步',
+          stageType: 'normal'
+        });
+      } else {
+        let r = baseShare;
+        if (remShare > 0) { r++; remShare--; }
+        res.push({
+          month: m,
+          rate: r,
+          milestone: '研制攻坚与交付阶段',
+          note: '按剩余可用额度平摊',
+          stageType: 'normal'
+        });
       }
-      let r = baseShare;
-      if (remainder > 0) { r++; remainder--; }
-      return {
-        month: m,
-        rate: r,
-        milestone: '后续研制与交付',
-        note: '按剩余可用额度平摊'
-      };
+    }
+    // 末月
+    res.push({
+      month: mLast,
+      rate: mLastRate,
+      milestone: '维保阶段（项目结束）',
+      note: mLastActual !== undefined ? '按系统已有分配实际同步' : '项目结束阶段维保支持（保留5%额度）',
+      stageType: 'maintenance'
     });
+    return res;
   }
 
+  // 稳健交付导向型（防前期把钱分完，重在交付验收）
   if (mode === 'deliverable_focused') {
-    // 稳健交付导向型（防前期把钱分完，重在交付验收）：前期 20%，中期 35%，交付发货期 45%
-    if (n === 1) return [{ month: months[0], rate: totalAllocableRate, milestone: '全周期单月交付', note: '集中考核' }];
-    if (n === 2) {
-      const early = Math.round(totalAllocableRate * 0.35);
-      return [
-        { month: months[0], rate: early, milestone: '前期开发与原型试制', note: '前期研制（控制分配节奏）' },
-        { month: months[1], rate: totalAllocableRate - early, milestone: '终检验收与发货交付', note: '最终发货与交付考核（重头保障）' },
-      ];
-    }
-    const earlyCount = Math.max(1, Math.floor(n / 3));
-    const lateCount = Math.max(1, Math.ceil(n / 3));
-    const midCount = n - earlyCount - lateCount;
-
-    const earlyTotal = Math.round(totalAllocableRate * 0.20);
-    const midTotal = midCount > 0 ? Math.round(totalAllocableRate * 0.35) : 0;
-    const lateTotal = totalAllocableRate - earlyTotal - midTotal;
-
     const res: ProjectMonthlyQuotaPlan[] = [];
-    const earlyBase = Math.floor(earlyTotal / earlyCount);
-    let earlyRem = earlyTotal - earlyBase * earlyCount;
-    for (let i = 0; i < earlyCount; i++) {
-      let r = earlyBase;
-      if (earlyRem > 0) { r++; earlyRem--; }
-      res.push({
-        month: months[i],
-        rate: r,
-        milestone: i === 0 ? '需求方案评审与系统架构设计' : '模块开发与单元调试',
-        note: '前期研发阶段（严格控制消耗，防前期分完）'
-      });
-    }
 
-    if (midCount > 0) {
-      const midBase = Math.floor(midTotal / midCount);
-      let midRem = midTotal - midBase * midCount;
-      for (let i = 0; i < midCount; i++) {
-        let r = midBase;
-        if (midRem > 0) { r++; midRem--; }
+    // 1. 首月：前期项目争取阶段
+    res.push({
+      month: months[0],
+      rate: biddingRate,
+      milestone: '前期项目争取阶段',
+      note: '前期项目争取与客户方案对接（0-10%额度可调）',
+      stageType: 'bidding'
+    });
+
+    // 2. 中间月份：主体研制与发货交付
+    if (midCount === 1) {
+      res.push({
+        month: midMonths[0],
+        rate: midAllocable,
+        milestone: '核心部件攻坚、成品检验与发货交付',
+        note: '主体交付阶段（保障有货有产出时有充裕额度分配）',
+        stageType: 'normal'
+      });
+    } else if (midCount === 2) {
+      const earlyPart = Math.round(midAllocable * 0.35);
+      const latePart = midAllocable - earlyPart;
+      res.push({
+        month: midMonths[0],
+        rate: earlyPart,
+        milestone: '需求方案评审与核心部件攻坚',
+        note: '前期研发阶段（严格控制消耗，防前期分完）',
+        stageType: 'normal'
+      });
+      res.push({
+        month: midMonths[1],
+        rate: latePart,
+        milestone: '整机综合联调、出厂检验与发货交付',
+        note: '交付发货阶段（保障有货有产出时有充裕额度分配）',
+        stageType: 'normal'
+      });
+    } else {
+      const earlyCount = Math.max(1, Math.floor(midCount * 0.4));
+      const lateCount = midCount - earlyCount;
+      const earlyTotal = Math.round(midAllocable * 0.35);
+      const lateTotal = midAllocable - earlyTotal;
+
+      const earlyBase = Math.floor(earlyTotal / earlyCount);
+      let earlyRem = earlyTotal - earlyBase * earlyCount;
+      for (let i = 0; i < earlyCount; i++) {
+        let r = earlyBase;
+        if (earlyRem > 0) { r++; earlyRem--; }
         res.push({
-          month: months[earlyCount + i],
+          month: midMonths[i],
           rate: r,
-          milestone: i === midCount - 1 ? '系统综合联调与阶段性试验' : '核心部件攻坚与软硬件集成',
-          note: '中期攻坚研发阶段'
+          milestone: i === 0 ? '需求方案评审与系统架构设计' : '模块开发与单元调试',
+          note: '前期研发阶段（严格控制消耗，防前期分完）',
+          stageType: 'normal'
+        });
+      }
+
+      const lateBase = Math.floor(lateTotal / lateCount);
+      let lateRem = lateTotal - lateBase * lateCount;
+      for (let i = 0; i < lateCount; i++) {
+        let r = lateBase;
+        if (lateRem > 0) { r++; lateRem--; }
+        const isPenultimate = i === lateCount - 1;
+        res.push({
+          month: midMonths[earlyCount + i],
+          rate: r,
+          milestone: isPenultimate ? '成品检验、发货交付与用户验收' : '核心攻坚与整机试验验证',
+          note: '交付发货阶段（保障有货有产出时有充裕额度分配）',
+          stageType: 'normal'
         });
       }
     }
 
-    const lateBase = Math.floor(lateTotal / lateCount);
-    let lateRem = lateTotal - lateBase * lateCount;
-    for (let i = 0; i < lateCount; i++) {
-      let r = lateBase;
-      if (lateRem > 0) { r++; lateRem--; }
-      const isLast = i === lateCount - 1;
-      res.push({
-        month: months[earlyCount + midCount + i],
-        rate: r,
-        milestone: isLast ? '成品检验、发货交付与用户验收' : '整机试验验证与出厂调试',
-        note: '交付发货阶段（保障有货有产出时有充裕额度分配）'
-      });
-    }
+    // 3. 末月：维保阶段（放置在最后，项目结束阶段，保留 5% 额度）
+    res.push({
+      month: months[n - 1],
+      rate: maintenanceRate,
+      milestone: '维保阶段（项目结束）',
+      note: '项目结束阶段维保支持（保留5%额度）',
+      stageType: 'maintenance'
+    });
+
     return res;
   }
 
-  if (mode === 'middle_heavy') {
-    // 攻坚型：前期 15%，中期 70%，交付 15%
-    if (n <= 2) return generateProjectQuotaSchedule(project, 'even');
-    const earlyCount = Math.max(1, Math.floor(n * 0.25));
-    const lateCount = Math.max(1, Math.floor(n * 0.25));
-    const midCount = n - earlyCount - lateCount;
-    const earlyTotal = Math.round(totalAllocableRate * 0.15);
-    const lateTotal = Math.round(totalAllocableRate * 0.15);
-    const midTotal = totalAllocableRate - earlyTotal - lateTotal;
+  // 攻坚型或均摊型
+  const res: ProjectMonthlyQuotaPlan[] = [];
+  res.push({
+    month: months[0],
+    rate: biddingRate,
+    milestone: '前期项目争取阶段',
+    note: '前期项目争取与客户方案对接（0-10%额度可调）',
+    stageType: 'bidding'
+  });
 
-    const res: ProjectMonthlyQuotaPlan[] = [];
-    const distribute = (mList: string[], tot: number, stageName: string, stageNote: string) => {
-      const base = Math.floor(tot / mList.length);
-      let rem = tot - base * mList.length;
-      for (let i = 0; i < mList.length; i++) {
-        let r = base;
-        if (rem > 0) { r++; rem--; }
-        res.push({ month: mList[i], rate: r, milestone: `${stageName}（第${i + 1}阶段）`, note: stageNote });
-      }
-    };
-    distribute(months.slice(0, earlyCount), earlyTotal, '需求与方案论证', '前期论证');
-    distribute(months.slice(earlyCount, earlyCount + midCount), midTotal, '核心技术攻坚与联调', '中期攻坚');
-    distribute(months.slice(earlyCount + midCount), lateTotal, '验收交付与发货', '后期交付');
-    return res;
-  }
-
-  // 默认 even: 全周期均匀平摊
-  const base = Math.floor(totalAllocableRate / n);
-  let rem = totalAllocableRate - base * n;
-  return months.map((m, idx) => {
+  const base = Math.floor(midAllocable / midCount);
+  let rem = midAllocable - base * midCount;
+  for (let i = 0; i < midCount; i++) {
     let r = base;
     if (rem > 0) { r++; rem--; }
-    return {
-      month: m,
+    res.push({
+      month: midMonths[i],
       rate: r,
-      milestone: `项目第 ${idx + 1} 阶段`,
-      note: '全周期按月平摊'
-    };
+      milestone: mode === 'middle_heavy' ? `技术攻坚与系统联调（第${i + 1}阶段）` : `项目第 ${i + 2} 阶段研制与交付`,
+      note: mode === 'middle_heavy' ? '中期攻坚研发' : '主体研制与交付',
+      stageType: 'normal'
+    });
+  }
+
+  res.push({
+    month: months[n - 1],
+    rate: maintenanceRate,
+    milestone: '维保阶段（项目结束）',
+    note: '项目结束阶段维保支持（保留5%额度）',
+    stageType: 'maintenance'
   });
+
+  return res;
 }
 
 // 获取项目全周期额度规划与实际执行全景透视数据
@@ -1007,12 +1156,14 @@ export function parseProjectQuotaScheduleCsvText(csvText: string, project: Proje
 
     const milestone = milestoneCol !== -1 ? (row[milestoneCol] || '').trim() : '';
     const note = noteCol !== -1 ? (row[noteCol] || '').trim() : '';
+    const stageType = getQuotaPlanStageType({ milestone, note });
 
     result.push({
       month: normMonth,
       rate: Math.max(0, Math.min(SCALE, parsedRate)),
       milestone,
       note,
+      stageType,
     });
   }
 
@@ -1887,7 +2038,7 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.4.0';
 export const APP_BUILD = '20261018';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
@@ -1901,6 +2052,19 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.4.0',
+    date: '2026-10-18',
+    tag: '重大更新',
+    title: '全周期额度规划升级与弹窗防误触保护',
+    items: [
+      '【弹窗防误触保护】全局弹窗底层交互优化：点击弹窗遮罩外部背景不再误退出，必须通过右上角关闭按钮或取消退出，彻底避免填写的数据和额度规划意外丢失。',
+      '【前期项目争取阶段】月度额度规划首月/前期新增“前期项目争取阶段”（0-10% 额度可调），规范前期商务与技术对接，严格防范前期过度分光。',
+      '【维保阶段保留5%】月度额度规划置底新增“维保阶段（项目结束）”，锁定并保留 5% 额度，保障项目终检验收后的质保维保与售后技术支持。',
+      '【智能排期算法升级】“稳健交付型”算法原生集成前期争取（0-10%可调）与项目结束维保保留（5%），主体研制阶段平稳过渡，发货交付大头保障。',
+      '【快捷配置与追加】规划弹窗提供一键设为前期争取/维保阶段、快捷追加前期或维保月份，并在底部汇总栏直观展示争取阶段、维保阶段与中间研制占比。'
+    ]
+  },
   {
     version: 'v0.3.0',
     date: '2026-10-18',
