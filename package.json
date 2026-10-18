@@ -1,7 +1,8 @@
 {
   "name": "site-creator-vinext-starter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
+  "main": "scripts/workspace-main.cjs",
   "engines": {
     "node": ">=22.13.0"
   },
@@ -11,7 +12,11 @@
     "build": "node scripts/run-framework.mjs build",
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "desktop:build": "vite build --config vite.desktop.config.ts",
+    "desktop:start": "vite build --config vite.desktop.config.ts && electron .",
+    "desktop:pack": "vite build --config vite.desktop.config.ts && electron-builder --win portable",
+    "desktop:pack:signed": "vite build --config vite.desktop.config.ts && electron-builder --win portable --config.forceCodeSigning=true"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -49,6 +54,8 @@
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
+    "electron": "^33.4.11",
+    "electron-builder": "^26.0.12",
     "eslint": "9.39.4",
     "eslint-config-next": "16.3.4",
     "json-rpc-2.0": "1.7.1",
@@ -62,6 +69,18 @@
     "wrangler": "4.92.0"
   },
   "type": "module",
+  "build": {
+    "appId": "com.topfire.merit",
+    "productName": "衡绩员工绩点考核系统",
+    "compression": "normal",
+    "extraMetadata": { "dependencies": {} },
+    "artifactName": "衡绩员工绩点考核系统-${version}.${ext}",
+    "directories": { "output": "dist-desktop" },
+    "npmRebuild": false,
+    "files": ["build/desktop/**/*", "build/icon.ico", "build/icon.png", "scripts/workspace-main.cjs", "scripts/workspace-preload.cjs", "scripts/workspace-crypto.cjs", "package.json", "!node_modules/**/*"],
+    "win": { "target": "portable", "icon": "build/icon.ico" },
+    "portable": { "artifactName": "衡绩员工绩点考核系统-${version}.exe" }
+  },
   "overrides": {
     "miniflare": {
       "sharp": "0.35.4"
