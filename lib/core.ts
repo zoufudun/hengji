@@ -1884,6 +1884,198 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
   };
 }
 
+// -------------------------------------------------------------
+// 系统版本、更新历史与开发作者
+// -------------------------------------------------------------
+export const APP_VERSION = '0.3.0';
+export const APP_BUILD = '20261018';
+export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
+export const APP_CONTACT = 'zoufudun@163.com';
+
+export type VersionUpdate = {
+  version: string;
+  date: string;
+  tag: '重大更新' | '功能增强' | '安全优化' | '常规迭代';
+  title: string;
+  items: string[];
+};
+
+export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.3.0',
+    date: '2026-10-18',
+    tag: '重大更新',
+    title: '全周期额度规划与灾备加密体系',
+    items: [
+      '【全周期额度规划】支持按项目起止周期对各月份建立预期分配比例、金额与阶段里程碑（如方案评审、初样研制、试验联调、成品发货交付验收）。',
+      '【防前期透支策略】新增“🎯稳健交付型（前低后高）”智能排期算法，锁定 45%+ 额度在后期发货交付，杜绝前期把钱分完。',
+      '【全景透视走势图】提供月度规划 vs 实际消耗双柱对比图、累计消耗折线图及发货交付储备金监控。',
+      '【月度分配表单联动】在月度绩效分配表单中实时展示当月规划与节点交付物，支持“⚡ 一键套用规划额度”，超支时自动弹出风险预警。',
+      '【灾备数据高强度加密】全量系统灾备快照升级为企业级 AES-256-GCM + PBKDF2 加密保护，导出时设置密钥，导入时必须输入权限口令方可解密。',
+      '【关于与版本历史】新增系统关于面板、开发作者信息与完整版本演进历史。',
+      '【缺陷修复】修复额度规划弹窗中 points 函数引用报错。'
+    ]
+  },
+  {
+    version: 'v0.2.0',
+    date: '2026-10-17',
+    tag: '重大更新',
+    title: '多团队架构、参考区间与全量灾备',
+    items: [
+      '【专业组体系】全面打通总体组、产品组、研发组等多专业组架构，支持项目组多模版管理与一键批量配置成员比例。',
+      '【柔性管理规则】项目负责人分配率由硬性强校验变更为参考区间，支持灵活超出并给出合理诊断提示。',
+      '【管理员自由切换】支持在在职员工列表中自由设置/移交系统管理员，并在顶部栏实时同步。',
+      '【二维矩阵报表】周期绩效报表支持按各项目合同名称加工作令号导出二维矩阵格式 CSV。',
+      '【代码去内置化】彻底清理源码中预设员工姓名，改为支持全量花名册一键导入与初始化。'
+    ]
+  },
+  {
+    version: 'v0.1.0',
+    date: '2026-10-16',
+    tag: '常规迭代',
+    title: '离线版系统发布与核心绩点引擎',
+    items: [
+      '【离线优先架构】支持 Windows 单文件便携版运行，支持创建 .hengji 加密安全工作区，数据全本地存储。',
+      '【精准绩点折合】合同金额以分存储、支持 6 位小数万元换算，最大余数补差法精确保全成员绩点。',
+      '【多维度考核与荣誉】支持月度之星、季度之星与年度之星自动评定，支持项目消耗趋势分析。'
+    ]
+  }
+];
+
+// -------------------------------------------------------------
+// 企业级全量灾备快照 AES-256-GCM 高强度加密与权限解密
+// -------------------------------------------------------------
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToUint8(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function deriveKeyWebCrypto(password: string, salt: Uint8Array, iterations = 100000): Promise<CryptoKey> {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(password),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveKey']
+  );
+  return await crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt,
+      iterations,
+      hash: 'SHA-256'
+    },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+export async function exportEncryptedBackupJson(
+  state: State,
+  password: string,
+  optionsOrGroups?: { projectGroups?: ProjectGroup[]; workspaceName?: string; configs?: Record<string, any> } | ProjectGroup[]
+): Promise<string> {
+  if (!password || !password.trim()) {
+    fail('请设置灾备数据加密口令（权限密钥）');
+  }
+  const rawBackupJson = exportFullBackupJson(state, optionsOrGroups);
+  const enc = new TextEncoder();
+  const plaintext = enc.encode(rawBackupJson);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKeyWebCrypto(password.trim(), salt, 100000);
+  const ciphertextBuffer = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    plaintext
+  );
+  const ciphertext = new Uint8Array(ciphertextBuffer);
+
+  const encryptedEnvelope = {
+    format: 'hengji-encrypted-backup',
+    version: '2.0.0',
+    system: '衡绩员工绩点考核系统',
+    kdf: 'PBKDF2-SHA256',
+    iterations: 100000,
+    encrypted: true,
+    salt: uint8ToBase64(salt),
+    iv: uint8ToBase64(iv),
+    data: uint8ToBase64(ciphertext),
+    exportedAt: new Date().toISOString(),
+    summary: {
+      projectCount: state.projects.length,
+      employeeCount: state.employees.length,
+      planCount: state.plans.length,
+    },
+    note: '企业级AES-256-GCM加密灾备快照，需输入口令解密还原'
+  };
+  return JSON.stringify(encryptedEnvelope, null, 2);
+}
+
+export async function parseAndDecryptBackupJson(fileContent: string, password?: string): Promise<BackupData> {
+  let parsed: any;
+  try {
+    parsed = JSON.parse(fileContent);
+  } catch {
+    fail('备份文件格式损坏，非合法的 JSON 数据');
+  }
+
+  // If this is an encrypted backup
+  if (parsed && parsed.format === 'hengji-encrypted-backup' && parsed.encrypted) {
+    if (!password || !password.trim()) {
+      fail('该灾备快照已启用高强度加密，请输入解密口令');
+    }
+    try {
+      const salt = base64ToUint8(parsed.salt);
+      const iv = base64ToUint8(parsed.iv);
+      const ciphertext = base64ToUint8(parsed.data);
+      const iterations = parsed.iterations || 100000;
+      const key = await deriveKeyWebCrypto(password.trim(), salt, iterations);
+      const decryptedBuffer = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        ciphertext
+      );
+      const dec = new TextDecoder();
+      const rawJson = dec.decode(decryptedBuffer);
+      return parseAndValidateBackupJson(rawJson);
+    } catch (e: any) {
+      if (e.message && e.message.includes('备份文件')) throw e;
+      fail('灾备解密失败：权限口令错误或备份文件已被篡改！');
+    }
+  }
+
+  // If unencrypted legacy backup
+  return parseAndValidateBackupJson(fileContent);
+}
+
+export function isEncryptedBackup(fileContent: string): boolean {
+  try {
+    const parsed = JSON.parse(fileContent);
+    return Boolean(parsed && parsed.format === 'hengji-encrypted-backup' && parsed.encrypted);
+  } catch {
+    return false;
+  }
+}
+
+
 // 需求5：常用项目组与项目组成员 CSV 导入
 export function getProjectMemberTemplateCsv(): string {
   const headers = ['员工姓名', '专业组', '职务/角色', '部门', '备注'];

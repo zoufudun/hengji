@@ -38,6 +38,11 @@ import {
   getProjectQuotaPerspective,
   exportProjectQuotaScheduleCsv,
   parseProjectQuotaScheduleCsvText,
+  exportEncryptedBackupJson,
+  parseAndDecryptBackupJson,
+  isEncryptedBackup,
+  APP_VERSION,
+  UPDATE_HISTORY,
 } from '../lib/core.ts';
 
 test('项目创建时只保存成员名单，不需要成员固定系数', () => {
@@ -913,6 +918,64 @@ test('项目周期额度规划与全周期透视功能（防前期把钱分完�
   assert.equal(parsedSchedule.length, 3);
   assert.equal(parsedSchedule[0].month, '2026-01');
   assert.equal(parsedSchedule[0].rate, deliverablePlan[0].rate);
+});
+
+test('企业级全量灾备数据 AES-256-GCM 加密导出与权限口令解密验证', async () => {
+  const state = demoState();
+  const password = 'DisasterAdmin#2026';
+
+  // 1. 加密导出全量灾备
+  const encryptedJson = await exportEncryptedBackupJson(state, password, {
+    workspaceName: '生产保密工作区',
+    projectGroups: [{ id: 'g1', name: '核心总体组', type: '总体组', memberIds: ['admin'] }]
+  });
+
+  assert.ok(isEncryptedBackup(encryptedJson));
+  const parsedEnvelope = JSON.parse(encryptedJson);
+  assert.equal(parsedEnvelope.format, 'hengji-encrypted-backup');
+  assert.equal(parsedEnvelope.encrypted, true);
+  assert.ok(parsedEnvelope.salt);
+  assert.ok(parsedEnvelope.iv);
+  assert.ok(parsedEnvelope.data);
+  // 明文数据不应暴露在顶层
+  assert.equal(parsedEnvelope.state, undefined);
+
+  // 2. 正确口令成功解密
+  const decrypted = await parseAndDecryptBackupJson(encryptedJson, password);
+  assert.equal(decrypted.workspaceName, '生产保密工作区');
+  assert.equal(decrypted.state.employees.length, state.employees.length);
+  assert.equal(decrypted.state.projects.length, state.projects.length);
+  assert.equal(decrypted.projectGroups.length, 1);
+  assert.equal(decrypted.projectGroups[0].name, '核心总体组');
+
+  // 3. 错误口令解密被拒绝
+  await assert.rejects(
+    async () => {
+      await parseAndDecryptBackupJson(encryptedJson, 'WrongPassword123');
+    },
+    /权限口令错误/
+  );
+
+  // 4. 未输入口令被拒绝
+  await assert.rejects(
+    async () => {
+      await parseAndDecryptBackupJson(encryptedJson, '');
+    },
+    /请输入解密口令/
+  );
+
+  // 5. 兼容导入历史未加密备份
+  const legacyBackup = exportFullBackupJson(state);
+  assert.equal(isEncryptedBackup(legacyBackup), false);
+  const legacyDecrypted = await parseAndDecryptBackupJson(legacyBackup);
+  assert.equal(legacyDecrypted.state.projects.length, state.projects.length);
+
+  // 6. 版本号与更新历史验证
+  assert.equal(APP_VERSION, '0.3.0');
+  assert.ok(UPDATE_HISTORY.length >= 3);
+  assert.equal(UPDATE_HISTORY[0].version, 'v0.3.0');
+  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('全周期额度规划')));
+  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('加密')));
 });
 
 

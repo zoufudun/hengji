@@ -47,6 +47,9 @@ import {
   AlertCircle,
   AlertTriangle,
   Info,
+  History,
+  Lock,
+  Unlock,
   X
 } from 'lucide-react';
 import {
@@ -114,6 +117,15 @@ import {
   rangeReport,
   report,
   score,
+  points,
+  APP_VERSION,
+  APP_BUILD,
+  APP_AUTHOR,
+  APP_CONTACT,
+  UPDATE_HISTORY,
+  exportEncryptedBackupJson,
+  parseAndDecryptBackupJson,
+  isEncryptedBackup,
   toMoney,
   toRate,
   total,
@@ -461,6 +473,7 @@ export default function DesktopWorkspace() {
   // 项目组管理状态 (不预设默认模版，由用户根据业务需要手动配置或从CSV导入)
   const [projectGroups, setProjectGroups] = useState<ProjectGroup[]>([]);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [aboutModalOpen, setAboutModalOpen] = useState(false);
 
   const saveProjectGroups = async (next: ProjectGroup[]) => {
     setProjectGroups(next);
@@ -688,6 +701,17 @@ export default function DesktopWorkspace() {
             )}
           </div>
         </div>
+        <div style={{ padding: '8px 14px', borderTop: '1px solid #1c3b32', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: '#94a3b8' }}>
+          <span>版本: v{APP_VERSION}</span>
+          <button
+            type="button"
+            style={{ border: 'none', background: 'transparent', color: '#4ade80', cursor: 'pointer', padding: 0, fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+            onClick={() => setAboutModalOpen(true)}
+            title="查看系统关于与版本更新历史"
+          >
+            <Info size={11} />关于系统
+          </button>
+        </div>
       </aside>
 
       <main>
@@ -725,6 +749,14 @@ export default function DesktopWorkspace() {
             <button className="secondary" style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }} onClick={async () => {
               if (await window.meritDesktop.exportBase({ state, projectGroups })) setNotice('共享基础库已导出：不包含项目、工作内容和绩点');
             }}><Users size={14}/>导出共享基础库</button>
+            <button
+              className="secondary"
+              style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }}
+              onClick={() => setAboutModalOpen(true)}
+              title="查看软件版本、开发作者信息与更新历史"
+            >
+              <Info size={14} />关于 (v{APP_VERSION})
+            </button>
             <button className="secondary" style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }} onClick={async () => {
               await window.meritDesktop.lock(); setState(null); setWorkspaceName(''); setDataFile(''); setProjectGroups([]); setNotice('工作区已锁定');
             }}><LogOut size={14}/>锁定</button>
@@ -945,7 +977,214 @@ export default function DesktopWorkspace() {
         />
       )}
 
+      {/* About & Version History Modal */}
+      {aboutModalOpen && (
+        <AboutModal onClose={() => setAboutModalOpen(false)} />
+      )}
+
     </div>
+  );
+}
+
+// -------------------------------------------------------------
+// 关于系统弹窗 (About & Update History Modal)
+// -------------------------------------------------------------
+function AboutModal({ onClose }: { onClose(): void }) {
+  const [activeTab, setActiveTab] = useState<'intro' | 'history'>('intro');
+
+  return (
+    <Modal
+      title="关于衡绩员工绩点考核系统"
+      subtitle={`版本号: v${APP_VERSION} (Build ${APP_BUILD}) · 离线优先安全架构`}
+      wide
+      onClose={onClose}
+    >
+      <div className="modal-body" style={{ maxHeight: '72vh', overflowY: 'auto' }}>
+        {/* 顶部品牌与核心信息卡片 */}
+        <div style={{
+          background: 'linear-gradient(135deg, #142822 0%, #1c3b32 60%, #15803d 100%)',
+          borderRadius: '12px',
+          padding: '24px 28px',
+          color: '#ffffff',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '16px',
+          marginBottom: '20px',
+          boxShadow: '0 8px 24px rgba(20,40,34,0.18)'
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <div style={{
+                width: 36,
+                height: 36,
+                borderRadius: '8px',
+                background: '#4ade80',
+                color: '#142822',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                fontSize: '20px'
+              }}>
+                衡
+              </div>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '20px', letterSpacing: '0.5px' }}>衡绩 · 员工绩点考核系统</h2>
+                <span style={{ fontSize: '12px', opacity: 0.85, letterSpacing: '1px' }}>MERIT PERFORMANCE EVALUATION SYSTEM</span>
+              </div>
+            </div>
+            <p style={{ margin: 0, fontSize: '13px', opacity: 0.9, maxWidth: '520px', lineHeight: 1.5 }}>
+              面向多项目、长周期、跨专业组的工程与科研团队，构建“合同额度控制 — 全周期节奏规划 — 月度绩点分润 — 荣誉与报表透视”的端到端量化闭环。
+            </p>
+          </div>
+
+          <div style={{
+            background: 'rgba(255,255,255,0.12)',
+            backdropFilter: 'blur(8px)',
+            borderRadius: '10px',
+            padding: '12px 18px',
+            border: '1px solid rgba(255,255,255,0.2)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            fontSize: '12px'
+          }}>
+            <div><span style={{ opacity: 0.75 }}>软件版本：</span><b style={{ color: '#4ade80', fontSize: '14px' }}>v{APP_VERSION}</b></div>
+            <div><span style={{ opacity: 0.75 }}>发布构建：</span><b>Build {APP_BUILD}</b></div>
+            <div><span style={{ opacity: 0.75 }}>系统授权：</span><b>企业本地私有版 (离线免联网)</b></div>
+          </div>
+        </div>
+
+        {/* 标签栏：系统简介与理念 vs 版本演进更新历史 */}
+        <div className="modal-nav-tabs" style={{ marginBottom: '18px' }}>
+          <button
+            type="button"
+            className={`modal-tab-btn ${activeTab === 'intro' ? 'active' : ''}`}
+            onClick={() => setActiveTab('intro')}
+          >
+            <ShieldCheck size={14} /> 架构设计与开发作者
+          </button>
+          <button
+            type="button"
+            className={`modal-tab-btn ${activeTab === 'history' ? 'active' : ''}`}
+            onClick={() => setActiveTab('history')}
+          >
+            <History size={14} /> 版本更新历史 ({UPDATE_HISTORY.length} 个版本)
+          </button>
+        </div>
+
+        {activeTab === 'intro' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '18px' }}>
+            {/* 左侧：系统理念与技术特色 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px 18px' }}>
+                <h4 style={{ margin: '0 0 10px', fontSize: '14px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Award size={16} color="#0284c7" />
+                  核心设计理念
+                </h4>
+                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12.5px', color: '#334155', lineHeight: 1.8 }}>
+                  <li><strong>公平量化有据可循</strong>：严格遵循项目合同总额上限，杜绝超额超发，确保每一分绩点真实挂钩项目合同经费。</li>
+                  <li><strong>全周期规划防透支</strong>：提供“稳健交付型”全生命周期排期模型，锁定关键发货交付阶段储备金，杜绝“前期分光、后期有货无钱”现象。</li>
+                  <li><strong>柔性管理与专业组协同</strong>：支持总体组、产品组、研发组等多专业组团队架构，项目负责人绩点率实行参考区间引导。</li>
+                  <li><strong>离线原生与数据自主</strong>：纯本地文件存储（.hengji 与全量加密灾备快照），无网络依赖、无需云端服务器，保障涉密安全。</li>
+                </ul>
+              </div>
+
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px 18px' }}>
+                <h4 style={{ margin: '0 0 10px', fontSize: '14px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Lock size={16} color="#15803d" />
+                  企业级安全防护体系
+                </h4>
+                <div style={{ fontSize: '12px', color: '#475569', lineHeight: 1.6 }}>
+                  系统工作区与全量系统灾备文件均采用国际高强度 <b>AES-256-GCM</b> 对称加密算法，结合 <b>PBKDF2-SHA256</b> 密钥派生（100,000 次哈希迭代），有效防范暴力破解与数据篡改。导入与恢复时必须输入正确的权限密钥方能解密。
+                </div>
+              </div>
+            </div>
+
+            {/* 右侧：开发作者卡片与系统环境信息 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '16px 18px' }}>
+                <h4 style={{ margin: '0 0 12px', fontSize: '14px', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Crown size={16} color="#15803d" />
+                  研发团队与作者信息
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12.5px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ color: '#64748b', width: '70px' }}>开发作者：</span>
+                    <strong style={{ color: '#0f172a' }}>{APP_AUTHOR}</strong>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ color: '#64748b', width: '70px' }}>联系邮箱：</span>
+                    <a href={`mailto:${APP_CONTACT}`} style={{ color: '#0284c7', textDecoration: 'none', fontWeight: 600 }}>{APP_CONTACT}</a>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ color: '#64748b', width: '70px' }}>系统版本：</span>
+                    <span style={{ color: '#15803d', fontWeight: 700 }}>v{APP_VERSION} (Major.Minor.Patch 规范)</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ color: '#64748b', width: '70px' }}>更新准则：</span>
+                    <span style={{ color: '#475569' }}>每次更新根据功能幅度同步调整大版本/小版本号</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px 18px' }}>
+                <h4 style={{ margin: '0 0 8px', fontSize: '13px', color: '#334155' }}>💻 技术架构与栈</h4>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  <span style={{ background: '#e2e8f0', borderRadius: '4px', padding: '2px 7px', fontSize: '11px', color: '#334155' }}>Electron 33</span>
+                  <span style={{ background: '#e2e8f0', borderRadius: '4px', padding: '2px 7px', fontSize: '11px', color: '#334155' }}>React 19</span>
+                  <span style={{ background: '#e2e8f0', borderRadius: '4px', padding: '2px 7px', fontSize: '11px', color: '#334155' }}>TypeScript</span>
+                  <span style={{ background: '#e2e8f0', borderRadius: '4px', padding: '2px 7px', fontSize: '11px', color: '#334155' }}>Vite 8</span>
+                  <span style={{ background: '#e2e8f0', borderRadius: '4px', padding: '2px 7px', fontSize: '11px', color: '#334155' }}>Recharts 3</span>
+                  <span style={{ background: '#e2e8f0', borderRadius: '4px', padding: '2px 7px', fontSize: '11px', color: '#334155' }}>WebCrypto AES-256</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* 版本更新历史时间轴 */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {UPDATE_HISTORY.map((ver, idx) => (
+              <div
+                key={ver.version}
+                style={{
+                  background: idx === 0 ? '#f0fdf4' : '#ffffff',
+                  border: `1px solid ${idx === 0 ? '#86efac' : '#e2e8f0'}`,
+                  borderRadius: '10px',
+                  padding: '16px 20px',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.03)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <b style={{ fontSize: '16px', color: idx === 0 ? '#15803d' : '#0f172a' }}>{ver.version}</b>
+                    <Badge tone={idx === 0 ? 'green' : 'neutral'}>{ver.tag}</Badge>
+                    <span style={{ fontSize: '13.5px', fontWeight: 600, color: '#334155' }}>{ver.title}</span>
+                  </div>
+                  <time style={{ fontSize: '12px', color: '#64748b' }}>📅 发布日期: {ver.date}</time>
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12.5px', color: '#334155', lineHeight: 1.7 }}>
+                  {ver.items.map((it, i) => (
+                    <li key={i}>{it}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+        <div style={{ fontSize: '11.5px', color: '#64748b' }}>
+          © 2026 TOPFIRE 衡绩 · 保留所有权利
+        </div>
+        <button type="button" className="primary" onClick={onClose}>
+          我知道了
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -5470,6 +5709,34 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
     e.target.value = '';
   };
 
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportPassword, setExportPassword] = useState('');
+  const [exportPasswordConfirm, setExportPasswordConfirm] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+
+  const [decryptModalOpen, setDecryptModalOpen] = useState(false);
+  const [pendingBackupText, setPendingBackupText] = useState<string | null>(null);
+  const [decryptPassword, setDecryptPassword] = useState('');
+  const [isDecrypting, setIsDecrypting] = useState(false);
+
+  const confirmAndApplyRestore = async (backup: BackupData) => {
+    const grpCount = backup.projectGroups?.length || 0;
+    const confirmMsg =
+      `【系统全量灾备恢复确认】\n\n` +
+      `已成功校验并解锁快照数据：\n` +
+      `• 备份导出时间: ${backup.exportedAt}\n` +
+      `• 包含部门员工: ${backup.state.employees.length} 人\n` +
+      `• 包含项目清单: ${backup.state.projects.length} 个\n` +
+      `• 包含项目组配置: ${grpCount} 组（含成员与分配比例）\n` +
+      `• 包含月度分配: ${backup.state.plans.length} 笔\n` +
+      `• 包含审计流水: ${backup.state.audit.length} 条\n\n` +
+      `⚠️ 警告：恢复操作将用该快照数据完整覆盖当前系统全部数据与项目组配置！\n确定要继续恢复吗？`;
+    if (window.confirm(confirmMsg)) {
+      await onRestoreState(backup.state, backup.projectGroups || []);
+      setIoNotice(`✅ 成功通过权限验证，已完整恢复系统全部数据与配置（${backup.state.projects.length}个项目，${backup.state.employees.length}位员工，${grpCount}个项目组配置）`);
+    }
+  };
+
   const handleRestoreJsonFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -5477,28 +5744,67 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
     reader.onload = async evt => {
       try {
         const text = evt.target?.result as string;
-        const backup = parseAndValidateBackupJson(text);
-        const grpCount = backup.projectGroups?.length || 0;
-        const confirmMsg =
-          `【系统全量灾备恢复确认】\n\n` +
-          `已成功解析并校验快照文件：\n` +
-          `• 备份导出时间: ${backup.exportedAt}\n` +
-          `• 包含部门员工: ${backup.state.employees.length} 人\n` +
-          `• 包含项目清单: ${backup.state.projects.length} 个\n` +
-          `• 包含项目组配置: ${grpCount} 组（含成员与分配比例）\n` +
-          `• 包含月度分配: ${backup.state.plans.length} 笔\n` +
-          `• 包含审计流水: ${backup.state.audit.length} 条\n\n` +
-          `⚠️ 警告：恢复操作将用该快照数据完整覆盖当前系统全部数据与项目组配置！\n确定要继续恢复吗？`;
-        if (window.confirm(confirmMsg)) {
-          await onRestoreState(backup.state, backup.projectGroups || []);
-          setIoNotice(`✅ 成功从灾备快照中完整恢复系统全部数据与配置（${backup.state.projects.length}个项目，${backup.state.employees.length}位员工，${grpCount}个项目组配置）`);
+        if (isEncryptedBackup(text)) {
+          // 该灾备快照已加密，必须输入口令才能解密打开
+          setPendingBackupText(text);
+          setDecryptPassword('');
+          setDecryptModalOpen(true);
+        } else {
+          // 历史未加密灾备兼容
+          const backup = parseAndValidateBackupJson(text);
+          await confirmAndApplyRestore(backup);
         }
       } catch (err) {
-        alert(`灾备恢复失败：${errorText(err)}`);
+        alert(`灾备文件读取失败：${errorText(err)}`);
       }
     };
     reader.readAsText(file, 'utf-8');
     e.target.value = '';
+  };
+
+  const handleDecryptAndRestore = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pendingBackupText) return;
+    if (!decryptPassword.trim()) {
+      alert('请输入灾备快照解密权限口令');
+      return;
+    }
+    setIsDecrypting(true);
+    try {
+      const backup = await parseAndDecryptBackupJson(pendingBackupText, decryptPassword);
+      setDecryptModalOpen(false);
+      setPendingBackupText(null);
+      await confirmAndApplyRestore(backup);
+    } catch (err) {
+      alert(errorText(err));
+    } finally {
+      setIsDecrypting(false);
+    }
+  };
+
+  const handleConfirmExportEncrypted = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!exportPassword || exportPassword.length < 4) {
+      alert('为保障灾备数据安全，请输入至少 4 位加密口令（权限密钥）');
+      return;
+    }
+    if (exportPassword !== exportPasswordConfirm) {
+      alert('两次输入的加密口令不一致，请重新核对');
+      return;
+    }
+    setIsExporting(true);
+    try {
+      const encryptedJson = await exportEncryptedBackupJson(state, exportPassword, { projectGroups, workspaceName });
+      triggerDownload(encryptedJson, `衡绩系统全量灾备快照-加密版-${nowMonth()}-${Date.now().toString().slice(-4)}.json`);
+      setExportModalOpen(false);
+      setExportPassword('');
+      setExportPasswordConfirm('');
+      setIoNotice('🔐 全量系统灾备数据已完成 AES-256-GCM 高强度加密并成功导出！导入时须输入所设口令方可解密还原。');
+    } catch (err) {
+      alert(`导出加密失败：${errorText(err)}`);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const createLocalSnapshot = () => {
@@ -5582,16 +5888,26 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
               <span>月度分配: <b>{state.plans.length} 笔</b></span>
               <span>审计流水: <b>{state.audit.length} 条</b></span>
             </div>
-            <button
-              className="primary"
-              style={{ background: '#15803d' }}
-              onClick={() => {
-                const jsonStr = exportFullBackupJson(state, { projectGroups, workspaceName });
-                triggerDownload(jsonStr, `衡绩系统全量灾备快照-${nowMonth()}-${Date.now().toString().slice(-4)}.json`);
-              }}
-            >
-              <Download size={14} />导出全量灾备快照 (.json)
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                className="primary"
+                style={{ background: '#15803d', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                onClick={() => setExportModalOpen(true)}
+              >
+                <Lock size={14} />导出加密全量灾备快照 (.json)
+              </button>
+              <button
+                className="secondary"
+                style={{ fontSize: '12px', padding: '6px 12px', color: '#475569' }}
+                onClick={() => {
+                  const jsonStr = exportFullBackupJson(state, { projectGroups, workspaceName });
+                  triggerDownload(jsonStr, `衡绩系统全量灾备快照-明文版-${nowMonth()}-${Date.now().toString().slice(-4)}.json`);
+                }}
+                title="导出免密明文快照（仅供测试或局域网共享）"
+              >
+                <Download size={13} />导出未加密快照
+              </button>
+            </div>
           </div>
 
           {/* 全量灾备恢复 */}
@@ -5601,7 +5917,7 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
               <Badge tone="amber">管理员专享</Badge>
             </div>
             <p style={{ fontSize: '12.5px', color: '#64748b', margin: '0 0 14px', lineHeight: 1.5 }}>
-              选择此前导出的全量快照 JSON 文件。系统将严谨校验数据结构合法性与业务完整性，确认无误后完整恢复系统状态与全部项目组配置。
+              选择此前导出的全量快照 JSON 文件。系统将自动校验数据合法性与加密状态，若是加密快照须输入权限口令方可解密，确认无误后完整恢复系统状态与全部项目组配置。
             </p>
             <input type="file" ref={restoreFileInput} accept=".json" onChange={handleRestoreJsonFile} style={{ display: 'none' }} />
             {isAdmin ? (
@@ -5609,7 +5925,7 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
                 <div className="import-dropzone" style={{ padding: '14px', minHeight: 'auto' }} onClick={() => restoreFileInput.current?.click()}>
                   <Upload size={20} color="#b45309" />
                   <p style={{ fontSize: '12.5px', margin: '4px 0' }}>点击选择全量灾备快照 JSON 文件执行恢复</p>
-                  <small style={{ fontSize: '11px' }}>支持自动格式校验、项目、项目组配置与人员依赖完整性检查</small>
+                  <small style={{ fontSize: '11px' }}>支持自动识别加密快照（验证权限口令后解密）与明文快照完整性检查</small>
                 </div>
               </div>
             ) : (
@@ -5821,6 +6137,95 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
           </div>
         </div>
       </div>
+      {/* 灾备加密导出弹窗 */}
+      {exportModalOpen && (
+        <Modal
+          title="🔐 导出企业级加密全量灾备快照"
+          subtitle="系统将采用国际标准 AES-256-GCM 高强度加密打包当前所有人员、项目、规划与配置，导入还原时须输入该权限口令方可解密。"
+          onClose={() => setExportModalOpen(false)}
+        >
+          <form onSubmit={handleConfirmExportEncrypted}>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '10px 14px', fontSize: '12.5px', color: '#166534' }}>
+                <div style={{ fontWeight: 600, marginBottom: '2px' }}>🛡️ 数据高强度安全防线</div>
+                灾备数据包含全单位项目合同、预算总额、人员编制、项目组配置及月度绩点。加密后生成防篡改文件，脱离权限口令无法解密，可安心进行离线归档或跨设备交接。
+              </div>
+
+              <Field label="设置灾备加密权限口令" hint="建议输入至少 4 位字符，请妥善保管该口令">
+                <input
+                  type="password"
+                  value={exportPassword}
+                  onChange={e => setExportPassword(e.target.value)}
+                  placeholder="请输入权限口令..."
+                  autoFocus
+                  required
+                />
+              </Field>
+
+              <Field label="确认加密口令" hint="请再次输入以防输入有误">
+                <input
+                  type="password"
+                  value={exportPasswordConfirm}
+                  onChange={e => setExportPasswordConfirm(e.target.value)}
+                  placeholder="请再次输入权限口令..."
+                  required
+                />
+              </Field>
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" className="secondary" onClick={() => setExportModalOpen(false)}>
+                取消
+              </button>
+              <button type="submit" className="primary" disabled={isExporting} style={{ background: '#15803d' }}>
+                {isExporting ? '加密打包中...' : '🔐 确认加密并下载快照'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* 灾备解密权限验证弹窗 */}
+      {decryptModalOpen && (
+        <Modal
+          title="🔐 灾备数据权限口令验证"
+          subtitle="检测到该快照已被 AES-256-GCM 高强度加密，必须输入加密权限口令方可解密并查看数据"
+          onClose={() => { setDecryptModalOpen(false); setPendingBackupText(null); }}
+        >
+          <form onSubmit={handleDecryptAndRestore}>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '10px 14px', fontSize: '12.5px', color: '#92400e' }}>
+                <div style={{ fontWeight: 600, marginBottom: '2px' }}>🔒 权限受控保护</div>
+                该快照文件已被加密保护。输入正确的权限口令后，系统将校验数据完整性并展示快照全景概览供您确认恢复。
+              </div>
+
+              <Field label="输入灾备加密权限口令">
+                <input
+                  type="password"
+                  value={decryptPassword}
+                  onChange={e => setDecryptPassword(e.target.value)}
+                  placeholder="请输入导出时设置的口令..."
+                  autoFocus
+                  required
+                />
+              </Field>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => { setDecryptModalOpen(false); setPendingBackupText(null); }}
+              >
+                取消
+              </button>
+              <button type="submit" className="primary" disabled={isDecrypting}>
+                {isDecrypting ? '验证解密中...' : '🔓 验证口令并解密还原'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }
