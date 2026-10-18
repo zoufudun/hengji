@@ -2293,7 +2293,7 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.5.0';
+export const APP_VERSION = '0.5.1';
 export const APP_BUILD = '20261018';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
@@ -2307,6 +2307,18 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.5.1',
+    date: '2026-10-18',
+    tag: '功能增强',
+    title: '批量撤回独立强化与快捷全选体系',
+    items: [
+      '【独立常驻的批量撤回按键】在月底分配与全项目集中管理看板常驻提供“↩ 批量撤回”一级操作按键，支持一键撤回勾选的已发布项目或当月全部已发布方案。',
+      '【多模式快捷勾选工具条】表格上方新增快捷勾选栏，提供“全选当月草稿”、“全选当月已发布”、“全选所有项目”与“清空选择”，支持清晰掌握勾选状态。',
+      '【批量撤回前置安全确认】批量撤回时弹出明确的确认提示，说明撤回后转为草稿并暂时从当月报表中移出，支持无缝重新调整额度与人员。',
+      '【单项目历史明细联动支持】单项目各月份明细视图中同样新增“批量撤回已发布”快捷入口，方便单项目整周期或历史调整。'
+    ]
+  },
   {
     version: 'v0.5.0',
     date: '2026-10-18',

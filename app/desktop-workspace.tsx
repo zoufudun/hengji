@@ -4262,18 +4262,41 @@ function PlansView({
   };
 
   // 批量撤回
+  const [isReopeningBatch, setIsReopeningBatch] = useState(false);
+
   const handleBatchReopen = async () => {
     if (!onBatchReopen) return;
-    const pubPlanIds: string[] = [];
-    for (const r of monthPerspective.rows) {
-      if (r.plan && r.plan.status === 'published' && selectedPlanIds.includes(r.plan.id)) {
-        pubPlanIds.push(r.plan.id);
-      }
+    
+    // 找出所有勾选的已发布方案
+    const selectedPubPlanIds = monthPerspective.rows
+      .filter(r => r.plan && r.plan.status === 'published' && selectedPlanIds.includes(r.plan.id))
+      .map(r => r.plan!.id);
+
+    // 找出当月全部已发布方案
+    const allPubPlanIds = monthPerspective.rows
+      .filter(r => r.plan && r.plan.status === 'published')
+      .map(r => r.plan!.id);
+
+    if (allPubPlanIds.length === 0) {
+      alert(`当前【${selectedMonth}】月份没有已发布的项目方案可供撤回。`);
+      return;
     }
-    if (pubPlanIds.length === 0) return;
-    if (window.confirm(`确认批量撤回选中的 ${pubPlanIds.length} 个项目方案为草稿状态？`)) {
-      await onBatchReopen(pubPlanIds);
-      setSelectedPlanIds([]);
+
+    const targetPlanIds = selectedPubPlanIds.length > 0 ? selectedPubPlanIds : allPubPlanIds;
+    const isAll = selectedPubPlanIds.length === 0 || selectedPubPlanIds.length === allPubPlanIds.length;
+    
+    const confirmMsg = isAll
+      ? `【批量撤回确认】\n\n确定要将【${selectedMonth}】月份全部 ${allPubPlanIds.length} 个已发布的项目月度分配方案批量撤回为草稿状态吗？\n\n撤回后：\n1. 方案将转为草稿，您可以重新调整分配额度与成员比例；\n2. 涉及的绩点将暂时从当月考核报表中移出，待重新审核发布后计入。`
+      : `【批量撤回确认】\n\n确定要将勾选的 ${selectedPubPlanIds.length} 个已发布项目月度分配方案批量撤回为草稿状态吗？\n\n撤回后：\n1. 选中的项目方案将转为草稿状态供重新编辑；\n2. 涉及的绩点将暂时从当月考核报表中移出。`;
+
+    if (window.confirm(confirmMsg)) {
+      setIsReopeningBatch(true);
+      try {
+        await onBatchReopen(targetPlanIds);
+        setSelectedPlanIds(prev => prev.filter(id => !targetPlanIds.includes(id)));
+      } finally {
+        setIsReopeningBatch(false);
+      }
     }
   };
 
@@ -4296,14 +4319,40 @@ function PlansView({
 
   const dirtyCount = Object.values(draftEdits).filter(e => e.dirty).length;
   const draftRows = monthPerspective.rows.filter(r => r.status === 'draft');
-  const allDraftsSelected = draftRows.length > 0 && draftRows.every(r => r.plan && selectedPlanIds.includes(r.plan.id));
+  const publishedRows = monthPerspective.rows.filter(r => r.plan && r.plan.status === 'published');
+  const allocatedRows = monthPerspective.rows.filter(r => r.plan !== undefined);
+
+  const selectedDraftIds = draftRows.filter(r => r.plan && selectedPlanIds.includes(r.plan.id)).map(r => r.plan!.id);
+  const selectedPubPlanIds = publishedRows.filter(r => r.plan && selectedPlanIds.includes(r.plan.id)).map(r => r.plan!.id);
+
+  const allDraftsSelected = draftRows.length > 0 && selectedDraftIds.length === draftRows.length;
+  const allPublishedSelected = publishedRows.length > 0 && selectedPubPlanIds.length === publishedRows.length;
+  const allAllocatedSelected = allocatedRows.length > 0 && selectedPlanIds.length === allocatedRows.length;
 
   const toggleSelectAllDrafts = () => {
     if (allDraftsSelected) {
-      setSelectedPlanIds([]);
+      setSelectedPlanIds(prev => prev.filter(id => !draftRows.some(r => r.plan?.id === id)));
     } else {
-      setSelectedPlanIds(draftRows.map(r => r.plan!.id));
+      const draftIds = draftRows.map(r => r.plan!.id);
+      setSelectedPlanIds(prev => Array.from(new Set([...prev, ...draftIds])));
     }
+  };
+
+  const toggleSelectAllPublished = () => {
+    if (allPublishedSelected) {
+      setSelectedPlanIds(prev => prev.filter(id => !publishedRows.some(r => r.plan?.id === id)));
+    } else {
+      const pubIds = publishedRows.map(r => r.plan!.id);
+      setSelectedPlanIds(prev => Array.from(new Set([...prev, ...pubIds])));
+    }
+  };
+
+  const selectAllAllocated = () => {
+    setSelectedPlanIds(allocatedRows.map(r => r.plan!.id));
+  };
+
+  const clearSelection = () => {
+    setSelectedPlanIds([]);
   };
 
   return (
@@ -4519,22 +4568,125 @@ function PlansView({
                 disabled={isPublishingBatch || monthPerspective.draftCount === 0}
                 title="将勾选的草稿方案批量正式发布"
               >
-                <CheckSquare size={13} /> {isPublishingBatch ? '正在发布...' : `🚀 批量发布 (${selectedPlanIds.length > 0 ? selectedPlanIds.length : '全部草稿'})`}
+                <CheckSquare size={13} /> {isPublishingBatch ? '正在发布...' : `🚀 批量发布 (${selectedDraftIds.length > 0 ? `${selectedDraftIds.length} 项草稿` : '全部草稿'})`}
               </button>
 
-              {selectedPlanIds.some(id => monthPerspective.rows.some(r => r.plan?.id === id && r.plan.status === 'published')) && (
-                <button
-                  type="button"
-                  className="secondary"
-                  style={{ padding: '4px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', color: '#b45309' }}
-                  onClick={handleBatchReopen}
-                  title="将选中的已发布方案批量撤回为草稿"
-                >
-                  <RotateCcw size={13} /> 批量撤回草稿
-                </button>
-              )}
+              <button
+                type="button"
+                className="secondary"
+                style={{
+                  padding: '4px 12px',
+                  fontSize: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  cursor: monthPerspective.publishedCount === 0 ? 'not-allowed' : 'pointer',
+                  color: monthPerspective.publishedCount === 0 ? '#94a3b8' : '#b45309',
+                  borderColor: monthPerspective.publishedCount === 0 ? '#e2e8f0' : '#f59e0b',
+                  background: monthPerspective.publishedCount === 0 ? '#f8fafc' : '#fffbeb'
+                }}
+                onClick={handleBatchReopen}
+                disabled={isReopeningBatch || monthPerspective.publishedCount === 0}
+                title={
+                  monthPerspective.publishedCount === 0
+                    ? `当前月份暂无已发布方案`
+                    : selectedPubPlanIds.length > 0
+                    ? `将勾选的 ${selectedPubPlanIds.length} 个已发布方案批量撤回为草稿`
+                    : `将当月全部 ${monthPerspective.publishedCount} 个已发布方案批量撤回为草稿重新调整`
+                }
+              >
+                <RotateCcw size={13} /> {isReopeningBatch ? '正在撤回...' : `↩ 批量撤回 (${
+                  selectedPubPlanIds.length > 0
+                    ? `${selectedPubPlanIds.length} 项已发布`
+                    : `全部 ${monthPerspective.publishedCount} 项已发布`
+                })`}
+              </button>
             </div>
           </div>
+
+          {/* 快捷勾选工具条 */}
+          {monthPerspective.allocatedCount > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '12px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ color: '#64748b', fontWeight: 600 }}>快捷勾选：</span>
+                <button
+                  type="button"
+                  style={{
+                    padding: '2px 8px',
+                    fontSize: '11px',
+                    borderRadius: '4px',
+                    border: '1px solid #cbd5e1',
+                    background: allDraftsSelected ? '#dbeafe' : '#ffffff',
+                    color: allDraftsSelected ? '#1d4ed8' : '#334155',
+                    cursor: monthPerspective.draftCount > 0 ? 'pointer' : 'default',
+                    opacity: monthPerspective.draftCount > 0 ? 1 : 0.5
+                  }}
+                  disabled={monthPerspective.draftCount === 0}
+                  onClick={toggleSelectAllDrafts}
+                  title="勾选/取消勾选全部草稿待发布项目"
+                >
+                  📝 {allDraftsSelected ? '取消草稿全选' : `全选当月草稿 (${monthPerspective.draftCount})`}
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    padding: '2px 8px',
+                    fontSize: '11px',
+                    borderRadius: '4px',
+                    border: '1px solid #f59e0b',
+                    background: allPublishedSelected ? '#fef3c7' : '#ffffff',
+                    color: allPublishedSelected ? '#b45309' : '#334155',
+                    cursor: monthPerspective.publishedCount > 0 ? 'pointer' : 'default',
+                    opacity: monthPerspective.publishedCount > 0 ? 1 : 0.5
+                  }}
+                  disabled={monthPerspective.publishedCount === 0}
+                  onClick={toggleSelectAllPublished}
+                  title="勾选/取消勾选全部已发布项目（便于批量撤回）"
+                >
+                  🔒 {allPublishedSelected ? '取消已发布全选' : `全选当月已发布 (${monthPerspective.publishedCount})`}
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    padding: '2px 8px',
+                    fontSize: '11px',
+                    borderRadius: '4px',
+                    border: '1px solid #cbd5e1',
+                    background: allAllocatedSelected ? '#dcfce7' : '#ffffff',
+                    color: allAllocatedSelected ? '#15803d' : '#334155',
+                    cursor: 'pointer'
+                  }}
+                  onClick={allAllocatedSelected ? clearSelection : selectAllAllocated}
+                  title="勾选/取消勾选所有已配置方案"
+                >
+                  {allAllocatedSelected ? '取消全选' : `全选所有项目 (${monthPerspective.allocatedCount})`}
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {selectedPlanIds.length > 0 ? (
+                  <>
+                    <span style={{ color: '#166534', fontWeight: 600 }}>
+                      已勾选 <b>{selectedPlanIds.length}</b> 项（草稿 {selectedDraftIds.length}，已发布 {selectedPubPlanIds.length}）
+                    </span>
+                    <button
+                      type="button"
+                      style={{ padding: '2px 6px', fontSize: '11px', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#ffffff', color: '#64748b', cursor: 'pointer' }}
+                      onClick={clearSelection}
+                    >
+                      清空选择
+                    </button>
+                  </>
+                ) : (
+                  <span style={{ color: '#94a3b8', fontSize: '11.5px' }}>
+                    💡 提示：未单独勾选时，点击“🚀 批量发布”发布全部草稿，点击“↩ 批量撤回”撤回全部已发布
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* 全项目当月集中矩阵列表 */}
           <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
@@ -4544,9 +4696,17 @@ function PlansView({
                   <th style={{ width: '40px', textAlign: 'center' }}>
                     <input
                       type="checkbox"
-                      checked={allDraftsSelected}
-                      onChange={toggleSelectAllDrafts}
-                      title="全选/取消全选当月所有草稿方案"
+                      checked={allAllocatedSelected || (monthPerspective.draftCount > 0 && allDraftsSelected)}
+                      onChange={() => {
+                        if (allAllocatedSelected || allDraftsSelected) {
+                          clearSelection();
+                        } else if (draftRows.length > 0) {
+                          toggleSelectAllDrafts();
+                        } else {
+                          selectAllAllocated();
+                        }
+                      }}
+                      title="全选/取消全选"
                     />
                   </th>
                   <th style={{ width: '22%' }}>项目令号与名称</th>
@@ -4970,6 +5130,22 @@ function PlansView({
                     title="打开全周期额度规划与各月交付节点透视"
                   >
                     <CalendarRange size={13} /> 周期额度规划
+                  </button>
+                )}
+                {singlePlans.some(p => p.status === 'published') && canManageSingleProject && onBatchReopen && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ padding: '3px 9px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer', color: '#b45309', borderColor: '#f59e0b', background: '#fffbeb' }}
+                    onClick={async () => {
+                      const pubPlans = singlePlans.filter(p => p.status === 'published');
+                      if (window.confirm(`【批量撤回确认】\n\n确定要将项目【${singleProject?.name}】下的全部 ${pubPlans.length} 个已发布月份方案批量撤回为草稿状态吗？\n\n撤回后：\n1. 所有方案转为可编辑草稿；\n2. 涉及绩点将暂时从报表中移出。`)) {
+                        await onBatchReopen(pubPlans.map(p => p.id));
+                      }
+                    }}
+                    title="将该项目下全部已发布的月份方案批量撤回为草稿"
+                  >
+                    <RotateCcw size={13} /> 批量撤回已发布 ({singlePlans.filter(p => p.status === 'published').length})
                   </button>
                 )}
               </div>
