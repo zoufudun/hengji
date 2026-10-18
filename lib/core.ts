@@ -90,13 +90,80 @@ export const wan = (fen: number) => (fen / 1_000_000).toLocaleString('zh-CN', { 
 export const score = (fen: number) => (fen / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const monthAmount = (project: Project, plan: Plan) => points(project.contract, plan.budget);
 
-export function toMoney(value: string) {
-  if (!/^\d+(\.\d{1,6})?$/.test(value)) fail('金额最多保留六位小数（万元）');
-  return integer(Math.round(Number(value) * 1_000_000), '金额', 1, 1_000_000_000_000);
+export function toMoney(value: unknown): number {
+  if (value == null) fail('金额不能为空');
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value <= 0) fail('金额格式不正确（必须大于0）');
+    return integer(Math.round(value * 1_000_000), '金额', 1, 1_000_000_000_000);
+  }
+  let str = String(value).trim();
+  if (!str) fail('金额不能为空');
+
+  // 全角字符转半角字符（如 １２３．４５ -> 123.45）
+  str = str.replace(/[\uff01-\uff5e]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0));
+  // 去除空格、千分位逗号与下划线（如 1,309,000.00 -> 1309000.00）
+  str = str.replace(/[,_\s]/g, '');
+  // 去除常见货币前缀（¥, ￥, $, RMB, rmb等）
+  str = str.replace(/^[¥￥$RMBrmb]+/g, '');
+
+  // 识别单位是否为“元”（且不含“万”，例如 1000000元 或 500000元）
+  let isYuan = false;
+  if (/[元圆]$/.test(str) && !/万/.test(str)) {
+    isYuan = true;
+    str = str.replace(/[元圆]$/, '');
+  } else {
+    str = str.replace(/[万元\s]+$/gi, '');
+  }
+
+  // 去除可能的负号（若为负数后续报错）
+  const isNegative = str.startsWith('-');
+  if (isNegative) str = str.slice(1);
+
+  // 补全前导或尾部小数点，如 ".5" -> "0.5", "50." -> "50"
+  if (str.startsWith('.')) str = '0' + str;
+  if (str.endsWith('.')) str = str.slice(0, -1);
+
+  // 如果包含多个小数点（例如令号 22.01.28 或日期 2026.09.15 误入金额列），尝试截取首个浮点数
+  if ((str.match(/\./g) || []).length > 1) {
+    const m = str.match(/^\d+(\.\d+)?/);
+    if (m) str = m[0];
+  }
+
+  const num = Number(str);
+  if (isNaN(num) || !Number.isFinite(num)) {
+    fail('金额必须为有效数字（单位：万元）');
+  }
+  if (isNegative || num <= 0) {
+    fail('金额必须大于 0（单位：万元）');
+  }
+
+  const wan = isYuan ? num / 10000 : num;
+  // 1 万元 = 10,000 元 = 1,000,000 分
+  // 金额在系统中以“分”为整型基准存储。
+  // 对于 Excel 计算、浮点运算或外部导出时产生的超过 6 位小数（如 33.33333333 或 50.100000000000001），
+  // 自动四舍五入到最近的“分”（即对应 6 位小数），杜绝直接向用户弹窗阻断导入
+  const fen = Math.round(wan * 1_000_000);
+  return integer(fen, '金额', 1, 1_000_000_000_000);
 }
-export function toRate(value: string) {
-  if (!/^\d+(\.\d{1,2})?$/.test(value)) fail('百分比最多保留两位小数');
-  return integer(Math.round(Number(value) * 100), '比例');
+
+export function toRate(value: unknown): number {
+  if (value == null) fail('比例不能为空');
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value < 0) fail('比例格式不正确');
+    return integer(Math.round(value * 100), '比例');
+  }
+  let str = String(value).trim().replace('%', '');
+  str = str.replace(/[\uff01-\uff5e]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0));
+  str = str.replace(/[,_\s]/g, '');
+  if (str.startsWith('.')) str = '0' + str;
+  if (str.endsWith('.')) str = str.slice(0, -1);
+
+  const num = Number(str);
+  if (isNaN(num) || !Number.isFinite(num)) {
+    fail('百分比必须为有效数字');
+  }
+  // 自动四舍五入到基点（支持输入超过 2 位小数的浮点数自然保留到 0.01% 基点）
+  return integer(Math.round(num * 100), '比例');
 }
 
 // Largest-remainder allocation keeps every monthly amount exact to the cent.
@@ -458,7 +525,7 @@ export function execute(current: State, actorId: string, command: Command, id: s
         note,
         stageType,
       };
-    }).sort((a, b) => a.month.localeCompare(b.month));
+    }).sort((a: ProjectMonthlyQuotaPlan, b: ProjectMonthlyQuotaPlan) => a.month.localeCompare(b.month));
 
     const totalRate = total(schedule.map(s => s.rate));
     const maxAllocable = Math.max(0, SCALE - (project.historyCompletedRate || 0));
@@ -1189,6 +1256,8 @@ export function getProjectQuotaPerspective(state: State, projectId: string) {
     remainingRate,
     remainingPct: pct(remainingRate),
     remainingWan: wan(remainingAmount),
+    deliveryStageReserveRate: remainingRate,
+    deliveryStageReserveAmount: remainingAmount,
     maxAllocableRate,
     maxAllocablePct: pct(maxAllocableRate),
     overbudgetCount,
@@ -1937,6 +2006,7 @@ export function parseProjectCsvText(csvText: string, state?: State) {
 
   const firstRow = rows[0];
   let nameCol = -1, codeCol = -1, contractCol = -1, ownerCol = -1, startCol = -1, endCol = -1, clientCol = -1, membersCol = -1;
+  let isYuanColumn = false;
 
   for (let i = 0; i < firstRow.length; i++) {
     const cell = firstRow[i].trim();
@@ -1944,12 +2014,17 @@ export function parseProjectCsvText(csvText: string, state?: State) {
       continue; // 跳过纯序号列
     }
     if (/项目名[称陈]|名称/.test(cell) && nameCol === -1) nameCol = i;
-    else if (/工作令号|令号|项目编号|任务单号/.test(cell) && codeCol === -1) codeCol = i;
-    else if (/合同金额|合同总额|金额/.test(cell) && contractCol === -1) contractCol = i;
-    else if (/项目负责人|负责人|项目经理/.test(cell) && ownerCol === -1) ownerCol = i;
-    else if (/开始[日期月份时间]|启动[日期月份时间]/.test(cell) && startCol === -1) startCol = i;
-    else if (/结束[日期月份时间]|截止[日期月份时间]|交付[日期月份时间]|完成[日期月份时间]/.test(cell) && endCol === -1) endCol = i;
-    else if (/客户[名称主体]?|发包方|委托方/.test(cell) && clientCol === -1) clientCol = i;
+    else if (/工作令号|令号|项目编号|任务单号|任务令号|令号编号/.test(cell) && codeCol === -1) codeCol = i;
+    else if (/合同[金总]?额|合同[总]?价|项目[金总]?额|[总]?金额|[总]?经费|[总]?预算|[总]?产值/i.test(cell) && contractCol === -1) {
+      contractCol = i;
+      if (/[\(（]元[\)）]|单位[:：\s]*元/i.test(cell)) {
+        isYuanColumn = true;
+      }
+    }
+    else if (/项目负责人|负责人|项目经理|责任人|总师|负责人姓名/.test(cell) && ownerCol === -1) ownerCol = i;
+    else if (/开始[日期月份时间]?|启动[日期月份时间]?|立项[日期月份时间]?/.test(cell) && startCol === -1) startCol = i;
+    else if (/结束[日期月份时间]?|截止[日期月份时间]?|交付[日期月份时间]?|完成[日期月份时间]?|结项[日期月份时间]?/.test(cell) && endCol === -1) endCol = i;
+    else if (/客户[名称主体]?|发包方|委托方|委托单位|用户单位/.test(cell) && clientCol === -1) clientCol = i;
     else if (/项目组成员|成员[名单姓名列表]?/.test(cell) && membersCol === -1) membersCol = i;
   }
 
@@ -2013,8 +2088,19 @@ export function parseProjectCsvText(csvText: string, state?: State) {
 
     const name = rawName || rawCode;
     const code: string = rawCode || `WO-${nowMonth().replace('-', '')}-${String(results.length + 1).padStart(3, '0')}`;
-    const cleanAmt = rawContract.replace(/[^\d.]/g, '');
-    const contract = cleanAmt ? toMoney(cleanAmt) : 10_000_000;
+    
+    // 金额解析与自适应容错：兼容万元/元、千分位、科学计数法、Excel浮点超长小数及待定金额
+    let contract = 10_000_000;
+    try {
+      if (rawContract && String(rawContract).trim()) {
+        const rawTrimmed = String(rawContract).trim();
+        const isYuan = (isYuanColumn && !/万/.test(rawTrimmed)) || (/[元圆]$/.test(rawTrimmed) && !/万/.test(rawTrimmed));
+        contract = toMoney(isYuan && !/[元圆]$/.test(rawTrimmed) ? `${rawTrimmed}元` : rawTrimmed);
+      }
+    } catch {
+      // 容错兜底：若该行金额填写了“待定/暂无”或其它无法识别的文本，安全使用默认 10 万元（10_000_000 分），不阻断整表导入
+      contract = 10_000_000;
+    }
 
     let start = normalizeMonthInput(rawStart);
     if (!start) start = nowMonth();
@@ -2293,8 +2379,8 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.5.3';
-export const APP_BUILD = '20261018';
+export const APP_VERSION = '0.5.4';
+export const APP_BUILD = '20261019';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
 
@@ -2307,6 +2393,18 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.5.4',
+    date: '2026-10-19',
+    tag: '功能增强',
+    title: '合同金额导入精度容错与多格式自适应解析强化',
+    items: [
+      '【彻底消除“金额最多保留六位小数”报错阻断】针对用户自 Excel、WPS 或财务系统导出 CSV 时常见的高精度浮点数（如 33.3333333333、50.100000000000001、8 位固定小数等），底层金额解析算法全面升级为安全自动四舍五入到“分”（对应万元 6 位小数），杜绝因小数位数超出而直接弹出错误打断导入。',
+      '【合同金额列智能自适应识别】扩展表头匹配正则，全面兼容“合同额”、“合同额(万元)”、“合同总价”、“总金额”、“项目经费”、“总预算”、“产值”等多样化表头，杜绝因表头未命中回退导致令号或日期被误当金额解析。',
+      '【千分位、货币符号与科学计数法兼容】自动清洗金额中的千分位逗号（如 1,309,000.00）、中文全角数字与全角点号、货币符号（¥、￥、$、RMB）及科学计数法（如 1.25E+05），并智能识别“元”与“万元”单位转换。',
+      '【单行容错安全兜底】导入工作令 CSV 时，若单行金额为“待定”、“不确定”或空缺，自动安全兜底为标准额度并继续导入全表，彻底防止单个单元格格式瑕疵导致上百个项目导入失败。'
+    ]
+  },
   {
     version: 'v0.5.3',
     date: '2026-10-18',
@@ -2443,7 +2541,7 @@ async function deriveKeyWebCrypto(password: string, salt: Uint8Array, iterations
   return await crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt,
+      salt: new Uint8Array(salt),
       iterations,
       hash: 'SHA-256'
     },
@@ -2516,9 +2614,9 @@ export async function parseAndDecryptBackupJson(fileContent: string, password?: 
       const iterations = parsed.iterations || 100000;
       const key = await deriveKeyWebCrypto(password.trim(), salt, iterations);
       const decryptedBuffer = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv },
+        { name: 'AES-GCM', iv: new Uint8Array(iv) },
         key,
-        ciphertext
+        new Uint8Array(ciphertext)
       );
       const dec = new TextDecoder();
       const rawJson = dec.decode(decryptedBuffer);

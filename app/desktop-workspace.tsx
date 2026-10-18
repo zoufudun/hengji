@@ -197,8 +197,8 @@ function Modal({
   );
 }
 
-function Badge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'green' | 'amber' | 'blue' | 'purple' | 'gray' }) {
-  return <span className={`badge ${tone}`}>{children}</span>;
+function Badge({ children, tone = 'neutral', style }: { children: React.ReactNode; tone?: 'neutral' | 'green' | 'amber' | 'blue' | 'purple' | 'gray'; style?: React.CSSProperties }) {
+  return <span className={`badge ${tone}`} style={style}>{children}</span>;
 }
 
 function GroupTag({ group }: { group?: string }) {
@@ -355,7 +355,6 @@ function WorkspaceGate({ hasLegacyData, onReady, onError }: {
         const rev = 1;
         localStorage.setItem('merit_desktop_state', JSON.stringify({ revision: rev, actorId: 'admin', state: initial }));
         onReady({
-          open: true,
           name: trimmedName,
           revision: rev,
           actorId: 'admin',
@@ -569,7 +568,7 @@ export default function DesktopWorkspace() {
   }
 
   async function command(type: string, data: any, message: string) {
-    if (!state) return;
+    if (!state) return false;
     try {
       await persist(execute(state, actorId, { type, data }, uid(), new Date().toISOString()), message);
       return true;
@@ -7276,12 +7275,6 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
   const [empPreview, setEmpPreview] = useState<any[] | null>(null);
   const [prjPreview, setPrjPreview] = useState<any[] | null>(null);
   const [ioNotice, setIoNotice] = useState('');
-  const [snapshots, setSnapshots] = useState<{ id: string; time: string; note: string; empCount: number; prjCount: number; grpCount?: number; data: string }[]>(() => {
-    try {
-      const raw = localStorage.getItem('merit_local_snapshots');
-      return raw ? JSON.parse(raw) : [];
-    } catch { return []; }
-  });
 
   const empFileInput = useRef<HTMLInputElement>(null);
   const prjFileInput = useRef<HTMLInputElement>(null);
@@ -7423,48 +7416,6 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
     }
   };
 
-  const createLocalSnapshot = () => {
-    const newSnap = {
-      id: crypto.randomUUID().slice(0, 8),
-      time: new Date().toLocaleString('zh-CN'),
-      note: `手动即时快照 (${nowMonth()})`,
-      empCount: state.employees.length,
-      prjCount: state.projects.length,
-      grpCount: projectGroups.length,
-      data: exportFullBackupJson(state, { projectGroups, workspaceName }),
-    };
-    const nextList = [newSnap, ...snapshots.slice(0, 4)];
-    setSnapshots(nextList);
-    try {
-      localStorage.setItem('merit_local_snapshots', JSON.stringify(nextList));
-      setIoNotice('📸 已成功保存本地即时快照（含全部数据与项目组配置）！');
-    } catch {
-      alert('保存本地快照失败，可能本地存储空间已满');
-    }
-  };
-
-  const rollbackLocalSnapshot = async (snapData: string) => {
-    if (!isAdmin) {
-      alert('需要管理员权限执行回滚');
-      return;
-    }
-    if (confirm('⚠️ 确定要回滚到该本地快照吗？当前系统全部数据与项目组配置将被快照完整覆盖。')) {
-      try {
-        const backup = parseAndValidateBackupJson(snapData);
-        await onRestoreState(backup.state, backup.projectGroups || []);
-        setIoNotice('✅ 已成功回滚至该本地即时快照！');
-      } catch (err) {
-        alert(errorText(err));
-      }
-    }
-  };
-
-  const deleteLocalSnapshot = (id: string) => {
-    const nextList = snapshots.filter(s => s.id !== id);
-    setSnapshots(nextList);
-    try { localStorage.setItem('merit_local_snapshots', JSON.stringify(nextList)); } catch {}
-  };
-
   return (
     <div style={{ display: 'grid', gap: '22px' }}>
       <PageTitle
@@ -7512,17 +7463,6 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
               >
                 <Lock size={14} />导出加密全量灾备快照 (.json)
               </button>
-              <button
-                className="secondary"
-                style={{ fontSize: '12px', padding: '6px 12px', color: '#475569' }}
-                onClick={() => {
-                  const jsonStr = exportFullBackupJson(state, { projectGroups, workspaceName });
-                  triggerDownload(jsonStr, `衡绩系统全量灾备快照-明文版-${nowMonth()}-${Date.now().toString().slice(-4)}.json`);
-                }}
-                title="导出免密明文快照（仅供测试或局域网共享）"
-              >
-                <Download size={13} />导出未加密快照
-              </button>
             </div>
           </div>
 
@@ -7552,50 +7492,6 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
           </div>
         </div>
 
-        {/* 本地即时快照与一键回滚 */}
-        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px 18px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <div>
-              <strong style={{ fontSize: '13.5px', color: '#1e293b' }}>📸 本地即时快照与一键回滚</strong>
-              <span style={{ fontSize: '12px', color: '#64748b', marginLeft: '10px' }}>
-                在做大规模调整前快速创建本地安全点，支持随时一键回退
-              </span>
-            </div>
-            <button className="secondary" style={{ fontSize: '12px', padding: '5px 12px' }} onClick={createLocalSnapshot}>
-              <Save size={13} />保存当前即时快照
-            </button>
-          </div>
-
-          {snapshots.length > 0 ? (
-            <div>
-              {snapshots.map(s => (
-                <div key={s.id} className="backup-snapshot-item">
-                  <div>
-                    <b>{s.note}</b>
-                    <span style={{ color: '#64748b', marginLeft: '12px', fontSize: '11.5px' }}>{s.time}</span>
-                    <span style={{ color: '#166534', marginLeft: '10px', fontSize: '11.5px' }}>
-                      ({s.prjCount} 个项目 · {s.empCount} 位员工 · {s.grpCount ?? 0} 个项目组配置)
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    {isAdmin && (
-                      <button className="secondary" style={{ fontSize: '11.5px', padding: '3px 8px' }} onClick={() => rollbackLocalSnapshot(s.data)}>
-                        <RotateCcw size={12} />回滚此快照
-                      </button>
-                    )}
-                    <button className="text-button" style={{ fontSize: '11.5px', color: '#ef4444' }} onClick={() => deleteLocalSnapshot(s.id)}>
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ fontSize: '12px', color: '#94a3b8', textAlign: 'center', padding: '8px' }}>
-              暂未保存本地即时快照，点击上方“保存当前即时快照”可随时创建系统快照点。
-            </div>
-          )}
-        </div>
       </div>
 
       {/* CSV 导出区域 */}
@@ -8107,9 +8003,6 @@ function ProjectFormModal({ state, value, initialGroupId, projectGroups, onSaveG
 
   const saveCommonGroupsToStorage = (groups: ProjectGroup[]) => {
     if (onSaveGroups) onSaveGroups(groups);
-    try {
-      localStorage.setItem('merit_common_project_groups', JSON.stringify(groups));
-    } catch {}
   };
 
   const handleApplyCommonGroup = (groupId: string) => {
@@ -9046,17 +8939,10 @@ function PlanFormModal({ state, value, initialProjectId, projectGroups, onSaveGr
       defaultRates,
       memberEntries,
     };
-    try {
-      const raw = localStorage.getItem('merit_common_project_groups');
-      const existing = raw ? JSON.parse(raw) : [];
-      const updated = [...existing.filter((g: any) => g.name !== finalGroup.name), finalGroup];
-      localStorage.setItem('merit_common_project_groups', JSON.stringify(updated));
-      setCommonGroupOptions(updated);
-      if (onSaveGroups) onSaveGroups(updated);
-      setPlanNotice(`⭐ 已将当前 ${planMembers.length} 位成员及其分配比例、工作内容保存为【${finalGroup.name}】（${finalGroup.type}）！可在“项目组管理”中查看管理。`);
-    } catch (e) {
-      alert(errorText(e));
-    }
+    const updated = [...commonGroupOptions.filter(g => g.name !== finalGroup.name), finalGroup];
+    setCommonGroupOptions(updated);
+    if (onSaveGroups) onSaveGroups(updated);
+    setPlanNotice(`⭐ 已将当前 ${planMembers.length} 位成员及其分配比例、工作内容保存为【${finalGroup.name}】（${finalGroup.type}）！可在“项目组管理”中查看管理。`);
   };
 
   const handlePlanCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -9249,7 +9135,7 @@ function PlanFormModal({ state, value, initialProjectId, projectGroups, onSaveGr
             {currentMonthQuota ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', color: '#334155' }}>
-                  <span>本月规划额度：<b style={{ color: '#0369a1' }}>{pct(currentMonthQuota.rate)}</b> ({wan(Math.round((project.contractAmount || 0) * currentMonthQuota.rate / 10000))} 万元)</span>
+                  <span>本月规划额度：<b style={{ color: '#0369a1' }}>{pct(currentMonthQuota.rate)}</b> ({wan(Math.round(project.contract * currentMonthQuota.rate / 10000))} 万元)</span>
                   <span>阶段节点：<b style={{ color: '#1e293b' }}>{currentMonthQuota.milestone || '未指定'}</b></span>
                   {currentMonthQuota.note && <span>说明：<span style={{ color: '#64748b' }}>{currentMonthQuota.note}</span></span>}
                   {quotaPerspective && (
@@ -9273,7 +9159,7 @@ function PlanFormModal({ state, value, initialProjectId, projectGroups, onSaveGr
                     <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '1px' }} />
                     <div>
                       <strong>⚠️ 超出本月规划预警：</strong>
-                      当前填写的比例 ({pct(enteredRate)}) 高于规划 ({pct(currentMonthQuota.rate)})，多支出 <b>{pct(enteredRate - currentMonthQuota.rate)}</b>（约 {wan(Math.round((project.contractAmount || 0) * (enteredRate - currentMonthQuota.rate) / 10000))} 万元）。
+                      当前填写的比例 ({pct(enteredRate)}) 高于规划 ({pct(currentMonthQuota.rate)})，多支出 <b>{pct(enteredRate - currentMonthQuota.rate)}</b>（约 {wan(Math.round(project.contract * (enteredRate - currentMonthQuota.rate) / 10000))} 万元）。
                       <span style={{ display: 'block', color: '#b45309', marginTop: '2px' }}>
                         💡 掌握全周期节奏提醒：请确保为后续成品发货、试验交付预留充足额度，防范前期把钱分完导致后续有货无钱可分！
                       </span>

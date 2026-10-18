@@ -1036,10 +1036,10 @@ test('企业级全量灾备数据 AES-256-GCM 加密导出与权限口令解密�
   assert.equal(legacyDecrypted.state.projects.length, state.projects.length);
 
   // 6. 版本号与更新历史验证
-  assert.equal(APP_VERSION, '0.5.3');
-  assert.ok(UPDATE_HISTORY.length >= 8);
-  assert.equal(UPDATE_HISTORY[0].version, 'v0.5.3');
-  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('键盘焦点')));
+  assert.equal(APP_VERSION, '0.5.4');
+  assert.ok(UPDATE_HISTORY.length >= 9);
+  assert.equal(UPDATE_HISTORY[0].version, 'v0.5.4');
+  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('六位小数')));
 });
 
 test('月底分配全项目当月集中透视、每个项目月分配批量修改与一键批量发布/撤回', () => {
@@ -1166,6 +1166,53 @@ test('月底分配全项目当月集中透视、每个项目月分配批量修�
       }
     }, 'fail-edit-pub', '2026-01-01T00:00:00Z');
   }, /已发布，需先撤回为草稿才能修改/);
+});
+
+test('合同金额导入超长小数、千分位、科学计数法、多类表头与待定金额高容错解析', () => {
+  const state = demoState();
+
+  // 1. 测试超长小数（>6位小数）、Excel公式导出浮点精度、千分位逗号、中文万元单位、科学计数法
+  const testCsv = `项目名称,工作令号,合同额,项目负责人,开始日期,结束日期
+超精度浮点项目1,WO-EXT-01,33.33333333333333,管理员,2026-01,2026-06
+IEEE浮点漂移项目2,WO-EXT-02,50.100000000000001,管理员,2026-01,2026-06
+千分位与单位项目3,WO-EXT-03,"1,309.50万元",管理员,2026-01,2026-06
+科学计数法项目4,WO-EXT-04,1.25E+02,管理员,2026-01,2026-06
+高位固定小数项目5,WO-EXT-05,120.50000000,管理员,2026-01,2026-06
+待定金额项目6,WO-EXT-06,待定,管理员,2026-01,2026-06
+前导点数项目7,WO-EXT-07,.85,管理员,2026-01,2026-06`;
+
+  const parsed = parseProjectCsvText(testCsv, state);
+  assert.equal(parsed.length, 7);
+
+  // 33.33333333333333 万元 -> 四舍五入到分 33333333 分
+  assert.equal(parsed[0].contract, 33_333_333);
+  // 50.100000000000001 万元 -> 50100000 分
+  assert.equal(parsed[1].contract, 50_100_000);
+  // 1,309.50万元 -> 1309500000 分
+  assert.equal(parsed[2].contract, 1_309_500_000);
+  // 1.25E+02 (125万元) -> 125000000 分
+  assert.equal(parsed[3].contract, 125_000_000);
+  // 120.50000000 -> 120500000 分
+  assert.equal(parsed[4].contract, 120_500_000);
+  // 待定 -> 自动安全兜底为 10 万元 (10000000 分)
+  assert.equal(parsed[5].contract, 10_000_000);
+  // .85 -> 850000 分 (0.85万元)
+  assert.equal(parsed[6].contract, 850_000);
+
+  // 2. 测试表头为“合同金额(元)”时的自动万元换算
+  const yuanCsv = `工作令号,项目名称,合同金额(元),开始月份
+WO-YUAN-01,元单位研发项目,1500000,2026-03`;
+  const parsedYuan = parseProjectCsvText(yuanCsv, state);
+  assert.equal(parsedYuan.length, 1);
+  // 1,500,000 元 = 150 万元 = 150_000_000 分
+  assert.equal(parsedYuan[0].contract, 150_000_000);
+
+  // 3. 测试表头为“总预算”、“总产值”、“项目经费”等多样化表头的智能识别
+  const variedCsv = `项目编号,项目名称,总预算,负责人
+WO-VAR-01,总预算标识项目,260.80,管理员`;
+  const parsedVaried = parseProjectCsvText(variedCsv, state);
+  assert.equal(parsedVaried.length, 1);
+  assert.equal(parsedVaried[0].contract, 260_800_000);
 });
 
 

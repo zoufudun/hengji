@@ -58,12 +58,13 @@ function createWindow() {
       preload: path.join(__dirname, 'workspace-preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      devTools: true
+      devTools: !app.isPackaged
     }
   });
   win.removeMenu();
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  win.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('file://')) event.preventDefault(); });
+  win.webContents.on('will-navigate', (event) => event.preventDefault());
+  win.webContents.on('will-redirect', (event) => event.preventDefault());
   win.on('focus', () => { restoreFocus(win); });
   win.loadFile(path.join(__dirname, '..', 'build', 'desktop', 'desktop.html'));
 }
