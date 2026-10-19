@@ -8051,13 +8051,13 @@ function DataIoView({
       )}
 
       {/* 增强数据备份功能：企业级全量 JSON 灾备与还原 */}
-      <div className="panel full">
+      <div className="panel">
         <h3 style={{ margin: '0 0 16px', fontSize: '17px', color: '#142822', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <ShieldCheck size={20} color="#15803d" />
           系统全量数据灾备与恢复（企业级高可用）
         </h3>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '16px', marginBottom: '18px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '16px' }}>
           {/* 全量备份导出 */}
           <div className="backup-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
@@ -8113,7 +8113,7 @@ function DataIoView({
       </div>
 
       {/* 项目分配绩点数据包导出与协同流转中心 */}
-      <div className="panel full">
+      <div className="panel">
         <h3 style={{ margin: '0 0 16px', fontSize: '17px', color: '#142822', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Package size={20} color="#0284c7" />
           项目分配绩点数据包（项目协同与核算流转）
@@ -8178,7 +8178,7 @@ function DataIoView({
       </div>
 
       {/* CSV 导出区域 */}
-      <div className="panel full">
+      <div className="panel">
         <h3 style={{ margin: '0 0 16px', fontSize: '17px', color: '#142822' }}>
           <Download size={18} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
           CSV 数据一键导出
@@ -8211,7 +8211,7 @@ function DataIoView({
       </div>
 
       {/* CSV 导入区域 */}
-      <div className="panel full">
+      <div className="panel">
         <h3 style={{ margin: '0 0 16px', fontSize: '17px', color: '#142822' }}>
           <Upload size={18} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
           批量导入数据
