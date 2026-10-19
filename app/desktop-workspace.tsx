@@ -343,11 +343,6 @@ function WorkspaceGate({ hasLegacyData, onReady, onError }: {
       return;
     }
 
-    if (workspaceType === 'project_manager' && !ownerEmployeeName.trim()) {
-      setErrorMsg('请配置该工作区绑定的项目负责人姓名');
-      return;
-    }
-
     if (workspaceType === 'auditor' && !ownerEmployeeName.trim()) {
       setErrorMsg('请配置该工作区绑定的绩效核算员姓名');
       return;
@@ -376,28 +371,9 @@ function WorkspaceGate({ hasLegacyData, onReady, onError }: {
     };
     const employees = base?.employees?.length ? structuredClone(base.employees) : [defaultAdmin];
 
-    // 如果是项目负责人工作区，确保该负责人在员工列表中
+    // 如果是绩效核算员工作区，确保该核算员在员工列表中并标记 role: 'auditor'
     let finalOwnerId = ownerEmployeeId.trim();
     const finalOwnerName = ownerEmployeeName.trim();
-    if (workspaceType === 'project_manager' && finalOwnerName) {
-      if (!finalOwnerId) finalOwnerId = `pm_${Date.now().toString().slice(-4)}`;
-      const existing = employees.find(e => e.id === finalOwnerId || e.name === finalOwnerName);
-      if (!existing) {
-        employees.push({
-          id: finalOwnerId,
-          name: finalOwnerName,
-          department: '研发中心',
-          position: '项目负责人',
-          role: 'member',
-          email: `${finalOwnerId}@local`,
-          active: true,
-        });
-      } else {
-        finalOwnerId = existing.id;
-      }
-    }
-
-    // 如果是绩效核算员工作区，确保该核算员在员工列表中并标记 role: 'auditor'
     if (workspaceType === 'auditor' && finalOwnerName) {
       if (!finalOwnerId) finalOwnerId = `aud_${Date.now().toString().slice(-4)}`;
       const existing = employees.find(e => e.id === finalOwnerId || e.name === finalOwnerName);
@@ -517,62 +493,13 @@ function WorkspaceGate({ hasLegacyData, onReady, onError }: {
           <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '8px' }}>
             工作区类型与应用场景
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div
               style={{
-                border: `2px solid ${workspaceType === 'project_manager' ? '#0284c7' : '#e2e8f0'}`,
-                background: workspaceType === 'project_manager' ? '#f0f9ff' : '#ffffff',
+                border: `2px solid ${workspaceType === 'general' ? '#15803d' : '#e2e8f0'}`,
+                background: workspaceType === 'general' ? '#f0fdf4' : '#ffffff',
                 borderRadius: '10px',
-                padding: '12px',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-              onClick={() => {
-                setWorkspaceType('project_manager');
-                if (ownerEmployeeName) setName(`${ownerEmployeeName}负责的项目工作区`);
-                else setName('项目负责人专职工作区');
-                setErrorMsg('');
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#0369a1', fontSize: '13px' }}>
-                <BriefcaseBusiness size={16} />
-                🎯 项目负责人工作区
-              </div>
-              <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '4px', lineHeight: 1.4 }}>
-                专属于指定项目负责人，仅该负责人能分配并一键导出全部数据包发给核算员。
-              </div>
-            </div>
-
-            <div
-              style={{
-                border: `2px solid ${workspaceType === 'auditor' ? '#059669' : '#e2e8f0'}`,
-                background: workspaceType === 'auditor' ? '#f0fdf4' : '#ffffff',
-                borderRadius: '10px',
-                padding: '12px',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-              onClick={() => {
-                setWorkspaceType('auditor');
-                setName('部门绩效核算与汇总工作区');
-                setErrorMsg('');
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#047857', fontSize: '13px' }}>
-                <Calculator size={16} />
-                📊 绩效核算员工作区
-              </div>
-              <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '4px', lineHeight: 1.4 }}>
-                导入各负责人提交的项目数据包，汇总部门全员绩点、合同大盘与月/季/年度之星。
-              </div>
-            </div>
-
-            <div
-              style={{
-                border: `2px solid ${workspaceType === 'general' ? '#475569' : '#e2e8f0'}`,
-                background: workspaceType === 'general' ? '#f8fafc' : '#ffffff',
-                borderRadius: '10px',
-                padding: '12px',
+                padding: '14px',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
               }}
@@ -582,69 +509,40 @@ function WorkspaceGate({ hasLegacyData, onReady, onError }: {
                 setErrorMsg('');
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#334155', fontSize: '13px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#166534', fontSize: '13.5px' }}>
                 <Building2 size={16} />
-                🏢 综合管理员工作区
+                🏢 综合管理工作区
               </div>
-              <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '4px', lineHeight: 1.4 }}>
-                全功能综合工作区，适用于超级管理员统一全局配置、团队花名册与基准库维护。
+              <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '6px', lineHeight: 1.45 }}>
+                全功能综合工作区，适用于超级管理员统一全局配置、项目库创建、额度分配规划与团队基准库维护。
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: `2px solid ${workspaceType === 'auditor' ? '#0284c7' : '#e2e8f0'}`,
+                background: workspaceType === 'auditor' ? '#f0f9ff' : '#ffffff',
+                borderRadius: '10px',
+                padding: '14px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+              onClick={() => {
+                setWorkspaceType('auditor');
+                setName('部门绩效核算与汇总工作区');
+                setErrorMsg('');
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#0369a1', fontSize: '13.5px' }}>
+                <Calculator size={16} />
+                📊 绩效核算工作区
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '6px', lineHeight: 1.45 }}>
+                核算员专职工作区，用于导入项目分配数据包，汇总部门全员绩点档案、监控合同额度大盘与评选月/季/年度之星。
               </div>
             </div>
           </div>
         </div>
-
-        {/* 若为项目负责人工作区：配置负责人 */}
-        {workspaceType === 'project_manager' && (
-          <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px', padding: '14px', marginBottom: '14px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 600, color: '#0369a1', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <ShieldCheck size={16} />
-              配置工作区绑定的项目负责人（仅该负责人能查看和分配）
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: base?.employees?.length ? '1fr 1fr' : '1fr 1fr', gap: '10px' }}>
-              {base?.employees?.length ? (
-                <Field label="从基础库选择项目负责人">
-                  <select
-                    value={ownerEmployeeId}
-                    onChange={e => {
-                      const emp = base.employees.find(x => x.id === e.target.value);
-                      setOwnerEmployeeId(e.target.value);
-                      if (emp) {
-                        setOwnerEmployeeName(emp.name);
-                        setName(`${emp.name}负责的项目工作区`);
-                      }
-                      setErrorMsg('');
-                    }}
-                  >
-                    <option value="">-- 请选择负责人 --</option>
-                    {base.employees.map(emp => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.name} ({emp.department} - {emp.position || '成员'})
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              ) : null}
-              <Field label="负责人姓名">
-                <input
-                  value={ownerEmployeeName}
-                  onChange={e => {
-                    setOwnerEmployeeName(e.target.value);
-                    if (e.target.value) setName(`${e.target.value}负责的项目工作区`);
-                    setErrorMsg('');
-                  }}
-                  placeholder="如：王项目经理"
-                />
-              </Field>
-              <Field label="负责人工号 / ID (选填)">
-                <input
-                  value={ownerEmployeeId}
-                  onChange={e => { setOwnerEmployeeId(e.target.value); setErrorMsg(''); }}
-                  placeholder="如：emp_01 或留空自动生成"
-                />
-              </Field>
-            </div>
-          </div>
-        )}
 
         {/* 若为核算员工作区：配置核算员 */}
         {workspaceType === 'auditor' && (
@@ -942,23 +840,42 @@ export default function DesktopWorkspace() {
     }
   };
 
-  // 一键直接导出项目负责人名下全部项目数据包集合 (ProjectManagerBundle)
+  // 导出项目数据包（项目负责人导出名下项目合包，或管理员一键导出全系统所有项目合包）
   const handleExportManagerAllPackages = async (targetManagerId?: string) => {
     if (!state) return;
+    if (state.projects.length === 0) {
+      setNotice('当前系统暂无任何项目数据可导出。');
+      return;
+    }
     const mId = targetManagerId || (workspaceType === 'project_manager' && ownerEmployeeId ? ownerEmployeeId : currentActor.id);
     const manager = state.employees.find(e => e.id === mId) || currentActor;
     const myProjects = state.projects.filter(p => p.owner === mId || p.owner === manager.name);
-    if (myProjects.length === 0) {
-      setNotice(`【${manager.name}】名下暂无管理的任何项目。`);
-      return;
+
+    if (myProjects.length === 0 || targetManagerId === 'all') {
+      if (isAdmin || currentActor.role === 'auditor') {
+        try {
+          const bundleJson = exportProjectManagerBundleJson(state, 'all', currentActor);
+          const filename = `【项目数据包合包】全部门_${state.projects.length}个项目数据包_${new Date().toISOString().slice(0, 10)}.json`;
+          await triggerDownload(bundleJson, filename, 'application/json;charset=utf-8');
+          setNotice(`✅ 已成功导出全部门共 ${state.projects.length} 个项目的绩点分配数据包！请直接发给核算员导入。`);
+          return;
+        } catch (err: any) {
+          setNotice(`❌ 导出失败: ${err.message || '未知错误'}`);
+          return;
+        }
+      } else {
+        setNotice(`【${manager.name}】名下暂无管理的任何项目。`);
+        return;
+      }
     }
+
     try {
       const bundleJson = exportProjectManagerBundleJson(state, mId, currentActor);
-      const filename = `【项目负责人合包】${manager.name}_负责的全部项目数据包_${new Date().toISOString().slice(0, 10)}.json`;
+      const filename = `【项目数据包合包】${manager.name}_负责的全部项目数据包_${new Date().toISOString().slice(0, 10)}.json`;
       await triggerDownload(bundleJson, filename, 'application/json;charset=utf-8');
-      setNotice(`✅ 已成功一键导出【${manager.name}】管理的全部 ${myProjects.length} 个项目数据包！请直接发给核算员导入。`);
+      setNotice(`✅ 已成功导出【${manager.name}】管理的全部 ${myProjects.length} 个项目数据包！请直接发给核算员导入。`);
     } catch (err: any) {
-      setNotice(`❌ 一键导出失败: ${err.message || '未知错误'}`);
+      setNotice(`❌ 导出失败: ${err.message || '未知错误'}`);
     }
   };
 
@@ -1126,26 +1043,13 @@ export default function DesktopWorkspace() {
 
       <main>
         <header className="topbar">
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-              <span className="eyebrow" style={{ margin: 0 }}>MERIT EVALUATION SYSTEM</span>
-              {workspaceType === 'project_manager' ? (
-                <span style={{ background: '#e0f2fe', color: '#0369a1', fontSize: '11px', padding: '1px 8px', borderRadius: '10px', border: '1px solid #7dd3fc', fontWeight: 600 }}>
-                  🎯 项目负责人工作区 {ownerEmployeeName ? `· 【${ownerEmployeeName}】` : ''}
-                </span>
-              ) : workspaceType === 'auditor' ? (
-                <span style={{ background: '#ecfdf5', color: '#047857', fontSize: '11px', padding: '1px 8px', borderRadius: '10px', border: '1px solid #6ee7b7', fontWeight: 600 }}>
-                  📊 绩效核算员工作区 {ownerEmployeeName ? `· 【${ownerEmployeeName}】` : ''}
-                </span>
-              ) : (
-                <span style={{ background: '#f1f5f9', color: '#475569', fontSize: '11px', padding: '1px 8px', borderRadius: '10px', border: '1px solid #cbd5e1', fontWeight: 600 }}>
-                  🏢 综合管理工作区
-                </span>
-              )}
-            </div>
-            <strong>{tab === 'auditor' ? '全项目全员绩点汇总中心' : nav.find(item => item.key === tab)?.label}</strong>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+            <span className="eyebrow" style={{ margin: 0, fontSize: '10px' }}>MERIT EVALUATION SYSTEM</span>
+            <strong style={{ fontSize: '18px', color: '#142822', whiteSpace: 'nowrap' }}>
+              {tab === 'auditor' ? '全项目全员绩点汇总中心' : nav.find(item => item.key === tab)?.label}
+            </strong>
           </div>
-          <div className="operator" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div className="operator" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: 'auto' }}>
             <div
               className="user-profile-badge clickable"
               title="点击修改系统管理员或切换身份"
@@ -1166,25 +1070,6 @@ export default function DesktopWorkspace() {
                 </div>
               </div>
             </div>
-            {(isManager || workspaceType === 'project_manager') && (
-              <button
-                className="secondary"
-                style={{
-                  padding: '6px 12px',
-                  fontSize: '12.5px',
-                  gap: '5px',
-                  background: '#ecfdf5',
-                  color: '#065f46',
-                  borderColor: '#a7f3d0',
-                  fontWeight: 600,
-                }}
-                onClick={() => handleExportManagerAllPackages()}
-                title="一键打包导出我负责的所有项目分配绩点数据包（合并为一个总包发给核算员）"
-              >
-                <Package size={14} color="#059669" />
-                📦 一键导出我负责的项目数据包
-              </button>
-            )}
             <button className="secondary" style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }} onClick={async () => {
               if (!state) return;
               const saved = await window.meritDesktop.saveAs({
@@ -1334,6 +1219,8 @@ export default function DesktopWorkspace() {
               onImportProjects={async projects => {
                 await command('project.importBatch', { projects }, `成功导入 ${projects.length} 个项目`);
               }}
+              onExportPackages={handleExportManagerAllPackages}
+              onNavigateAuditor={() => setTab('auditor')}
             />
           )}
           {tab === 'auditor' && (
@@ -2474,10 +2361,10 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
                   gap: '6px',
                 }}
                 onClick={() => onExportManagerAllPackages()}
-                title="一键直接导出我负责的所有项目数据包（合并为一个总包发给核算员导入）"
+                title="导出项目分配绩点数据包（发给核算员一键导入与汇总）"
               >
                 <Package size={15} color="#059669" />
-                📦 一键导出我负责的所有项目数据包
+                导出项目数据包
               </button>
             )}
             {isAdmin && (
@@ -7983,7 +7870,17 @@ function ReportsView({ state }: { state: State }) {
 // -------------------------------------------------------------
 // 8. Data IO View (数据导入导出与系统灾备中心)
 // -------------------------------------------------------------
-function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', onRestoreState, onImportEmployees, onImportProjects }: {
+function DataIoView({
+  state,
+  isAdmin,
+  projectGroups = [],
+  workspaceName = '',
+  onRestoreState,
+  onImportEmployees,
+  onImportProjects,
+  onExportPackages,
+  onNavigateAuditor,
+}: {
   state: State;
   isAdmin: boolean;
   projectGroups?: ProjectGroup[];
@@ -7991,6 +7888,8 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
   onRestoreState(state: State, projectGroups?: ProjectGroup[]): Promise<void>;
   onImportEmployees(employees: any[]): Promise<void>;
   onImportProjects(projects: any[]): Promise<void>;
+  onExportPackages?(): void;
+  onNavigateAuditor?(): void;
 }) {
   const [empPreview, setEmpPreview] = useState<any[] | null>(null);
   const [prjPreview, setPrjPreview] = useState<any[] | null>(null);
@@ -8158,7 +8057,7 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
           系统全量数据灾备与恢复（企业级高可用）
         </h3>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '18px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '16px', marginBottom: '18px' }}>
           {/* 全量备份导出 */}
           <div className="backup-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
@@ -8211,7 +8110,71 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
             )}
           </div>
         </div>
+      </div>
 
+      {/* 项目分配绩点数据包导出与协同流转中心 */}
+      <div className="panel full">
+        <h3 style={{ margin: '0 0 16px', fontSize: '17px', color: '#142822', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Package size={20} color="#0284c7" />
+          项目分配绩点数据包（项目协同与核算流转）
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '16px' }}>
+          {/* 导出项目数据包 */}
+          <div className="backup-card" style={{ background: '#f0f9ff', borderColor: '#bae6fd' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+              <h4 style={{ margin: 0, fontSize: '15px', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Package size={16} color="#0284c7" />
+                导出项目数据包
+              </h4>
+              <Badge tone="blue">协同流转标准包</Badge>
+            </div>
+            <p style={{ fontSize: '12.5px', color: '#475569', margin: '0 0 14px', lineHeight: 1.5 }}>
+              将当前项目（或管理的全部项目）的合同额度、月度成员分配明细、个人绩点总额与流水分发一键打包为标准的绩点数据包文件（.json）。项目负责人可直接将此包提交发给绩效核算员。
+            </p>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', background: '#ffffff', padding: '10px 14px', borderRadius: '8px', marginBottom: '14px', fontSize: '12px', border: '1px solid #e0f2fe' }}>
+              <span>系统项目总数: <b style={{ color: '#0284c7' }}>{state.projects.length} 项</b></span>
+              <span>合同总额度: <b>{wan(state.projects.reduce((acc, p) => acc + (p.contract || 0), 0))} 万元</b></span>
+              <span>累计已分配: <b>{state.plans.filter(p => p.status === 'published').length} 个发布月次</b></span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                className="primary"
+                style={{ background: '#0284c7', borderColor: '#0369a1', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                onClick={() => onExportPackages && onExportPackages()}
+              >
+                <Package size={14} />导出项目数据包 (.json)
+              </button>
+            </div>
+          </div>
+
+          {/* 绩效核算员协同看板指引 */}
+          <div className="backup-card" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+              <h4 style={{ margin: 0, fontSize: '15px', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Calculator size={16} color="#15803d" />
+                绩效核算员全盘汇总通道
+              </h4>
+              <Badge tone="green">核算员专享</Badge>
+            </div>
+            <p style={{ fontSize: '12.5px', color: '#475569', margin: '0 0 14px', lineHeight: 1.5 }}>
+              绩效核算员在收到各项目负责人提交的数据包后，可在【绩效核算中心】一键批量导入，系统将自动汇总全项目全员绩点、生成全部门合同额度大盘、计算全员位次排名以及评选月/季/年度之星。
+            </p>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', background: '#ffffff', padding: '10px 14px', borderRadius: '8px', marginBottom: '14px', fontSize: '12px', border: '1px solid #dcfce7' }}>
+              <span>汇总看板: <b>全员下钻档案</b></span>
+              <span>合同分析: <b>全部门大盘监控</b></span>
+              <span>荣誉殿堂: <b>月/季/年度之星</b></span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                className="secondary"
+                style={{ color: '#166534', borderColor: '#86efac', background: '#fff', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                onClick={() => onNavigateAuditor && onNavigateAuditor()}
+              >
+                <Calculator size={14} />前往绩效核算中心
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* CSV 导出区域 */}
@@ -8220,7 +8183,7 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
           <Download size={18} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
           CSV 数据一键导出
         </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
           <div style={{ background: '#f8fafc', padding: '18px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
             <h4 style={{ margin: '0 0 6px', fontSize: '15px' }}>工作令项目数据汇总</h4>
             <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 14px' }}>包含工作令号、项目名称、客户、合同金额、起止月份、已规划与剩余额度。</p>
@@ -8254,7 +8217,7 @@ function DataIoView({ state, isAdmin, projectGroups = [], workspaceName = '', on
           批量导入数据
         </h3>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '20px' }}>
           {/* 部门成员导入 */}
           <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '20px', background: '#fff' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>

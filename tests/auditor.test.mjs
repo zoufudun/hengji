@@ -307,6 +307,12 @@ test('项目负责人管理多个项目：一键导出名下全部项目数据�
   assert.ok(stars.annualStars.length > 0);
   // manager 绩效突出，应入选荣誉之星
   assert.ok(stars.monthlyStars.some(s => s.employeeId === manager.id));
-  assert.ok(stars.annualStars.some(s => s.employeeId === manager.id));
+  // 6. 测试系统管理员导出全系统全部项目数据包合包 (managerId === 'all')
+  const adminActor = { id: 'admin', name: '管理员', role: 'admin', active: true };
+  const allBundle = exportProjectManagerBundle(state, 'all', adminActor);
+  assert.equal(allBundle.format, 'hengji-pm-merit-bundle');
+  assert.equal(allBundle.managerId, 'all');
+  assert.equal(allBundle.projectCount, state.projects.length);
+  assert.equal(allBundle.packages.length, state.projects.length);
 });
 

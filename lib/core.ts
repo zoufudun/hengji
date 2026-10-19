@@ -4003,7 +4003,7 @@ export function exportAuditorFullBundleJson(summary: AuditorSummaryResult): stri
 // 工作区类型划分与权限绑定模型 (v0.6.0)
 // ============================================================================
 
-export type WorkspaceType = 'project_manager' | 'auditor' | 'general';
+export type WorkspaceType = 'general' | 'auditor' | 'project_manager';
 
 export interface WorkspaceMeta {
   workspaceType?: WorkspaceType;
@@ -4033,6 +4033,41 @@ export interface ProjectManagerMeritBundle {
  */
 export function exportProjectManagerBundle(state: State, managerId: string, actor: Employee): ProjectManagerMeritBundle {
   if (!managerId) fail('未指定项目负责人');
+
+  if (managerId === 'all') {
+    const isManagerOrAdmin = isAuditorRole(actor) || isAdminRole(actor);
+    if (!isManagerOrAdmin) {
+      fail('仅管理员或核算员可导出全项目数据包集合');
+    }
+    if (state.projects.length === 0) {
+      fail('当前系统暂无任何项目数据可导出');
+    }
+    const packages: ProjectMeritPackage[] = [];
+    let totalContractWan = 0;
+    let totalAllocatedPoints = 0;
+
+    for (const project of state.projects) {
+      const pkg = exportProjectMeritPackage(state, project.id, { actor });
+      packages.push(pkg);
+      totalContractWan += pkg.project.contractWan;
+      totalAllocatedPoints += (pkg.project.periodAllocatedPoints || pkg.project.allTimeAllocatedPoints || 0);
+    }
+
+    return {
+      format: 'hengji-pm-merit-bundle',
+      version: '0.6.0',
+      bundleId: `pm_bundle_all_${Date.now()}`,
+      exportedAt: new Date().toISOString(),
+      managerId: 'all',
+      managerName: '全系统项目汇总',
+      managerDepartment: actor.department || '全部门',
+      projectCount: packages.length,
+      totalContractWan: Number(totalContractWan.toFixed(4)),
+      totalAllocatedPoints,
+      packages,
+    };
+  }
+
   const targetManager = state.employees.find(e => e.id === managerId);
   if (!targetManager) fail(`未找到项目负责人（工号/ID: ${managerId}）`);
 
