@@ -669,6 +669,7 @@ tr:hover td { background: #fafcfb; }
   background: #15803d;
 }
 .user-avatar-circle.admin { background: #166534; }
+.user-avatar-circle.auditor { background: #059669; }
 .user-avatar-circle.manager { background: #b45309; }
 .user-avatar-circle.member { background: #475569; }
 
@@ -687,6 +688,11 @@ tr:hover td { background: #fafcfb; }
   background: #fef3c7;
   color: #92400e;
   border: 1px solid #fde68a;
+}
+.role-badge.auditor {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
 }
 .role-badge.manager {
   background: #dcfce7;

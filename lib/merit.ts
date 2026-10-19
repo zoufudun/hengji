@@ -1,5 +1,5 @@
 export const SCALE = 10000;
-export type Employee = { id: string; name: string; department: string; email: string; role: 'admin'|'member'; authId?: string; active: boolean };
+export type Employee = { id: string; name: string; department: string; email: string; role: 'admin'|'auditor'|'member'; authId?: string; active: boolean };
 export type Project = { id: string; code: string; name: string; client: string; contract: number; fund: number; owner: string; start: string; end: string; status: 'active'|'archived'; members: { employeeId: string; coefficient: number }[]; exception: string };
 export type Plan = { id: string; projectId: string; month: string; budget: number; entries: { employeeId: string; rate: number }[]; status: 'draft'|'published'; note: string };
 export type Audit = { id: string; at: string; actor: string; actorId?: string; action: string; target: string };

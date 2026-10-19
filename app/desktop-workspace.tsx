@@ -5,6 +5,7 @@ import {
   ArrowUpDown,
   BarChart3,
   BriefcaseBusiness,
+  Calculator,
   CalendarRange,
   Check,
   CheckSquare,
@@ -147,9 +148,16 @@ import {
   BIDDING_DEFAULT_RATE,
   getQuotaPlanStageType,
   getMonthProjectsAllocPerspective,
+  exportProjectMeritPackage,
+  exportProjectMeritPackageJson,
+  parseProjectMeritPackage,
+  summarizeAuditorPackages,
+  summarizeCurrentStateForAuditor,
+  isAuditorRole,
 } from '../lib/core';
+import { AuditorSummaryView } from '../components/AuditorSummaryView';
 
-type Tab = 'dashboard' | 'projects' | 'plans' | 'groups' | 'employees' | 'analytics' | 'stars' | 'reports' | 'rules' | 'data_io';
+type Tab = 'dashboard' | 'projects' | 'plans' | 'groups' | 'employees' | 'analytics' | 'stars' | 'reports' | 'rules' | 'data_io' | 'auditor';
 
 const uid = () => crypto.randomUUID();
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -219,11 +227,13 @@ function GroupRoleBadge({ role }: { role?: string }) {
 }
 
 // Browser & Desktop file download helper
-async function triggerDownload(content: string, filename: string) {
-  if (typeof window !== 'undefined' && window.meritDesktop?.exportCsv) {
-    return window.meritDesktop.exportCsv({ content, defaultPath: filename });
+async function triggerDownload(content: string, filename: string, mimeType = 'text/csv;charset=utf-8'): Promise<void> {
+  if (typeof window !== 'undefined' && window.meritDesktop?.exportCsv && !filename.endsWith('.json')) {
+    await window.meritDesktop.exportCsv({ content, defaultPath: filename });
+    return;
   }
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+  const type = filename.endsWith('.json') ? 'application/json;charset=utf-8' : mimeType;
+  const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -592,9 +602,27 @@ export default function DesktopWorkspace() {
   }, [state, actorId]);
 
   const isAdmin = currentActor.role === 'admin';
+  const isAuditor = currentActor.role === 'admin' || currentActor.role === 'auditor';
   const isManager = useMemo(() => {
     return Boolean(state?.projects.some(p => p.owner === currentActor.id));
   }, [state, currentActor.id]);
+
+  const handleExportProjectPackage = async (projectId: string) => {
+    if (!state) return;
+    try {
+      const p = state.projects.find(item => item.id === projectId);
+      if (!p) {
+        setNotice('项目不存在');
+        return;
+      }
+      const jsonStr = exportProjectMeritPackageJson(state, projectId, { actor: currentActor });
+      const filename = `【项目绩点数据包】${p.name}_${p.code || '令号'}_${new Date().toISOString().slice(0, 10)}.json`;
+      await triggerDownload(jsonStr, filename, 'application/json;charset=utf-8');
+      setNotice(`✅ 已成功导出【${p.name}】绩点分配数据包！请将此数据包发给核算员进行全员汇总。`);
+    } catch (err: any) {
+      setNotice(`❌ 导出数据包失败：${err.message}`);
+    }
+  };
 
 
   const handleUpdateAdmin = async (
@@ -717,6 +745,21 @@ export default function DesktopWorkspace() {
           ))}
         </nav>
 
+        <div className="sidebar-section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>核算员专区</span>
+          <span style={{ fontSize: '10px', background: '#ecfdf5', color: '#047857', padding: '1px 5px', borderRadius: '4px', border: '1px solid #a7f3d0' }}>专享</span>
+        </div>
+        <nav>
+          <button
+            className={tab === 'auditor' ? 'active' : ''}
+            onClick={() => setTab('auditor')}
+          >
+            <Calculator size={18} style={{ color: '#10b981' }} />
+            <span>全项目全员绩点汇总</span>
+            <ChevronRight size={14} />
+          </button>
+        </nav>
+
         <div className="sidebar-foot">
           <Database size={16} />
           <div>
@@ -747,7 +790,7 @@ export default function DesktopWorkspace() {
         <header className="topbar">
           <div>
             <span className="eyebrow">MERIT EVALUATION SYSTEM</span>
-            <strong>{nav.find(item => item.key === tab)?.label}</strong>
+            <strong>{tab === 'auditor' ? '全项目全员绩点汇总' : nav.find(item => item.key === tab)?.label}</strong>
           </div>
           <div className="operator" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
@@ -755,14 +798,14 @@ export default function DesktopWorkspace() {
               title="点击修改系统管理员或切换身份"
               onClick={() => setAuthModalOpen(true)}
             >
-              <div className={`user-avatar-circle ${isAdmin ? 'admin' : isManager ? 'manager' : 'member'}`}>
+              <div className={`user-avatar-circle ${isAdmin ? 'admin' : currentActor.role === 'auditor' ? 'auditor' : isManager ? 'manager' : 'member'}`}>
                 {currentActor.name.slice(0, 1)}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <b style={{ fontSize: '13px', color: '#1e293b' }}>{currentActor.name}</b>
-                  <span className={`role-badge ${isAdmin ? 'admin' : isManager ? 'manager' : 'member'}`}>
-                    {isAdmin ? '👑 系统管理员' : isManager ? '💼 项目负责人' : '👤 专业组成员'}
+                  <span className={`role-badge ${isAdmin ? 'admin' : currentActor.role === 'auditor' ? 'auditor' : isManager ? 'manager' : 'member'}`}>
+                    {isAdmin ? '👑 系统管理员' : currentActor.role === 'auditor' ? '📊 绩效核算员' : isManager ? '💼 项目负责人' : '👤 专业组成员'}
                   </span>
                   <span className="badge-edit-hint">
                     修改 <ChevronDown size={11} />
@@ -831,6 +874,7 @@ export default function DesktopWorkspace() {
               onBatchConfigureTeam={async (projectIds, members, defaultRates, ownerId) => {
                 await command('project.batchConfigureTeam', { projectIds, members, defaultRates, owner: ownerId }, `已成功为 ${projectIds.length} 个项目批量配置项目成员与默认分配比例`);
               }}
+              onExportPackage={handleExportProjectPackage}
             />
           )}
           {tab === 'plans' && (
@@ -910,6 +954,21 @@ export default function DesktopWorkspace() {
               }}
             />
           )}
+          {tab === 'auditor' && (
+            <AuditorSummaryView
+              state={state}
+              currentActor={currentActor}
+              isAdmin={isAdmin}
+              isAuditor={isAuditor}
+              onSwitchToAuditor={() => {
+                const audEmp = state.employees.find(e => e.role === 'auditor' && e.active) || state.employees.find(e => e.role === 'admin' && e.active);
+                if (audEmp) setActorId(audEmp.id);
+                else setAuthModalOpen(true);
+              }}
+              triggerDownload={triggerDownload}
+              setNotice={setNotice}
+            />
+          )}
         </div>
       </main>
 
@@ -963,6 +1022,7 @@ export default function DesktopWorkspace() {
           projectId={projectDetailId}
           onClose={() => setProjectDetailId(null)}
           onOpenQuotaSchedule={setProjectQuotaModalId}
+          onExportPackage={handleExportProjectPackage}
         />
       )}
 
@@ -1011,6 +1071,9 @@ export default function DesktopWorkspace() {
             const chosen = state.employees.find(e => e.id === id);
             setNotice(`已切换当前操作账号为【${chosen?.name || id}】`);
             setAuthModalOpen(false);
+          }}
+          onUpdateEmployeeRole={async (emp, newRole) => {
+            await command('employee.save', { ...emp, role: newRole }, `已将【${emp.name}】权限调整为【${newRole === 'admin' ? '系统管理员' : newRole === 'auditor' ? '绩效核算员' : '普通员工'}】`);
           }}
         />
       )}
@@ -1856,7 +1919,7 @@ function BatchProjectTeamModal({
 // -------------------------------------------------------------
 // 2. Projects View (项目库与额度管理：支持多样式布局阅览、删除、多维排序与筛选)
 // -------------------------------------------------------------
-function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups = [], onAdd, onEdit, onDelete, onBatchDelete, onViewDetail, onOpenQuotaSchedule, onArchive, onImportProjects, onBatchConfigureTeam }: {
+function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups = [], onAdd, onEdit, onDelete, onBatchDelete, onViewDetail, onOpenQuotaSchedule, onArchive, onImportProjects, onBatchConfigureTeam, onExportPackage }: {
   state: State;
   isAdmin: boolean;
   isManager: boolean;
@@ -1871,6 +1934,7 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
   onArchive(project: Project): void;
   onImportProjects(projects: any[]): Promise<void>;
   onBatchConfigureTeam?(projectIds: string[], members: string[], defaultRates: Record<string, number>, ownerId?: string): Promise<void>;
+  onExportPackage?(projectId: string): void;
 }) {
   const [filter, setFilter] = useState<'all' | 'active' | 'archived'>('all');
   const [quotaFilter, setQuotaFilter] = useState<'all' | 'full' | 'partial' | 'zero'>('all');
@@ -2212,6 +2276,11 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
                                       <CalendarRange size={12} />额度规划
                                     </button>
                                   )}
+                                  {onExportPackage && (
+                                    <button style={{ padding: '3px 8px', fontSize: '11.5px', color: '#7c3aed', background: '#f5f3ff', borderColor: '#ddd6fe' }} onClick={() => onExportPackage(p.id)} title="导出本项目分配数据包（含个人总和、明细及额度情况），发送给核算员汇总">
+                                      <Download size={12} />数据包
+                                    </button>
+                                  )}
                                   {isAdmin && onBatchConfigureTeam && (
                                     <button style={{ padding: '3px 8px', fontSize: '11.5px', color: '#166534' }} onClick={() => setBatchTeamTargetProjects([p])} title="为该项目配置成员名单与默认分配比例">
                                       <Users size={12} />组员与比例
@@ -2355,6 +2424,11 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
                             <CalendarRange size={12} />额度规划
                           </button>
                         )}
+                        {onExportPackage && (
+                          <button style={{ padding: '3px 8px', fontSize: '11.5px', color: '#7c3aed', background: '#f5f3ff', borderColor: '#ddd6fe' }} onClick={() => onExportPackage(p.id)} title="导出本项目分配数据包，发送给核算员汇总">
+                            <Download size={12} />数据包
+                          </button>
+                        )}
                         {isAdmin && onBatchConfigureTeam && (
                           <button style={{ padding: '3px 8px', fontSize: '11.5px', color: '#166534' }} onClick={() => setBatchTeamTargetProjects([p])} title="为该项目配置成员名单与默认分配比例">
                             <Users size={12} />组员与比例
@@ -2471,6 +2545,11 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
                       <CalendarRange size={14} />额度规划
                     </button>
                   )}
+                  {onExportPackage && (
+                    <button style={{ color: '#7c3aed', background: '#f5f3ff', borderColor: '#ddd6fe' }} onClick={() => onExportPackage(project.id)} title="导出本项目分配数据包，发送给核算员汇总">
+                      <Download size={14} />导出数据包
+                    </button>
+                  )}
                   {isAdmin && onBatchConfigureTeam && (
                     <button onClick={() => setBatchTeamTargetProjects([project])} title="为该项目配置成员名单与默认分配比例">
                       <Users size={14} />组员与比例
@@ -2522,7 +2601,13 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
 // -------------------------------------------------------------
 // 需求1 Modal: Project Detail Realtime Quota & Breakdown
 // -------------------------------------------------------------
-function ProjectDetailModal({ state, projectId, onClose, onOpenQuotaSchedule }: { state: State; projectId: string; onClose(): void; onOpenQuotaSchedule?(projectId: string): void }) {
+function ProjectDetailModal({ state, projectId, onClose, onOpenQuotaSchedule, onExportPackage }: {
+  state: State;
+  projectId: string;
+  onClose(): void;
+  onOpenQuotaSchedule?(projectId: string): void;
+  onExportPackage?(projectId: string): void;
+}) {
   const detail = projectAllocDetail(state, projectId);
   if (!detail) return null;
   const project = detail.project;
@@ -2754,7 +2839,12 @@ function ProjectDetailModal({ state, projectId, onClose, onOpenQuotaSchedule }: 
           </tbody>
         </table>
       </div>
-      <div className="modal-actions" style={{ padding: '16px 26px' }}>
+      <div className="modal-actions" style={{ padding: '16px 26px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {onExportPackage ? (
+          <button style={{ background: '#7c3aed', color: '#ffffff', borderColor: '#6d28d9', display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={() => onExportPackage(projectId)}>
+            <Download size={14} />导出本项目分配数据包 (供核算员汇总)
+          </button>
+        ) : <span />}
         <button className="primary" onClick={onClose}>关闭</button>
       </div>
     </Modal>
@@ -6431,8 +6521,8 @@ function EmployeesView({ state, isAdmin, currentActorId, onAdd, onEdit, onToggle
                 <td>{emp.department}</td>
                 <td style={{ color: emp.email ? '#334155' : '#94a3b8' }}>{emp.email || '—'}</td>
                 <td>
-                  <Badge tone={emp.role === 'admin' ? 'blue' : 'neutral'}>
-                    {emp.role === 'admin' ? '系统管理员' : '普通成员'}
+                  <Badge tone={emp.role === 'admin' ? 'blue' : emp.role === 'auditor' ? 'green' : 'neutral'}>
+                    {emp.role === 'admin' ? '👑 系统管理员' : emp.role === 'auditor' ? '📊 绩效核算员' : '普通成员'}
                   </Badge>
                 </td>
                 <td>{prjCount} 个项目</td>
@@ -7033,6 +7123,7 @@ function ReportsView({ state }: { state: State }) {
   const [groupFilter, setGroupFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [detailRow, setDetailRow] = useState<any>(null);
+  const [reportViewMode, setReportViewMode] = useState<'matrix' | 'list'>('matrix');
 
   // Compute targeted months
   const targetMonths = useMemo(() => {
@@ -7068,6 +7159,56 @@ function ReportsView({ state }: { state: State }) {
     return `${rangeStart} 至 ${rangeEnd} 区间`;
   }, [mode, singleMonth, selectedYear, quarter, rangeStart, rangeEnd]);
 
+  // 图2标准：二维矩阵透视数据（人员 × 项目令号，最右侧个人累加，最底部项目累加）
+  const matrixData = useMemo(() => {
+    const projects = state.projects;
+    const projectPointsSums = new Array(projects.length).fill(0);
+    let grandTotalPoints = 0;
+
+    const dataRows = rows.map((r, index) => {
+      let rowPersonalTotal = 0;
+      const projectScores = projects.map((p, pIndex) => {
+        // 严格基于项目唯一 ID 隔离，杜绝同令号数据复制
+        const fen = r.details
+          .filter(d => d.projectId === p.id)
+          .reduce((sum, d) => sum + d.points, 0);
+
+        projectPointsSums[pIndex] += fen;
+        rowPersonalTotal += fen;
+        return {
+          projectId: p.id,
+          fen,
+          scoreStr: (fen / 100).toFixed(2),
+        };
+      });
+
+      grandTotalPoints += rowPersonalTotal;
+
+      return {
+        index: index + 1,
+        employee: r.employee,
+        projectScores,
+        personalTotalFen: rowPersonalTotal,
+        personalTotalStr: (rowPersonalTotal / 100).toFixed(2),
+        originalRow: r,
+      };
+    });
+
+    const projectTotals = projects.map((p, pIndex) => ({
+      projectId: p.id,
+      fen: projectPointsSums[pIndex],
+      totalStr: (projectPointsSums[pIndex] / 100).toFixed(2),
+    }));
+
+    return {
+      projects,
+      dataRows,
+      projectTotals,
+      grandTotalPoints,
+      grandTotalStr: (grandTotalPoints / 100).toFixed(2),
+    };
+  }, [state.projects, rows]);
+
   const exportCsv = () => {
     const csv = exportPeriodMatrixReportCsv(state.projects, rows, periodLabel);
     triggerDownload(csv, `绩点报表-${periodLabel}.csv`);
@@ -7080,14 +7221,54 @@ function ReportsView({ state }: { state: State }) {
         title="周期绩点报表"
         description="支持查看整年度、季度、单月度或任意自定义区间的员工获得总额度与明细分润。"
         action={
-          <button className="primary" onClick={exportCsv}>
-            <Download size={15} />导出本期报表 CSV
-          </button>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: '3px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+              <button
+                type="button"
+                onClick={() => setReportViewMode('matrix')}
+                style={{
+                  padding: '5px 13px',
+                  fontSize: '12px',
+                  fontWeight: reportViewMode === 'matrix' ? 700 : 500,
+                  background: reportViewMode === 'matrix' ? '#ffffff' : 'transparent',
+                  color: reportViewMode === 'matrix' ? '#0369a1' : '#64748b',
+                  border: 'none',
+                  borderRadius: '6px',
+                  boxShadow: reportViewMode === 'matrix' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                📊 二维透视矩阵
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportViewMode('list')}
+                style={{
+                  padding: '5px 13px',
+                  fontSize: '12px',
+                  fontWeight: reportViewMode === 'list' ? 700 : 500,
+                  background: reportViewMode === 'list' ? '#ffffff' : 'transparent',
+                  color: reportViewMode === 'list' ? '#166534' : '#64748b',
+                  border: 'none',
+                  borderRadius: '6px',
+                  boxShadow: reportViewMode === 'list' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                📋 全员排名列表
+              </button>
+            </div>
+            <button className="primary" onClick={exportCsv}>
+              <Download size={15} />导出本期报表 CSV
+            </button>
+          </div>
         }
       />
 
       {/* 周期切换工具栏 (需求2) */}
-      <div className="toolbar" style={{ gap: '14px' }}>
+      <div className="toolbar" style={{ gap: '14px', flexWrap: 'wrap' }}>
         <div className="filter-tabs">
           <button className={mode === 'year' ? 'active' : ''} onClick={() => setMode('year')}>整年度</button>
           <button className={mode === 'quarter' ? 'active' : ''} onClick={() => setMode('quarter')}>按季度</button>
@@ -7155,47 +7336,184 @@ function ReportsView({ state }: { state: State }) {
         </div>
       </div>
 
-      <table>
-        <thead>
-          <tr>
-            <th>排名</th>
-            <th>员工姓名</th>
-            <th>专业组</th>
-            <th>所属部门</th>
-            <th>贡献项目数</th>
-            <th>活跃月份</th>
-            <th>获得总绩点</th>
-            <th>折合总额度</th>
-            <th className="actions">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={row.employee.id}>
-              <td>
-                <b className="rank">{index + 1}</b>
-              </td>
-              <td><b>{row.employee.name}</b></td>
-              <td><GroupTag group={row.employee.group} /></td>
-              <td>{row.employee.department}</td>
-              <td>{row.projectCount} 个项目</td>
-              <td>{row.activeMonthsCount} 个月</td>
-              <td style={{ color: '#166534', fontWeight: 700, fontSize: '13.5px' }}>
-                {score(row.points)}
-              </td>
-              <td><b>{(row.points / 1_000_000).toFixed(4)} 万元</b></td>
-              <td className="actions">
-                <button onClick={() => setDetailRow(row)}>
-                  <Eye size={13} />明细档案
-                </button>
-              </td>
+      {/* 视图1：图2标准二维矩阵透视模式（人员 × 项目合同细目，右侧个人累加，底行项目累加） */}
+      {reportViewMode === 'matrix' && (
+        <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', background: '#ffffff' }}>
+          <table style={{ minWidth: `${Math.max(800, 260 + state.projects.length * 140 + 130)}px`, borderCollapse: 'collapse', width: '100%', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ background: '#f8fafc', borderBottom: '2px solid #cbd5e1' }}>
+                <th style={{ width: '60px', padding: '10px 8px', textAlign: 'center', color: '#475569', fontWeight: 600, borderRight: '1px solid #e2e8f0', position: 'sticky', left: 0, background: '#f8fafc', zIndex: 3 }}>序号</th>
+                <th style={{ width: '110px', padding: '10px 10px', textAlign: 'left', color: '#475569', fontWeight: 600, borderRight: '1px solid #cbd5e1', position: 'sticky', left: '60px', background: '#f8fafc', zIndex: 3 }}>姓名</th>
+                {state.projects.map(p => {
+                  const headerText = p.code && !p.name.includes(p.code) ? `${p.name} (${p.code})` : p.name;
+                  return (
+                    <th key={p.id} style={{ padding: '10px 8px', textAlign: 'right', color: '#334155', fontWeight: 600, borderRight: '1px solid #e2e8f0', minWidth: '130px', whiteSpace: 'nowrap' }} title={`合同额: ${wan(p.contract)} 万元`}>
+                      <div>{p.name}</div>
+                      {p.code && <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 400 }}>{p.code}</div>}
+                    </th>
+                  );
+                })}
+                <th style={{ width: '130px', padding: '10px 12px', textAlign: 'right', background: '#38bdf8', color: '#0c4a6e', fontWeight: 700, borderLeft: '2px solid #0284c7', position: 'sticky', right: 0, zIndex: 3 }}>
+                  个人累加
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {matrixData.dataRows.map(row => (
+                <tr key={row.employee.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '8px', textAlign: 'center', color: '#64748b', borderRight: '1px solid #e2e8f0', position: 'sticky', left: 0, background: '#ffffff', zIndex: 2 }}>
+                    {row.index}
+                  </td>
+                  <td style={{ padding: '8px 10px', fontWeight: 600, color: '#1e293b', borderRight: '1px solid #cbd5e1', position: 'sticky', left: '60px', background: '#ffffff', zIndex: 2 }}>
+                    <span
+                      onClick={() => setDetailRow(row.originalRow)}
+                      style={{ cursor: 'pointer', color: '#0369a1', textDecoration: 'underline', textUnderlineOffset: '3px' }}
+                      title="点击查看该员工本期明细档案"
+                    >
+                      {row.employee.name}
+                    </span>
+                  </td>
+                  {row.projectScores.map(scoreItem => {
+                    const hasPoints = scoreItem.fen > 0;
+                    return (
+                      <td
+                        key={scoreItem.projectId}
+                        style={{
+                          padding: '8px',
+                          textAlign: 'right',
+                          borderRight: '1px solid #f1f5f9',
+                          fontFamily: 'monospace',
+                          fontSize: '12.5px',
+                          fontWeight: hasPoints ? 600 : 400,
+                          color: hasPoints ? '#166534' : '#cbd5e1',
+                          background: hasPoints ? '#f0fdf4' : 'transparent',
+                        }}
+                      >
+                        {scoreItem.scoreStr}
+                      </td>
+                    );
+                  })}
+                  <td
+                    style={{
+                      padding: '8px 12px',
+                      textAlign: 'right',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      fontSize: '13.5px',
+                      color: '#0369a1',
+                      background: '#e0f2fe',
+                      borderLeft: '2px solid #38bdf8',
+                      position: 'sticky',
+                      right: 0,
+                      zIndex: 2,
+                    }}
+                  >
+                    {row.personalTotalStr}
+                  </td>
+                </tr>
+              ))}
+              {matrixData.dataRows.length === 0 && (
+                <tr>
+                  <td colSpan={2 + state.projects.length + 1} style={{ padding: '40px', textAlign: 'center' }}>
+                    <Empty text="当前周期无任何已发布绩点记录" />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            {/* 图2标准：底部浅蓝色高亮【项目累加】汇总行 */}
+            {matrixData.dataRows.length > 0 && (
+              <tfoot>
+                <tr style={{ background: '#bae6fd', borderTop: '2px solid #0284c7', borderBottom: '2px solid #0284c7' }}>
+                  <td style={{ padding: '10px 8px', textAlign: 'center', background: '#bae6fd', borderRight: '1px solid #7dd3fc', position: 'sticky', left: 0, zIndex: 2 }}></td>
+                  <td style={{ padding: '10px 10px', fontWeight: 800, color: '#0c4a6e', fontSize: '13.5px', background: '#bae6fd', borderRight: '1px solid #0284c7', position: 'sticky', left: '60px', zIndex: 2 }}>
+                    项目累加
+                  </td>
+                  {matrixData.projectTotals.map(projTotal => (
+                    <td
+                      key={projTotal.projectId}
+                      style={{
+                        padding: '10px 8px',
+                        textAlign: 'right',
+                        fontWeight: 700,
+                        fontFamily: 'monospace',
+                        fontSize: '13px',
+                        color: '#0369a1',
+                        borderRight: '1px solid #7dd3fc',
+                        background: '#e0f2fe',
+                      }}
+                    >
+                      {projTotal.totalStr}
+                    </td>
+                  ))}
+                  <td
+                    style={{
+                      padding: '10px 12px',
+                      textAlign: 'right',
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                      fontSize: '14.5px',
+                      color: '#082f49',
+                      background: '#7dd3fc',
+                      borderLeft: '2px solid #0284c7',
+                      position: 'sticky',
+                      right: 0,
+                      zIndex: 2,
+                    }}
+                    title="全局所有项目与全员个人累加总和"
+                  >
+                    {matrixData.grandTotalStr}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      )}
+
+      {/* 视图2：原有全员排名列表模式 */}
+      {reportViewMode === 'list' && (
+        <table>
+          <thead>
+            <tr>
+              <th>排名</th>
+              <th>员工姓名</th>
+              <th>专业组</th>
+              <th>所属部门</th>
+              <th>贡献项目数</th>
+              <th>活跃月份</th>
+              <th>获得总绩点</th>
+              <th>折合总额度</th>
+              <th className="actions">操作</th>
             </tr>
-          ))}
-          {rows.length === 0 && (
-            <tr><td colSpan={9}><Empty text="当前周期无任何已发布绩点记录" /></td></tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={row.employee.id}>
+                <td>
+                  <b className="rank">{index + 1}</b>
+                </td>
+                <td><b>{row.employee.name}</b></td>
+                <td><GroupTag group={row.employee.group} /></td>
+                <td>{row.employee.department}</td>
+                <td>{row.projectCount} 个项目</td>
+                <td>{row.activeMonthsCount} 个月</td>
+                <td style={{ color: '#166534', fontWeight: 700, fontSize: '13.5px' }}>
+                  {score(row.points)}
+                </td>
+                <td><b>{(row.points / 1_000_000).toFixed(4)} 万元</b></td>
+                <td className="actions">
+                  <button onClick={() => setDetailRow(row)}>
+                    <Eye size={13} />明细档案
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr><td colSpan={9}><Empty text="当前周期无任何已发布绩点记录" /></td></tr>
+            )}
+          </tbody>
+        </table>
+      )}
 
       {/* 员工周期档案明细弹窗 */}
       {detailRow && (
@@ -7753,7 +8071,7 @@ function EmployeeFormModal({ value, onClose, onSave }: { value: Employee | 'new'
   const [group, setGroup] = useState(old?.group || '产品组');
   const [groupRole, setGroupRole] = useState(old?.groupRole || '组员');
   const [email, setEmail] = useState(old?.email || '');
-  const [role, setRole] = useState<'admin' | 'member'>(old?.role || 'member');
+  const [role, setRole] = useState<'admin' | 'auditor' | 'member'>(old?.role || 'member');
 
   return (
     <Modal title={old ? '编辑员工' : '添加员工'} subtitle="维护员工职务、所属专业组及系统管理权限" onClose={onClose}>
@@ -7789,9 +8107,10 @@ function EmployeeFormModal({ value, onClose, onSave }: { value: Employee | 'new'
               <option value="">无 / 领导</option>
             </select>
           </Field>
-          <Field label="系统权限 (管理员设置)" hint="系统管理员拥有项目增删、员工维护与灾备恢复最高权限">
-            <select value={role} onChange={e => setRole(e.target.value as 'admin' | 'member')}>
+          <Field label="系统权限 (管理员设置)" hint="系统管理员拥有项目增删与灾备最高权限；核算员拥有全项目全员汇总权限">
+            <select value={role} onChange={e => setRole(e.target.value as 'admin' | 'auditor' | 'member')}>
               <option value="member">👤 普通成员（参与项目考核、查看报表）</option>
+              <option value="auditor">📊 绩效核算员（拥有全项目全员绩点汇总、数据包导入与核算报表导出权限）</option>
               <option value="admin">👑 系统管理员（拥有全部管理与灾备权限）</option>
             </select>
           </Field>
@@ -9663,14 +9982,15 @@ function Empty({ text }: { text: string }) {
 // -------------------------------------------------------------
 // 需求2 Modal: Login & Role Permission Switcher
 // -------------------------------------------------------------
-function AuthModal({ state, currentActorId, onClose, onUpdateAdmin, onSelectActor }: {
+function AuthModal({ state, currentActorId, onClose, onUpdateAdmin, onSelectActor, onUpdateEmployeeRole }: {
   state: State;
   currentActorId: string;
   onClose(): void;
   onUpdateAdmin(targetEmpId: string, action: 'setAdmin' | 'transferAdmin' | 'removeAdmin', switchActive?: boolean): Promise<void>;
   onSelectActor(actorId: string): void;
+  onUpdateEmployeeRole?(emp: Employee, newRole: 'admin' | 'auditor' | 'member'): Promise<void>;
 }) {
-  const [roleTab, setRoleTab] = useState<'admin' | 'manager' | 'member'>('admin');
+  const [roleTab, setRoleTab] = useState<'admin' | 'auditor' | 'manager' | 'member'>('admin');
   const [search, setSearch] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
   const [selectedTargetId, setSelectedTargetId] = useState<string>(() => {
@@ -9682,6 +10002,7 @@ function AuthModal({ state, currentActorId, onClose, onUpdateAdmin, onSelectActo
 
   // 分类人员
   const adminUsers = state.employees.filter(e => e.role === 'admin' && e.active);
+  const auditorUsers = state.employees.filter(e => e.role === 'auditor' && e.active);
   const managerUsers = state.employees.filter(e => state.projects.some(p => p.owner === e.id) && e.active);
   const allMembers = state.employees.filter(e => e.active);
 
@@ -9727,6 +10048,9 @@ function AuthModal({ state, currentActorId, onClose, onUpdateAdmin, onSelectActo
           <button className={roleTab === 'admin' ? 'active' : ''} onClick={() => setRoleTab('admin')}>
             👑 系统管理员设置 ({adminUsers.length})
           </button>
+          <button className={roleTab === 'auditor' ? 'active' : ''} onClick={() => setRoleTab('auditor')}>
+            📊 绩效核算员设置 ({auditorUsers.length})
+          </button>
           <button className={roleTab === 'manager' ? 'active' : ''} onClick={() => setRoleTab('manager')}>
             💼 项目负责人视图 ({managerUsers.length})
           </button>
@@ -9736,6 +10060,117 @@ function AuthModal({ state, currentActorId, onClose, onUpdateAdmin, onSelectActo
         </div>
 
         {/* 管理员设置与权限面板 */}
+        {/* 绩效核算员设置面板 */}
+        {roleTab === 'auditor' && (
+          <div style={{ display: 'grid', gap: '16px' }}>
+            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '10px', padding: '16px 18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <Calculator size={18} color="#15803d" />
+                <strong style={{ fontSize: '14.5px', color: '#166534' }}>委任 / 增设绩效核算员</strong>
+                <span style={{ fontSize: '11.5px', color: '#64748b', marginLeft: 'auto' }}>
+                  核算员拥有全项目全员绩点汇总与各项目数据包导入权限
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr auto', gap: '10px', alignItems: 'center', marginTop: '10px' }}>
+                <select
+                  value={selectedTargetId}
+                  onChange={e => setSelectedTargetId(e.target.value)}
+                  style={{ width: '100%', height: '38px', borderRadius: '6px', border: '1px solid #cbd5e1', padding: '0 10px', fontSize: '13px', background: '#fff' }}
+                >
+                  {allMembers.map(emp => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.position || '员工'} · {emp.department}{emp.group ? ` · ${emp.group}` : ''}{emp.role === 'admin' ? ' [管理员]' : emp.role === 'auditor' ? ' [核算员]' : ''})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="primary"
+                  style={{ height: '38px', padding: '0 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', background: '#059669', borderColor: '#047857' }}
+                  onClick={async () => {
+                    const emp = state.employees.find(e => e.id === selectedTargetId);
+                    if (emp) {
+                      if (onUpdateEmployeeRole) {
+                        await onUpdateEmployeeRole(emp, 'auditor');
+                      }
+                      onSelectActor(emp.id);
+                      onClose();
+                    }
+                  }}
+                  title="设为绩效核算员并切换"
+                >
+                  <ShieldCheck size={14} />设为核算员并切换
+                </button>
+              </div>
+            </div>
+
+            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px 18px' }}>
+              <strong style={{ fontSize: '14px', color: '#065f46', display: 'block', marginBottom: '10px' }}>
+                📊 当前在职绩效核算员 ({auditorUsers.length} 人)
+              </strong>
+              {auditorUsers.length === 0 ? (
+                <div style={{ color: '#94a3b8', fontSize: '13px', padding: '12px', textAlign: 'center' }}>
+                  暂未专门设置核算员（系统管理员默认具备全部核算员权限）
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  {auditorUsers.map(aud => (
+                    <div
+                      key={aud.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 14px',
+                        background: '#f8fafc',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div className="user-avatar-circle auditor">{aud.name.slice(0, 1)}</div>
+                        <div>
+                          <b style={{ fontSize: '13.5px', color: '#0f172a' }}>{aud.name}</b>
+                          <div style={{ fontSize: '11.5px', color: '#64748b' }}>
+                            {aud.position || '绩效核算员'} · {aud.department} · {aud.group || '全域'}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          type="button"
+                          className="secondary"
+                          style={{ fontSize: '12px', padding: '4px 10px' }}
+                          onClick={() => {
+                            onSelectActor(aud.id);
+                            onClose();
+                          }}
+                        >
+                          切换以此身份操作
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary"
+                          style={{ fontSize: '12px', padding: '4px 10px', color: '#dc2626' }}
+                          onClick={async () => {
+                            if (confirm(`确定撤销【${aud.name}】的核算员权限吗？`)) {
+                              if (onUpdateEmployeeRole) {
+                                await onUpdateEmployeeRole(aud, 'member');
+                              }
+                            }
+                          }}
+                        >
+                          撤销核算员
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {roleTab === 'admin' && (
           <div style={{ display: 'grid', gap: '16px' }}>
             {/* 核心功能：修改/变更系统管理员 */}

@@ -10,9 +10,12 @@ export type Employee = {
   position?: string; // 职务：副所长,主任 / 副主任 / 研究员 / 高级工程师 / 工程师 等
   groupRole?: string; // 专业组职务：组长 / 副组长 / 顾问 / 组员
   email: string;
-  role: 'admin' | 'member';
+  role: 'admin' | 'auditor' | 'member';
   active: boolean;
 };
+
+export const isAdminRole = (actor?: Employee | null): boolean => actor?.role === 'admin';
+export const isAuditorRole = (actor?: Employee | null): boolean => actor?.role === 'admin' || actor?.role === 'auditor';
 
 export type ProjectQuotaStageType = 'bidding' | 'normal' | 'maintenance';
 
@@ -274,7 +277,7 @@ export function execute(current: State, actorId: string, command: Command, id: s
       position: typeof data.position === 'string' ? data.position.trim() : (old?.position || ''),
       groupRole: typeof data.groupRole === 'string' ? data.groupRole.trim() : (old?.groupRole || ''),
       email: typeof data.email === 'string' ? data.email.trim().toLowerCase() : '',
-      role: data.role === 'admin' ? 'admin' : 'member',
+      role: (data.role === 'admin' || data.role === 'auditor') ? data.role : 'member',
       active: data.active !== false
     };
     if (employee.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(employee.email)) fail('邮箱格式不正确');
@@ -326,7 +329,7 @@ export function execute(current: State, actorId: string, command: Command, id: s
           position: posVal,
           groupRole: grpRoleVal,
           email: emailVal,
-          role: item.role === 'admin' ? 'admin' : 'member',
+          role: (item.role === 'admin' || item.role === 'auditor') ? item.role : 'member',
           active: true,
         });
       }
@@ -1878,14 +1881,14 @@ export function exportEmployeesCsv(state: State): string {
     e.groupRole || '',
     e.department,
     e.email || '',
-    e.role === 'admin' ? '系统管理员' : '普通员工',
+    e.role === 'admin' ? '系统管理员' : e.role === 'auditor' ? '绩效核算员' : '普通员工',
     e.active ? '启用' : '停用',
     state.projects.filter(p => p.members.includes(e.id)).length,
   ]);
   return generateCsv(headers, rows);
 }
 
-// 周期绩点报表明细矩阵 CSV 导出（按图2格式：序号、姓名、各个项目合同名称加工作令号、个人累加）
+// 周期绩点报表明细矩阵 CSV 导出（按图2格式：序号、姓名、各个项目合同名称加工作令号、个人累加，最底行计算每个合同的项目累加）
 export function exportPeriodMatrixReportCsv(
   projects: Project[],
   rows: ReturnType<typeof rangeReport>,
@@ -1900,23 +1903,43 @@ export function exportPeriodMatrixReportCsv(
 
   const headers = ['序号', '姓名', ...projectHeaders, '个人累加'];
 
+  // 项目列纵向累加器（单位：分 points）
+  const projectPointsSums = new Array(projects.length).fill(0);
+  let grandTotalPoints = 0;
+
   const data = rows.map((r, index) => {
-    const projectScores = projects.map(p => {
+    let rowPersonalTotal = 0;
+    const projectScores = projects.map((p, pIndex) => {
+      // 必须严格精确匹配项目唯一 ID（p.id），坚决不能使用令号模糊或跨项目匹配，
+      // 彻底解决图1中同令号下的多个不同合同（如 EA1 LDC、EA1 S部、EA1 W部等）细目重复计算的问题！
       const fen = r.details
-        .filter(d => d.projectId === p.id || (p.code && d.code === p.code))
+        .filter(d => d.projectId === p.id)
         .reduce((sum, d) => sum + d.points, 0);
+
+      projectPointsSums[pIndex] += fen;
+      rowPersonalTotal += fen;
       return (fen / 100).toFixed(2);
     });
 
-    const totalScore = (r.points / 100).toFixed(2);
+    grandTotalPoints += rowPersonalTotal;
 
     return [
       index + 1,
       r.employee.name,
       ...projectScores,
-      totalScore,
+      (rowPersonalTotal / 100).toFixed(2),
     ];
   });
+
+  // 按照图2：在最底端增加“项目累加”行，统计每个合同的所有人的累加和，最后一列为所有项目累加的终极总和（等于所有人的个人累加总和）
+  const projectTotalsRow = [
+    '',
+    '项目累加',
+    ...projectPointsSums.map(pts => (pts / 100).toFixed(2)),
+    (grandTotalPoints / 100).toFixed(2),
+  ];
+
+  data.push(projectTotalsRow);
 
   return generateCsv(headers, data);
 }
@@ -2379,7 +2402,7 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.5.4';
+export const APP_VERSION = '0.6.0';
 export const APP_BUILD = '20261019';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
@@ -2387,12 +2410,37 @@ export const APP_CONTACT = 'zoufudun@163.com';
 export type VersionUpdate = {
   version: string;
   date: string;
-  tag: '重大更新' | '功能增强' | '安全优化' | '常规迭代';
+  tag: '重大更新' | '重大修复' | '功能增强' | '安全优化' | '常规迭代';
   title: string;
   items: string[];
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.6.0',
+    date: '2026-10-19',
+    tag: '重大更新',
+    title: '绩效核算员全项目全员绩点自动汇总与分配数据包流转中心',
+    items: [
+      '【新增绩效核算员（auditor）专属角色权限体系】在系统角色中正式开辟“绩效核算员”权限，与系统管理员（admin）及普通员工（member）形成精准的角色分权体系。核算员拥有专属的“全项目全员绩点汇总中心”工作台、数据包导入与汇总导出权，严密隔离普通成员越权查看全项目汇总数据。',
+      '【项目负责人导出项目分配绩点数据包】项目负责人在完成本项目各周期分配后，可在项目库卡片、方案列表或项目详情中一键导出《项目分配绩点数据包 (.json)》，数据包完整涵盖：① 本项目分配额度情况（合同金额、已分配额度、剩余额度及比例）；② 项目内每个人的绩点总和与占比；③ 每一笔月度分润明细流水与工作履职内容，支持无损外发给核算员。',
+      '【核算员自动汇总工作台（多数据包合并与一键读取）】核算员在专享模块中支持单选/批量多选/直接拖拽多位项目负责人发来的数据包，亦支持在单库模式下一键载入当前系统全部项目。系统秒级自动完成跨项目数据合并与汇总计算。',
+      '【四大全景透视维度】工作台提供无缝切换的四大维度：① 全员跨项目绩点总表（汇总每个人在所有项目累计获得的绩点总和、折合万元、贡献项目数及个人明细下钻档案）；② 各项目分配额度情况对照表（直观比对各项目合同额、已分配、剩余额度与健康状态）；③ 全项目全员二维透视矩阵（矩阵呈现人×项目绩点，右侧个人累加，最底行项目累加及终极总额双向守恒）；④ 全量明细流水表。',
+      '【多维核算报表导出与归档总包】支持导出全员绩点总表 CSV、各项目分配额度对照表 CSV、二维透视矩阵 CSV、全量明细流水 CSV，以及可用于系统归档审计的《核算汇总完整数据总包 (.json)》。',
+      '【身份委任与快捷切换】在顶部身份面板支持一键委任部门成员为“📊 绩效核算员”，并支持在管理员、核算员、项目负责人与普通成员之间自由切换操作身份。'
+    ]
+  },
+  {
+    version: 'v0.5.5',
+    date: '2026-10-19',
+    tag: '重大修复',
+    title: '合同分配细目隔离修复与周期报表项目累加计算',
+    items: [
+      '【彻底修复同令号多合同细目串联重复计算缺陷】解决母子项目或相同工作令号（如 23-0181 下的 EA1 LDC、EA1 S部、EA1 W部等12个合同）在导出周期报表时细目数值完全相同且重复放大的严重问题。明细提取严格锁定项目唯一 ID（projectId === project.id），确保每个合同独立精准核算自身实际额度。',
+      '【周期报表项目累加与双向求和闭环】按照标准透视矩阵格式，在报表底部新增浅蓝高亮的“项目累加”汇总行，精准汇总每个合同/工作令号下所有员工的获得绩点总计，右下角展示全系统总额双向闭环累加和。',
+      '【周期报表矩阵透视与榜单双视图】界面端周期绩点报表新增“矩阵透视”与“全员榜单”无缝双视图切换，支持在系统内直观查验每个员工在每个合同的细目分润与底部的项目累加汇总。',
+    ]
+  },
   {
     version: 'v0.5.4',
     date: '2026-10-19',
@@ -3119,5 +3167,833 @@ export function parseProjectGroupsCsvText(
   }
 
   return { groups, newEmployees };
+}
+
+// ============================================================================
+// 绩效核算员核心业务：项目分配绩点数据包与全项目全员绩点汇总
+// ============================================================================
+
+export type ProjectMeritPackage = {
+  version: '1.0';
+  packageType: 'project_merit_package';
+  generatedAt: string;
+  exporter: {
+    id: string;
+    name: string;
+    position?: string;
+    group?: string;
+    role?: string;
+  };
+  period: {
+    months: string[];
+    periodLabel: string;
+  };
+  project: {
+    id: string;
+    code: string;
+    name: string;
+    client: string;
+    contract: number; // 单位：分
+    ownerId: string;
+    ownerName: string;
+    start: string;
+    end: string;
+    status: 'active' | 'archived';
+    // 额度情况
+    contractWan: number; // 合同总额(万元)
+    historyCompletedAmount: number; // 历史完成(分)
+    historyCompletedWan: number; // 历史完成(万元)
+    periodAllocatedPoints: number; // 本包已分配绩点总和(分)
+    periodAllocatedWan: number; // 本包已分配折合金额(万元)
+    periodAllocatedRateBps: number; // 本包已分配基点(0-10000)
+    allTimeAllocatedPoints: number; // 项目全周期已分配总绩点(分)
+    allTimeAllocatedWan: number; // 项目全周期已分配总额度(万元)
+    remainingWan: number; // 扣除所有已发布方案后的剩余额度(万元)
+    remainingRateBps: number; // 剩余基点
+  };
+  // 每个人的绩点总和
+  memberSummaries: {
+    employeeId: string;
+    name: string;
+    department: string;
+    group?: string;
+    position?: string;
+    groupRole?: string;
+    totalPoints: number; // 在本项目中获得的总绩点 (分)
+    totalWan: number; // 折合金额 (万元)
+    ratioInProject: number; // 占本项目本次分配总量的比例 (%)
+    monthsCount: number; // 参与分配的月数
+  }[];
+  // 绩点分配明细
+  details: {
+    projectId: string;
+    projectName: string;
+    projectCode: string;
+    month: string;
+    employeeId: string;
+    employeeName: string;
+    department: string;
+    group?: string;
+    position?: string;
+    groupRole?: string;
+    rate: number; // 当月个人分配率 (基点 0-10000)
+    points: number; // 获得绩点 (分)
+    wan: number; // 折合万元
+    workContent?: string;
+    planBudget: number; // 当月项目额度规划基点
+    planStatus: 'published' | 'draft';
+  }[];
+  // 包含的方案原始数据
+  plans?: Plan[];
+};
+
+export type AuditorSummaryResult = {
+  overview: {
+    packageCount: number; // 纳入核算的项目数
+    totalContractWan: number; // 合同总额(万元)
+    totalAllocatedWan: number; // 已分配总金额(万元)
+    totalAllocatedPoints: number; // 已分配总绩点(分)
+    totalEmployees: number; // 获得分配的员工数
+    avgPointsPerEmployee: number; // 全员人均绩点(分)
+    months: string[]; // 涉及月份
+    periodLabel: string; // 周期说明
+  };
+  // 1. 全员跨项目绩点总和大表
+  employeeSummaries: {
+    employeeId: string;
+    name: string;
+    department: string;
+    group: string;
+    position: string;
+    groupRole: string;
+    totalPoints: number; // 跨项目总绩点 (分)
+    totalWan: number; // 折合总金额 (万元)
+    projectCount: number; // 参与项目数
+    projects: {
+      projectId: string;
+      projectName: string;
+      projectCode: string;
+      ownerName: string;
+      points: number;
+      wan: number;
+      months: string[];
+    }[];
+    details: ProjectMeritPackage['details'];
+    rank: number;
+  }[];
+  // 2. 项目分配额度情况对照表
+  projectSummaries: {
+    id: string;
+    code: string;
+    name: string;
+    client: string;
+    ownerName: string;
+    contractWan: number; // 合同金额(万元)
+    allocatedWan: number; // 已分配额度(万元)
+    allocatedPoints: number; // 已分配绩点(分)
+    allocatedRateBps: number; // 已分配比例 (基点)
+    remainingWan: number; // 剩余额度(万元)
+    remainingRateBps: number; // 剩余比例 (基点)
+    headcount: number; // 参与分配人数
+    recordCount: number; // 分配细项记录数
+    healthStatus: 'normal' | 'warning' | 'completed';
+    months: string[];
+    packageSource?: string;
+  }[];
+  // 3. 二维透视矩阵
+  matrix: {
+    projectHeaders: { id: string; name: string; code: string; label: string }[];
+    rows: {
+      index: number;
+      employeeId: string;
+      name: string;
+      group: string;
+      position: string;
+      scores: number[]; // 各项目的绩点 (分)
+      rowTotalPoints: number; // 个人累加 (分)
+    }[];
+    projectTotals: number[]; // 各项目列累加 (分)
+    grandTotalPoints: number; // 所有项目累加的终极总和 (分)
+  };
+  // 4. 全量明细
+  allDetails: ProjectMeritPackage['details'];
+  // 5. 专业组分布
+  groupDistribution: {
+    group: string;
+    points: number;
+    wan: number;
+    headcount: number;
+    ratio: number;
+  }[];
+};
+
+/**
+ * 项目负责人导出本项目分配绩点数据包
+ */
+export function exportProjectMeritPackage(
+  state: State,
+  projectId: string,
+  options?: {
+    months?: string[];
+    status?: 'published' | 'all';
+    actor?: Employee;
+  }
+): ProjectMeritPackage {
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) fail('项目不存在');
+
+  const actor = options?.actor;
+  if (actor && actor.role !== 'admin' && actor.role !== 'auditor' && project.owner !== actor.id) {
+    fail('只有项目负责人、核算员或管理员可以导出该项目的分配数据包');
+  }
+
+  const statusFilter = options?.status || 'published';
+  let targetPlans = state.plans.filter(p => p.projectId === project.id);
+  if (statusFilter !== 'all') {
+    targetPlans = targetPlans.filter(p => p.status === 'published');
+  }
+  if (options?.months && options.months.length > 0) {
+    targetPlans = targetPlans.filter(p => options.months!.includes(p.month));
+  }
+  targetPlans.sort((a, b) => a.month.localeCompare(b.month));
+
+  const owner = state.employees.find(e => e.id === project.owner);
+  const ownerName = owner?.name || '未知负责人';
+
+  const detail = projectAllocDetail(state, project.id);
+  const contractWan = Number((project.contract / 1_000_000).toFixed(6));
+  const historyCompletedAmount = project.historyCompletedAmount || 0;
+  const historyCompletedWan = Number((historyCompletedAmount / 1_000_000).toFixed(6));
+
+  const allTimeAllocatedPoints = detail?.publishedAmount || 0;
+  const allTimeAllocatedWan = Number((allTimeAllocatedPoints / 1_000_000).toFixed(6));
+  const remainingWan = Number(((detail?.remainingAmount ?? (project.contract - historyCompletedAmount)) / 1_000_000).toFixed(6));
+  const remainingRateBps = detail?.remainingRate ?? Math.max(0, SCALE - (project.historyCompletedRate || 0));
+
+  // 收集所选 plans 的分配明细
+  const details: ProjectMeritPackage['details'] = [];
+  const memberPointsMap = new Map<string, { points: number; wan: number; months: Set<string> }>();
+
+  let periodAllocatedPoints = 0;
+  let periodAllocatedRateBps = 0;
+
+  for (const plan of targetPlans) {
+    periodAllocatedRateBps += plan.budget;
+    const allocations = planAllocations(project, plan);
+    for (const alloc of allocations) {
+      const emp = state.employees.find(e => e.id === alloc.employeeId);
+      const entry = plan.entries.find(e => e.employeeId === alloc.employeeId);
+      const pts = alloc.points;
+      const amountWan = Number((pts / 1_000_000).toFixed(6));
+
+      periodAllocatedPoints += pts;
+
+      let currentMember = memberPointsMap.get(alloc.employeeId);
+      if (!currentMember) {
+        currentMember = { points: 0, wan: 0, months: new Set<string>() };
+        memberPointsMap.set(alloc.employeeId, currentMember);
+      }
+      currentMember.points += pts;
+      currentMember.wan += amountWan;
+      currentMember.months.add(plan.month);
+
+      details.push({
+        projectId: project.id,
+        projectName: project.name,
+        projectCode: project.code,
+        month: plan.month,
+        employeeId: alloc.employeeId,
+        employeeName: emp?.name || alloc.employeeId,
+        department: emp?.department || '',
+        group: emp?.group || '',
+        position: emp?.position || '',
+        groupRole: emp?.groupRole || '',
+        rate: entry?.rate || 0,
+        points: pts,
+        wan: amountWan,
+        workContent: entry?.workContent || '',
+        planBudget: plan.budget,
+        planStatus: plan.status,
+      });
+    }
+  }
+
+  const periodAllocatedWan = Number((periodAllocatedPoints / 1_000_000).toFixed(6));
+
+  // 计算每个人的绩点总和
+  const memberSummaries: ProjectMeritPackage['memberSummaries'] = [];
+  for (const [empId, agg] of memberPointsMap.entries()) {
+    const emp = state.employees.find(e => e.id === empId);
+    const ratio = periodAllocatedPoints > 0 ? Number(((agg.points / periodAllocatedPoints) * 100).toFixed(2)) : 0;
+    memberSummaries.push({
+      employeeId: empId,
+      name: emp?.name || empId,
+      department: emp?.department || '',
+      group: emp?.group || '',
+      position: emp?.position || '',
+      groupRole: emp?.groupRole || '',
+      totalPoints: agg.points,
+      totalWan: Number(agg.wan.toFixed(6)),
+      ratioInProject: ratio,
+      monthsCount: agg.months.size,
+    });
+  }
+  memberSummaries.sort((a, b) => b.totalPoints - a.totalPoints);
+
+  const months = Array.from(new Set(targetPlans.map(p => p.month))).sort();
+  const periodLabel = months.length === 1 ? months[0] : months.length > 1 ? `${months[0]} 至 ${months[months.length - 1]}` : '全周期';
+
+  const exporter: ProjectMeritPackage['exporter'] = {
+    id: actor?.id || owner?.id || 'unknown',
+    name: actor?.name || ownerName,
+    position: actor?.position,
+    group: actor?.group,
+    role: actor?.role,
+  };
+
+  return {
+    version: '1.0',
+    packageType: 'project_merit_package',
+    generatedAt: new Date().toISOString(),
+    exporter,
+    period: {
+      months,
+      periodLabel,
+    },
+    project: {
+      id: project.id,
+      code: project.code,
+      name: project.name,
+      client: project.client,
+      contract: project.contract,
+      ownerId: project.owner,
+      ownerName,
+      start: project.start,
+      end: project.end,
+      status: project.status,
+      contractWan,
+      historyCompletedAmount,
+      historyCompletedWan,
+      periodAllocatedPoints,
+      periodAllocatedWan,
+      periodAllocatedRateBps,
+      allTimeAllocatedPoints,
+      allTimeAllocatedWan,
+      remainingWan,
+      remainingRateBps,
+    },
+    memberSummaries,
+    details,
+    plans: targetPlans,
+  };
+}
+
+/**
+ * 导出项目分配数据包 JSON 格式
+ */
+export function exportProjectMeritPackageJson(
+  state: State,
+  projectId: string,
+  options?: {
+    months?: string[];
+    status?: 'published' | 'all';
+    actor?: Employee;
+  }
+): string {
+  const pkg = exportProjectMeritPackage(state, projectId, options);
+  return JSON.stringify(pkg, null, 2);
+}
+
+/**
+ * 解析并校验项目分配绩点数据包
+ */
+export function parseProjectMeritPackage(raw: string | object): ProjectMeritPackage {
+  let data: any = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  if (!data || typeof data !== 'object') {
+    fail('数据包解析失败：内容不是有效的对象格式');
+  }
+
+  // 兼容普通快照或报表对象格式
+  if (data.packageType !== 'project_merit_package' && data.project && data.details) {
+    data.packageType = 'project_merit_package';
+    data.version = data.version || '1.0';
+  }
+
+  if (!data.project || !data.project.name) {
+    fail('数据包格式错误：缺少项目核心信息（project.name）');
+  }
+
+  if (!Array.isArray(data.details)) {
+    data.details = [];
+  }
+
+  if (!Array.isArray(data.memberSummaries)) {
+    // 自动根据 details 计算 memberSummaries
+    const map = new Map<string, { name: string; dept: string; group: string; pos: string; grpRole: string; points: number; wan: number; months: Set<string> }>();
+    let totalPts = 0;
+    for (const d of data.details) {
+      totalPts += (d.points || 0);
+      let item = map.get(d.employeeId);
+      if (!item) {
+        item = {
+          name: d.employeeName || d.employeeId,
+          dept: d.department || '',
+          group: d.group || '',
+          pos: d.position || '',
+          grpRole: d.groupRole || '',
+          points: 0,
+          wan: 0,
+          months: new Set(),
+        };
+        map.set(d.employeeId, item);
+      }
+      item.points += (d.points || 0);
+      item.wan += (d.wan || 0);
+      if (d.month) item.months.add(d.month);
+    }
+
+    data.memberSummaries = Array.from(map.entries()).map(([empId, item]) => ({
+      employeeId: empId,
+      name: item.name,
+      department: item.dept,
+      group: item.group,
+      position: item.pos,
+      groupRole: item.grpRole,
+      totalPoints: item.points,
+      totalWan: Number(item.wan.toFixed(6)),
+      ratioInProject: totalPts > 0 ? Number(((item.points / totalPts) * 100).toFixed(2)) : 0,
+      monthsCount: item.months.size,
+    })).sort((a, b) => b.totalPoints - a.totalPoints);
+  }
+
+  if (!data.period) {
+    const months = Array.from(new Set(data.details.map((d: any) => d.month).filter(Boolean))) as string[];
+    months.sort();
+    data.period = {
+      months,
+      periodLabel: months.length > 0 ? `${months[0]} ~ ${months[months.length - 1]}` : '未指定周期',
+    };
+  }
+
+  return data as ProjectMeritPackage;
+}
+
+/**
+ * 核算员自动汇总多个项目分配数据包
+ */
+export function summarizeAuditorPackages(
+  packages: ProjectMeritPackage[],
+  allEmployees?: Employee[]
+): AuditorSummaryResult {
+  if (!packages || packages.length === 0) {
+    return {
+      overview: {
+        packageCount: 0,
+        totalContractWan: 0,
+        totalAllocatedWan: 0,
+        totalAllocatedPoints: 0,
+        totalEmployees: 0,
+        avgPointsPerEmployee: 0,
+        months: [],
+        periodLabel: '暂无数据',
+      },
+      employeeSummaries: [],
+      projectSummaries: [],
+      matrix: {
+        projectHeaders: [],
+        rows: [],
+        projectTotals: [],
+        grandTotalPoints: 0,
+      },
+      allDetails: [],
+      groupDistribution: [],
+    };
+  }
+
+  // 1. 月份与周期汇总
+  const allMonthsSet = new Set<string>();
+  for (const pkg of packages) {
+    if (pkg.period?.months) {
+      pkg.period.months.forEach(m => allMonthsSet.add(m));
+    }
+    if (pkg.details) {
+      pkg.details.forEach(d => { if (d.month) allMonthsSet.add(d.month); });
+    }
+  }
+  const sortedMonths = Array.from(allMonthsSet).sort();
+  const periodLabel = sortedMonths.length === 1 ? sortedMonths[0] : sortedMonths.length > 1 ? `${sortedMonths[0]} 至 ${sortedMonths[sortedMonths.length - 1]}` : '全周期';
+
+  // 2. 项目分配额度情况对照表
+  const projectSummaries: AuditorSummaryResult['projectSummaries'] = [];
+  let totalContractWan = 0;
+  let totalAllocatedWan = 0;
+  let totalAllocatedPoints = 0;
+
+  for (const pkg of packages) {
+    const p = pkg.project;
+    totalContractWan += (p.contractWan || 0);
+    totalAllocatedWan += (p.periodAllocatedWan || 0);
+    totalAllocatedPoints += (p.periodAllocatedPoints || 0);
+
+    const healthStatus: 'normal' | 'warning' | 'completed' =
+      (p.remainingWan < 0) ? 'warning' : (p.remainingRateBps <= 500) ? 'completed' : 'normal';
+
+    projectSummaries.push({
+      id: p.id,
+      code: p.code || '',
+      name: p.name,
+      client: p.client || '',
+      ownerName: p.ownerName || '未知',
+      contractWan: p.contractWan || 0,
+      allocatedWan: p.periodAllocatedWan || 0,
+      allocatedPoints: p.periodAllocatedPoints || 0,
+      allocatedRateBps: p.periodAllocatedRateBps || 0,
+      remainingWan: p.remainingWan || 0,
+      remainingRateBps: p.remainingRateBps || 0,
+      headcount: pkg.memberSummaries?.length || 0,
+      recordCount: pkg.details?.length || 0,
+      healthStatus,
+      months: pkg.period?.months || [],
+      packageSource: pkg.exporter?.name ? `由【${pkg.exporter.name}】导出 (${pkg.generatedAt?.slice(0, 10) || ''})` : '项目数据包',
+    });
+  }
+
+  // 3. 全量明细汇总
+  const allDetails: ProjectMeritPackage['details'] = [];
+  for (const pkg of packages) {
+    if (pkg.details) {
+      allDetails.push(...pkg.details);
+    }
+  }
+  allDetails.sort((a, b) => {
+    const mComp = a.month.localeCompare(b.month);
+    if (mComp !== 0) return mComp;
+    const pComp = a.projectName.localeCompare(b.projectName);
+    if (pComp !== 0) return pComp;
+    return b.points - a.points;
+  });
+
+  // 4. 全员跨项目绩点总和大表（以人为核心聚合）
+  type EmpAgg = {
+    employeeId: string;
+    name: string;
+    department: string;
+    group: string;
+    position: string;
+    groupRole: string;
+    totalPoints: number;
+    totalWan: number;
+    projectsMap: Map<string, {
+      projectId: string;
+      projectName: string;
+      projectCode: string;
+      ownerName: string;
+      points: number;
+      wan: number;
+      months: Set<string>;
+    }>;
+    details: ProjectMeritPackage['details'];
+  };
+
+  const empMap = new Map<string, EmpAgg>();
+
+  for (const d of allDetails) {
+    let agg = empMap.get(d.employeeId);
+    if (!agg) {
+      const matchEmp = allEmployees?.find(e => e.id === d.employeeId || e.name === d.employeeName);
+      agg = {
+        employeeId: d.employeeId,
+        name: d.employeeName || matchEmp?.name || d.employeeId,
+        department: matchEmp?.department || d.department || '',
+        group: matchEmp?.group || d.group || '',
+        position: matchEmp?.position || d.position || '',
+        groupRole: matchEmp?.groupRole || d.groupRole || '',
+        totalPoints: 0,
+        totalWan: 0,
+        projectsMap: new Map(),
+        details: [],
+      };
+      empMap.set(d.employeeId, agg);
+    }
+
+    agg.totalPoints += d.points;
+    agg.totalWan += d.wan;
+    agg.details.push(d);
+
+    let prj = agg.projectsMap.get(d.projectId);
+    if (!prj) {
+      const pkgPrj = packages.find(pkg => pkg.project.id === d.projectId)?.project;
+      prj = {
+        projectId: d.projectId,
+        projectName: d.projectName,
+        projectCode: d.projectCode,
+        ownerName: pkgPrj?.ownerName || '',
+        points: 0,
+        wan: 0,
+        months: new Set(),
+      };
+      agg.projectsMap.set(d.projectId, prj);
+    }
+    prj.points += d.points;
+    prj.wan += d.wan;
+    if (d.month) prj.months.add(d.month);
+  }
+
+  const employeeSummaries: AuditorSummaryResult['employeeSummaries'] = Array.from(empMap.values())
+    .map(agg => ({
+      employeeId: agg.employeeId,
+      name: agg.name,
+      department: agg.department,
+      group: agg.group,
+      position: agg.position,
+      groupRole: agg.groupRole,
+      totalPoints: agg.totalPoints,
+      totalWan: Number(agg.totalWan.toFixed(6)),
+      projectCount: agg.projectsMap.size,
+      projects: Array.from(agg.projectsMap.values()).map(p => ({
+        projectId: p.projectId,
+        projectName: p.projectName,
+        projectCode: p.projectCode,
+        ownerName: p.ownerName,
+        points: p.points,
+        wan: Number(p.wan.toFixed(6)),
+        months: Array.from(p.months).sort(),
+      })),
+      details: agg.details,
+      rank: 0,
+    }))
+    .sort((a, b) => b.totalPoints - a.totalPoints);
+
+  employeeSummaries.forEach((e, idx) => { e.rank = idx + 1; });
+
+  // 5. 二维透视矩阵（图2风格）
+  const projectHeaders = packages.map(pkg => ({
+    id: pkg.project.id,
+    name: pkg.project.name,
+    code: pkg.project.code,
+    label: pkg.project.code && !pkg.project.name.includes(pkg.project.code)
+      ? `${pkg.project.name} (${pkg.project.code})`
+      : pkg.project.name,
+  }));
+
+  const projectTotals = new Array(projectHeaders.length).fill(0);
+  let grandTotalPoints = 0;
+
+  const matrixRows = employeeSummaries.map((emp, index) => {
+    let rowTotal = 0;
+    const scores = projectHeaders.map((header, colIdx) => {
+      const pts = emp.details
+        .filter(d => d.projectId === header.id)
+        .reduce((sum, d) => sum + d.points, 0);
+      projectTotals[colIdx] += pts;
+      rowTotal += pts;
+      return pts;
+    });
+
+    grandTotalPoints += rowTotal;
+
+    return {
+      index: index + 1,
+      employeeId: emp.employeeId,
+      name: emp.name,
+      group: emp.group,
+      position: emp.position,
+      scores,
+      rowTotalPoints: rowTotal,
+    };
+  });
+
+  // 6. 专业组分布统计
+  const groupMap = new Map<string, { points: number; wan: number; emps: Set<string> }>();
+  for (const emp of employeeSummaries) {
+    const grp = emp.group || '其他未分组';
+    let g = groupMap.get(grp);
+    if (!g) {
+      g = { points: 0, wan: 0, emps: new Set() };
+      groupMap.set(grp, g);
+    }
+    g.points += emp.totalPoints;
+    g.wan += emp.totalWan;
+    g.emps.add(emp.employeeId);
+  }
+
+  const groupDistribution: AuditorSummaryResult['groupDistribution'] = Array.from(groupMap.entries())
+    .map(([group, val]) => ({
+      group,
+      points: val.points,
+      wan: Number(val.wan.toFixed(6)),
+      headcount: val.emps.size,
+      ratio: totalAllocatedPoints > 0 ? Number(((val.points / totalAllocatedPoints) * 100).toFixed(2)) : 0,
+    }))
+    .sort((a, b) => b.points - a.points);
+
+  const totalEmployees = employeeSummaries.length;
+  const avgPointsPerEmployee = totalEmployees > 0 ? Math.round(totalAllocatedPoints / totalEmployees) : 0;
+
+  return {
+    overview: {
+      packageCount: packages.length,
+      totalContractWan: Number(totalContractWan.toFixed(6)),
+      totalAllocatedWan: Number(totalAllocatedWan.toFixed(6)),
+      totalAllocatedPoints,
+      totalEmployees,
+      avgPointsPerEmployee,
+      months: sortedMonths,
+      periodLabel,
+    },
+    employeeSummaries,
+    projectSummaries,
+    matrix: {
+      projectHeaders,
+      rows: matrixRows,
+      projectTotals,
+      grandTotalPoints,
+    },
+    allDetails,
+    groupDistribution,
+  };
+}
+
+/**
+ * 核算员从当前系统 State 一键全量汇总
+ */
+export function summarizeCurrentStateForAuditor(
+  state: State,
+  options?: {
+    months?: string[];
+    status?: 'published' | 'all';
+    actor?: Employee;
+  }
+): AuditorSummaryResult {
+  const statusFilter = options?.status || 'published';
+  const targetProjects = state.projects.filter(p => {
+    if (options?.months && options.months.length > 0) {
+      return state.plans.some(plan => plan.projectId === p.id && options.months!.includes(plan.month) && (statusFilter === 'all' || plan.status === 'published'));
+    }
+    return state.plans.some(plan => plan.projectId === p.id && (statusFilter === 'all' || plan.status === 'published'));
+  });
+
+  const packages: ProjectMeritPackage[] = [];
+  for (const p of targetProjects) {
+    try {
+      const pkg = exportProjectMeritPackage(state, p.id, options);
+      if (pkg.details.length > 0) {
+        packages.push(pkg);
+      }
+    } catch {
+      // 容错跳过无分配项目
+    }
+  }
+
+  return summarizeAuditorPackages(packages, state.employees);
+}
+
+/**
+ * 导出全员跨项目绩点总表 CSV
+ */
+export function exportAuditorEmployeesCsv(summary: AuditorSummaryResult): string {
+  const headers = ['全员排名', '员工姓名', '所属专业组', '职务', '专业组职务', '所属部门', '参与项目数', '累计获得总绩点', '折合总金额(万元)', '参与项目明细'];
+  const rows = summary.employeeSummaries.map(emp => {
+    const detailStr = emp.projects.map(p => `${p.projectName}(${(p.points / 100).toFixed(2)}绩点)`).join('; ');
+    return [
+      emp.rank,
+      emp.name,
+      emp.group || '未分组',
+      emp.position || '',
+      emp.groupRole || '',
+      emp.department,
+      emp.projectCount,
+      (emp.totalPoints / 100).toFixed(2),
+      emp.totalWan.toFixed(4),
+      detailStr,
+    ];
+  });
+  return generateCsv(headers, rows);
+}
+
+/**
+ * 导出项目分配额度情况对照表 CSV
+ */
+export function exportAuditorProjectsCsv(summary: AuditorSummaryResult): string {
+  const headers = ['序号', '工作令号', '项目名称', '项目负责人', '客户名称', '合同总额(万元)', '已分配额度(万元)', '已分配比例(%)', '已分配绩点', '剩余额度(万元)', '剩余比例(%)', '分配人数', '核算期数', '额度健康度'];
+  const rows = summary.projectSummaries.map((p, idx) => [
+    idx + 1,
+    p.code,
+    p.name,
+    p.ownerName,
+    p.client,
+    p.contractWan.toFixed(4),
+    p.allocatedWan.toFixed(4),
+    (p.allocatedRateBps / 100).toFixed(2),
+    (p.allocatedPoints / 100).toFixed(2),
+    p.remainingWan.toFixed(4),
+    (p.remainingRateBps / 100).toFixed(2),
+    p.headcount,
+    p.months.join('; '),
+    p.healthStatus === 'warning' ? '超额预警' : p.healthStatus === 'completed' ? '结项/用尽' : '正常执行',
+  ]);
+  return generateCsv(headers, rows);
+}
+
+/**
+ * 导出二维透视矩阵 CSV（按图2格式：序号、姓名、职务、专业组、各合同令号...、个人累加，最底行【项目累加】）
+ */
+export function exportAuditorMatrixCsv(summary: AuditorSummaryResult): string {
+  const headers = ['序号', '姓名', '职务', '专业组', ...summary.matrix.projectHeaders.map(h => h.label), '个人累加'];
+  const data = summary.matrix.rows.map(r => [
+    r.index,
+    r.name,
+    r.position || '',
+    r.group || '',
+    ...r.scores.map(pts => (pts / 100).toFixed(2)),
+    (r.rowTotalPoints / 100).toFixed(2),
+  ]);
+
+  // 最底行【项目累加】
+  const projectTotalsRow = [
+    '',
+    '项目累加',
+    '',
+    '',
+    ...summary.matrix.projectTotals.map(pts => (pts / 100).toFixed(2)),
+    (summary.matrix.grandTotalPoints / 100).toFixed(2),
+  ];
+
+  data.push(projectTotalsRow);
+  return generateCsv(headers, data);
+}
+
+/**
+ * 导出全量明细流水 CSV
+ */
+export function exportAuditorDetailsCsv(summary: AuditorSummaryResult): string {
+  const headers = ['序号', '考核月份', '工作令号', '项目名称', '员工姓名', '专业组', '职务', '所属部门', '分润比例(%)', '获得绩点', '折合金额(万元)', '工作履职内容'];
+  const rows = summary.allDetails.map((d, idx) => [
+    idx + 1,
+    d.month,
+    d.projectCode,
+    d.projectName,
+    d.employeeName,
+    d.group || '',
+    d.position || '',
+    d.department || '',
+    (d.rate / 100).toFixed(2),
+    (d.points / 100).toFixed(2),
+    d.wan.toFixed(4),
+    d.workContent || '',
+  ]);
+  return generateCsv(headers, rows);
+}
+
+/**
+ * 导出核算汇总完整数据包 JSON 格式（用于归档与审计）
+ */
+export function exportAuditorFullBundleJson(summary: AuditorSummaryResult): string {
+  return JSON.stringify({
+    version: '1.0',
+    bundleType: 'auditor_summary_bundle',
+    exportedAt: new Date().toISOString(),
+    summary,
+  }, null, 2);
 }
 

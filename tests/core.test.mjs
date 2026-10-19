@@ -208,8 +208,8 @@ test('周期绩点报表导出CSV按二维矩阵格式导出：第一行为各�
     }
   }
 
-  // 数据行
-  assert.equal(parsed.length, rows.length + 1);
+  // 数据行 + 最后的【项目累加】汇总行 (按图2标准)
+  assert.equal(parsed.length, rows.length + 2);
   for (let r = 0; r < rows.length; r++) {
     const row = parsed[r + 1];
     assert.equal(row[0], String(r + 1));
@@ -217,9 +217,137 @@ test('周期绩点报表导出CSV按二维矩阵格式导出：第一行为各�
     assert.equal(row[row.length - 1], (rows[r].points / 100).toFixed(2));
   }
 
+  // 按照图2：最后一行必须是【项目累加】汇总行
+  const totalRow = parsed[parsed.length - 1];
+  assert.equal(totalRow[0], '');
+  assert.equal(totalRow[1], '项目累加');
+  assert.equal(totalRow.length, header.length);
+  let colSumTotal = 0;
+  for (let c = 2; c < totalRow.length - 1; c++) {
+    colSumTotal += Math.round(parseFloat(totalRow[c]) * 100);
+  }
+  const grandTotalFen = Math.round(parseFloat(totalRow[totalRow.length - 1]) * 100);
+  assert.equal(colSumTotal, grandTotalFen);
+
   // exportPeriodReportCsv 传入 state 兼容支持矩阵导出
   const csvFromOptions = exportPeriodReportCsv(rows, '2026年Q1', { state });
   assert.equal(csvFromOptions, csv);
+});
+
+test('彻底修复同令号多合同细目串联重复计算BUG，并验证末行【项目累加】及行列双向求和闭环', () => {
+  // 模拟图1真实场景：两个不同子项目拥有完全相同的工作令号 '23-0181'
+  const emp1 = { id: 'e1', name: '邹富敦', department: '总体部', group: '总体组', role: 'member', active: true };
+  const emp2 = { id: 'e2', name: '杨健', department: '研发中心', group: '研发组', role: 'member', active: true };
+
+  const prjA = {
+    id: 'p_ea1_ldc',
+    code: '23-0181', // 相同令号
+    name: 'EA1 LDC',
+    client: '客户A',
+    contract: 316_820_000, // 316.82万元
+    owner: 'e1',
+    start: '2026-01',
+    end: '2026-06',
+    status: 'active',
+    members: ['e1', 'e2'],
+  };
+
+  const prjB = {
+    id: 'p_ea1_s',
+    code: '23-0181', // 相同令号
+    name: 'EA1 S部',
+    client: '客户A',
+    contract: 137_590_000, // 137.59万元
+    owner: 'e1',
+    start: '2026-01',
+    end: '2026-06',
+    status: 'active',
+    members: ['e1', 'e2'],
+  };
+
+  const planA = {
+    id: 'plan_a_01',
+    projectId: prjA.id,
+    month: '2026-01',
+    budget: 1000, // 10%
+    status: 'published',
+    note: '',
+    entries: [
+      { employeeId: 'e1', rate: 7000 }, // 70%
+      { employeeId: 'e2', rate: 3000 }, // 30%
+    ],
+  };
+
+  const planB = {
+    id: 'plan_b_01',
+    projectId: prjB.id,
+    month: '2026-01',
+    budget: 1000, // 10%
+    status: 'published',
+    note: '',
+    entries: [
+      { employeeId: 'e1', rate: 4000 }, // 40%
+      { employeeId: 'e2', rate: 6000 }, // 60%
+    ],
+  };
+
+  const state = {
+    employees: [emp1, emp2],
+    projects: [prjA, prjB],
+    plans: [planA, planB],
+    audit: [],
+  };
+
+  const rows = rangeReport(state, { months: ['2026-01'] });
+  const csv = exportPeriodMatrixReportCsv([prjA, prjB], rows, '2026-01');
+  const parsed = parseCsv(csv);
+
+  // 表头校验
+  assert.equal(parsed[0][0], '序号');
+  assert.equal(parsed[0][1], '姓名');
+  assert.equal(parsed[0][2], 'EA1 LDC (23-0181)');
+  assert.equal(parsed[0][3], 'EA1 S部 (23-0181)');
+  assert.equal(parsed[0][4], '个人累加');
+
+  // 数据行
+  const rowZou = parsed.find(r => r[1] === '邹富敦');
+  const rowYang = parsed.find(r => r[1] === '杨健');
+  assert.ok(rowZou, '必须包含邹富敦');
+  assert.ok(rowYang, '必须包含杨健');
+
+  // 关键核验：同令号的两个项目列数值绝对不能相同！
+  assert.notEqual(rowZou[2], rowZou[3], '邹富敦在两个不同合同下的细目绝不能相同！');
+  assert.notEqual(rowYang[2], rowYang[3], '杨健在两个不同合同下的细目绝不能相同！');
+
+  // 邹富敦：横向相加必须精确等于个人累加
+  const zouA = parseFloat(rowZou[2]);
+  const zouB = parseFloat(rowZou[3]);
+  const zouTotal = parseFloat(rowZou[4]);
+  assert.equal((zouA + zouB).toFixed(2), zouTotal.toFixed(2));
+
+  // 杨健：横向相加必须精确等于个人累加
+  const yangA = parseFloat(rowYang[2]);
+  const yangB = parseFloat(rowYang[3]);
+  const yangTotal = parseFloat(rowYang[4]);
+  assert.equal((yangA + yangB).toFixed(2), yangTotal.toFixed(2));
+
+  // 末行【项目累加】汇总行核验
+  const totalRow = parsed[parsed.length - 1];
+  assert.equal(totalRow[0], '');
+  assert.equal(totalRow[1], '项目累加');
+
+  // EA1 LDC 项目累加 = 邹富敦(EA1 LDC) + 杨健(EA1 LDC)
+  const ldcSum = parseFloat(totalRow[2]);
+  assert.equal((zouA + yangA).toFixed(2), ldcSum.toFixed(2));
+
+  // EA1 S部 项目累加 = 邹富敦(EA1 S部) + 杨健(EA1 S部)
+  const sSum = parseFloat(totalRow[3]);
+  assert.equal((zouB + yangB).toFixed(2), sSum.toFixed(2));
+
+  // 右下角全局总累加 = EA1 LDC累加 + EA1 S部累加 = 邹富敦累加 + 杨健累加
+  const grandTotal = parseFloat(totalRow[4]);
+  assert.equal((ldcSum + sSum).toFixed(2), grandTotal.toFixed(2));
+  assert.equal((zouTotal + yangTotal).toFixed(2), grandTotal.toFixed(2));
 });
 
 test('支持新建项目：工作令号、客户名称选填、结束日期可以不确定', () => {
@@ -1036,10 +1164,10 @@ test('企业级全量灾备数据 AES-256-GCM 加密导出与权限口令解密�
   assert.equal(legacyDecrypted.state.projects.length, state.projects.length);
 
   // 6. 版本号与更新历史验证
-  assert.equal(APP_VERSION, '0.5.4');
-  assert.ok(UPDATE_HISTORY.length >= 9);
-  assert.equal(UPDATE_HISTORY[0].version, 'v0.5.4');
-  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('六位小数')));
+  assert.equal(APP_VERSION, '0.6.0');
+  assert.ok(UPDATE_HISTORY.length >= 11);
+  assert.equal(UPDATE_HISTORY[0].version, 'v0.6.0');
+  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('绩效核算员') || it.includes('汇总')));
 });
 
 test('月底分配全项目当月集中透视、每个项目月分配批量修改与一键批量发布/撤回', () => {
