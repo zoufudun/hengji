@@ -3260,6 +3260,7 @@ export type AuditorSummaryResult = {
   };
   // 1. 全员跨项目绩点总和大表
   employeeSummaries: {
+    id: string;
     employeeId: string;
     name: string;
     department: string;
@@ -3741,6 +3742,7 @@ export function summarizeAuditorPackages(
 
   const employeeSummaries: AuditorSummaryResult['employeeSummaries'] = Array.from(empMap.values())
     .map(agg => ({
+      id: agg.employeeId,
       employeeId: agg.employeeId,
       name: agg.name,
       department: agg.department,
@@ -3995,5 +3997,378 @@ export function exportAuditorFullBundleJson(summary: AuditorSummaryResult): stri
     exportedAt: new Date().toISOString(),
     summary,
   }, null, 2);
+}
+
+// ============================================================================
+// 工作区类型划分与权限绑定模型 (v0.6.0)
+// ============================================================================
+
+export type WorkspaceType = 'project_manager' | 'auditor' | 'general';
+
+export interface WorkspaceMeta {
+  workspaceType?: WorkspaceType;
+  ownerEmployeeId?: string;
+  ownerEmployeeName?: string;
+}
+
+/**
+ * 项目负责人名下全部项目聚合数据包
+ */
+export interface ProjectManagerMeritBundle {
+  format: 'hengji-pm-merit-bundle';
+  version: string;
+  bundleId: string;
+  exportedAt: string;
+  managerId: string;
+  managerName: string;
+  managerDepartment?: string;
+  projectCount: number;
+  totalContractWan: number;
+  totalAllocatedPoints: number;
+  packages: ProjectMeritPackage[];
+}
+
+/**
+ * 导出项目负责人管理的所有项目数据包集合（一键打包）
+ */
+export function exportProjectManagerBundle(state: State, managerId: string, actor: Employee): ProjectManagerMeritBundle {
+  if (!managerId) fail('未指定项目负责人');
+  const targetManager = state.employees.find(e => e.id === managerId);
+  if (!targetManager) fail(`未找到项目负责人（工号/ID: ${managerId}）`);
+
+  // 权限校验：仅负责人本人、核算员或管理员可以导出该负责人名下的全部项目包
+  const isSelf = actor.id === managerId;
+  const isManagerOrAdmin = isAuditorRole(actor) || isAdminRole(actor);
+  if (!isSelf && !isManagerOrAdmin) {
+    fail(`无权导出项目负责人【${targetManager.name}】名下的项目数据包`);
+  }
+
+  // 筛选该负责人管理的所有项目（owner === managerId 或 owner === targetManager.name）
+  const managerProjects = state.projects.filter(p => p.owner === managerId || p.owner === targetManager.name);
+  if (managerProjects.length === 0) {
+    fail(`项目负责人【${targetManager.name}】名下暂无管理的任何项目`);
+  }
+
+  const packages: ProjectMeritPackage[] = [];
+  let totalContractWan = 0;
+  let totalAllocatedPoints = 0;
+
+  for (const project of managerProjects) {
+    const pkg = exportProjectMeritPackage(state, project.id, { actor });
+    packages.push(pkg);
+    totalContractWan += pkg.project.contractWan;
+    totalAllocatedPoints += (pkg.project.periodAllocatedPoints || pkg.project.allTimeAllocatedPoints || 0);
+  }
+
+  return {
+    format: 'hengji-pm-merit-bundle',
+    version: '0.6.0',
+    bundleId: `pm_bundle_${managerId}_${Date.now()}`,
+    exportedAt: new Date().toISOString(),
+    managerId,
+    managerName: targetManager.name,
+    managerDepartment: targetManager.department,
+    projectCount: packages.length,
+    totalContractWan: Number(totalContractWan.toFixed(4)),
+    totalAllocatedPoints,
+    packages,
+  };
+}
+
+/**
+ * 导出项目负责人全部数据包的 JSON 字符串
+ */
+export function exportProjectManagerBundleJson(state: State, managerId: string, actor: Employee): string {
+  const bundle = exportProjectManagerBundle(state, managerId, actor);
+  return JSON.stringify(bundle, null, 2);
+}
+
+/**
+ * 智能解析导入的 JSON：支持单个项目数据包 (ProjectMeritPackage) 或项目负责人合并包 (ProjectManagerMeritBundle)
+ */
+export function parseMeritPackageOrBundle(jsonStr: string): ProjectMeritPackage[] {
+  let parsed: any;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    fail('文件不是合法的 JSON 格式，无法解析');
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    fail('数据包内容为空或格式不正确');
+  }
+
+  // 1. 如果是项目负责人多包合包
+  if (parsed.format === 'hengji-pm-merit-bundle' || (Array.isArray(parsed.packages) && parsed.managerId)) {
+    if (!Array.isArray(parsed.packages) || parsed.packages.length === 0) {
+      fail('项目负责人数据包中未包含任何项目数据');
+    }
+    return parsed.packages.map((pkg: any) => parseProjectMeritPackage(JSON.stringify(pkg)));
+  }
+
+  // 2. 如果是单个项目数据包
+  if (parsed.format === 'hengji-project-merit-package' || parsed.packageId || parsed.project) {
+    return [parseProjectMeritPackage(jsonStr)];
+  }
+
+  // 3. 容错处理：如果是直接数组形式的数据包
+  if (Array.isArray(parsed)) {
+    return parsed.map((item: any) => parseProjectMeritPackage(JSON.stringify(item)));
+  }
+
+  fail('无法识别的数据包格式：既不是单项目数据包，也不是项目负责人多项目合并包');
+}
+
+// ============================================================================
+// 全部门合同额度汇总与荣誉之星统计模型 (v0.6.0)
+// ============================================================================
+
+export interface DepartmentContractSummary {
+  totalProjects: number;
+  totalContractWan: number;
+  totalAllocatedWan: number;
+  totalRemainingWan: number;
+  overallAllocatedRateBps: number;
+  totalAllocatedPoints: number;
+  warningProjectsCount: number;
+  completedProjectsCount: number;
+  normalProjectsCount: number;
+  projects: Array<{
+    id: string;
+    code: string;
+    name: string;
+    ownerName: string;
+    contractWan: number;
+    allocatedWan: number;
+    remainingWan: number;
+    allocatedRateBps: number;
+    allocatedPoints: number;
+    healthStatus: 'normal' | 'warning' | 'completed';
+    headcount: number;
+  }>;
+}
+
+/**
+ * 计算全部门合同额度汇总
+ */
+export function calculateDepartmentContracts(summary: AuditorSummaryResult): DepartmentContractSummary {
+  let totalContractWan = 0;
+  let totalAllocatedWan = 0;
+  let totalRemainingWan = 0;
+  let totalAllocatedPoints = 0;
+  let warningProjectsCount = 0;
+  let completedProjectsCount = 0;
+  let normalProjectsCount = 0;
+
+  const projects = summary.projectSummaries.map(p => {
+    totalContractWan += p.contractWan;
+    totalAllocatedWan += p.allocatedWan;
+    totalRemainingWan += p.remainingWan;
+    totalAllocatedPoints += p.allocatedPoints;
+
+    if (p.healthStatus === 'warning') warningProjectsCount++;
+    else if (p.healthStatus === 'completed') completedProjectsCount++;
+    else normalProjectsCount++;
+
+    return {
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      ownerName: p.ownerName,
+      contractWan: p.contractWan,
+      allocatedWan: p.allocatedWan,
+      remainingWan: p.remainingWan,
+      allocatedRateBps: p.allocatedRateBps,
+      allocatedPoints: p.allocatedPoints,
+      healthStatus: p.healthStatus,
+      headcount: p.headcount,
+    };
+  });
+
+  const overallRate = totalContractWan > 0 ? Math.round((totalAllocatedWan / totalContractWan) * 10000) : 0;
+
+  return {
+    totalProjects: projects.length,
+    totalContractWan: Number(totalContractWan.toFixed(4)),
+    totalAllocatedWan: Number(totalAllocatedWan.toFixed(4)),
+    totalRemainingWan: Number(totalRemainingWan.toFixed(4)),
+    overallAllocatedRateBps: Math.min(10000, overallRate),
+    totalAllocatedPoints,
+    warningProjectsCount,
+    completedProjectsCount,
+    normalProjectsCount,
+    projects,
+  };
+}
+
+export interface HonorStar {
+  category: 'monthly' | 'quarterly' | 'annual';
+  title: string;       // 如：2026年3月 月度之星、2026年Q1 季度之星、2026年度 领航之星
+  period: string;      // 2026-03, 2026-Q1, 2026
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  group?: string;
+  position?: string;
+  points: number;      // 获得绩点（分）
+  wan: number;         // 折合万元
+  projectCount: number;
+  topProjects: string[]; // 主要贡献项目
+  badge: string;       // 徽章标识：👑 🌟 🏆 🎖️
+  rank: number;
+  reason: string;      // 评语/高光亮点
+}
+
+export interface HonorStarsResult {
+  monthlyStars: HonorStar[];
+  quarterlyStars: HonorStar[];
+  annualStars: HonorStar[];
+}
+
+/**
+ * 自动评选月度之星、季度之星与年度之星
+ */
+export function calculateHonorStars(summary: AuditorSummaryResult): HonorStarsResult {
+  const details = summary.allDetails;
+  const empMap = new Map<string, { name: string; dept: string; group?: string; pos?: string }>();
+  summary.employeeSummaries.forEach(e => {
+    empMap.set(e.id, { name: e.name, dept: e.department, group: e.group, pos: e.position });
+  });
+
+  // 1. 按月份聚合：month -> employeeId -> { points, projects: Set<string> }
+  const monthMap = new Map<string, Map<string, { points: number; projects: Set<string> }>>();
+  // 2. 按季度聚合：quarter -> employeeId -> { points, projects: Set<string> }
+  const quarterMap = new Map<string, Map<string, { points: number; projects: Set<string> }>>();
+  // 3. 按年度聚合：year -> employeeId -> { points, projects: Set<string> }
+  const yearMap = new Map<string, Map<string, { points: number; projects: Set<string> }>>();
+
+  for (const d of details) {
+    const month = d.month || '当前周期';
+    const year = month.slice(0, 4) || '本年';
+    const monthNum = parseInt(month.slice(5, 7) || '1', 10);
+    const qNum = Math.ceil(monthNum / 3) || 1;
+    const quarter = `${year}-Q${qNum}`;
+
+    // 月度累计
+    if (!monthMap.has(month)) monthMap.set(month, new Map());
+    const mSub = monthMap.get(month)!;
+    if (!mSub.has(d.employeeId)) mSub.set(d.employeeId, { points: 0, projects: new Set() });
+    const mItem = mSub.get(d.employeeId)!;
+    mItem.points += d.points;
+    mItem.projects.add(d.projectName);
+
+    // 季度累计
+    if (!quarterMap.has(quarter)) quarterMap.set(quarter, new Map());
+    const qSub = quarterMap.get(quarter)!;
+    if (!qSub.has(d.employeeId)) qSub.set(d.employeeId, { points: 0, projects: new Set() });
+    const qItem = qSub.get(d.employeeId)!;
+    qItem.points += d.points;
+    qItem.projects.add(d.projectName);
+
+    // 年度累计
+    if (!yearMap.has(year)) yearMap.set(year, new Map());
+    const ySub = yearMap.get(year)!;
+    if (!ySub.has(d.employeeId)) ySub.set(d.employeeId, { points: 0, projects: new Set() });
+    const yItem = ySub.get(d.employeeId)!;
+    yItem.points += d.points;
+    yItem.projects.add(d.projectName);
+  }
+
+  // 评选月度之星（每个月前 1-2 名）
+  const monthlyStars: HonorStar[] = [];
+  const sortedMonths = Array.from(monthMap.keys()).sort().reverse();
+  for (const month of sortedMonths) {
+    const mSub = monthMap.get(month)!;
+    const sorted = Array.from(mSub.entries()).sort((a, b) => b[1].points - a[1].points);
+    const topList = sorted.slice(0, Math.min(2, sorted.length));
+    topList.forEach(([empId, data], idx) => {
+      const info = empMap.get(empId) || { name: empId, dept: '部门', group: '', pos: '' };
+      const [y, m] = month.split('-');
+      const title = y && m ? `${y}年${parseInt(m, 10)}月 · 月度之星` : `${month} · 月度之星`;
+      monthlyStars.push({
+        category: 'monthly',
+        title,
+        period: month,
+        employeeId: empId,
+        employeeName: info.name,
+        department: info.dept,
+        group: info.group,
+        position: info.pos,
+        points: data.points,
+        wan: Number((data.points / 10000).toFixed(4)),
+        projectCount: data.projects.size,
+        topProjects: Array.from(data.projects).slice(0, 3),
+        badge: idx === 0 ? '🌟 月度领跑之星' : '⭐ 月度进取之星',
+        rank: idx + 1,
+        reason: `在 ${month} 周期内斩获 ${(data.points / 100).toFixed(2)} 绩点，深度参与 ${data.projects.size} 项核心项目任务，履职交付成果显著。`,
+      });
+    });
+  }
+
+  // 评选季度之星（每个季度前 1-3 名）
+  const quarterlyStars: HonorStar[] = [];
+  const sortedQuarters = Array.from(quarterMap.keys()).sort().reverse();
+  for (const q of sortedQuarters) {
+    const qSub = quarterMap.get(q)!;
+    const sorted = Array.from(qSub.entries()).sort((a, b) => b[1].points - a[1].points);
+    const topList = sorted.slice(0, Math.min(3, sorted.length));
+    topList.forEach(([empId, data], idx) => {
+      const info = empMap.get(empId) || { name: empId, dept: '部门', group: '', pos: '' };
+      const badges = ['🏆 季度卓越之星', '🥈 季度攻坚标兵', '🥉 季度实干先锋'];
+      quarterlyStars.push({
+        category: 'quarterly',
+        title: `${q} · 季度之星`,
+        period: q,
+        employeeId: empId,
+        employeeName: info.name,
+        department: info.dept,
+        group: info.group,
+        position: info.pos,
+        points: data.points,
+        wan: Number((data.points / 10000).toFixed(4)),
+        projectCount: data.projects.size,
+        topProjects: Array.from(data.projects).slice(0, 3),
+        badge: badges[idx] || '🎖️ 季度标兵',
+        rank: idx + 1,
+        reason: `整个 ${q} 季度持续攻坚，累计贡献 ${(data.points / 100).toFixed(2)} 绩点，位列季度绩效排名前列。`,
+      });
+    });
+  }
+
+  // 评选年度之星（每个年度综合排名前 3 名）
+  const annualStars: HonorStar[] = [];
+  const sortedYears = Array.from(yearMap.keys()).sort().reverse();
+  for (const yr of sortedYears) {
+    const ySub = yearMap.get(yr)!;
+    const sorted = Array.from(ySub.entries()).sort((a, b) => b[1].points - a[1].points);
+    const topList = sorted.slice(0, Math.min(3, sorted.length));
+    topList.forEach(([empId, data], idx) => {
+      const info = empMap.get(empId) || { name: empId, dept: '部门', group: '', pos: '' };
+      const badges = ['👑 年度功勋领航之星', '💎 年度卓越领航之星', '🏅 年度杰出贡献之星'];
+      annualStars.push({
+        category: 'annual',
+        title: `${yr}年度 · 领航之星`,
+        period: yr,
+        employeeId: empId,
+        employeeName: info.name,
+        department: info.dept,
+        group: info.group,
+        position: info.pos,
+        points: data.points,
+        wan: Number((data.points / 10000).toFixed(4)),
+        projectCount: data.projects.size,
+        topProjects: Array.from(data.projects).slice(0, 4),
+        badge: badges[idx] || '👑 年度之星',
+        rank: idx + 1,
+        reason: `${yr}年度累计斩获 ${(data.points / 100).toFixed(2)} 总绩点，领跑全团队项目交付，以卓越贡献树立年度标杆！`,
+      });
+    });
+  }
+
+  return {
+    monthlyStars,
+    quarterlyStars,
+    annualStars,
+  };
 }
 

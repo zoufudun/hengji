@@ -5,6 +5,7 @@ import {
   ArrowUpDown,
   BarChart3,
   BriefcaseBusiness,
+  Building2,
   Calculator,
   CalendarRange,
   Check,
@@ -29,6 +30,7 @@ import {
   LayoutGrid,
   ListFilter,
   LogOut,
+  Package,
   Pencil,
   Plus,
   RotateCcw,
@@ -143,6 +145,7 @@ import {
   type ProjectQuotaStageType,
   type PlanEntry,
   type MonthProjectAllocRow,
+  type WorkspaceType,
   MAINTENANCE_QUOTA_RATE,
   BIDDING_MAX_RATE,
   BIDDING_DEFAULT_RATE,
@@ -150,6 +153,7 @@ import {
   getMonthProjectsAllocPerspective,
   exportProjectMeritPackage,
   exportProjectMeritPackageJson,
+  exportProjectManagerBundleJson,
   parseProjectMeritPackage,
   summarizeAuditorPackages,
   summarizeCurrentStateForAuditor,
@@ -289,10 +293,23 @@ function sanitizeState(s: State): State {
 
 function WorkspaceGate({ hasLegacyData, onReady, onError }: {
   hasLegacyData: boolean;
-  onReady(data: { name: string; revision: number; actorId: string; state: State; projectGroups: ProjectGroup[]; filePath: string }): void;
+  onReady(data: {
+    name: string;
+    revision: number;
+    actorId: string;
+    workspaceType?: WorkspaceType;
+    ownerEmployeeId?: string;
+    ownerEmployeeName?: string;
+    state: State;
+    projectGroups: ProjectGroup[];
+    filePath: string;
+  }): void;
   onError(message: string): void;
 }) {
   const [mode, setMode] = useState<'home' | 'create' | 'open'>('home');
+  const [workspaceType, setWorkspaceType] = useState<WorkspaceType>('general');
+  const [ownerEmployeeId, setOwnerEmployeeId] = useState('');
+  const [ownerEmployeeName, setOwnerEmployeeName] = useState('');
   const [name, setName] = useState('衡绩工作区');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -325,6 +342,17 @@ function WorkspaceGate({ hasLegacyData, onReady, onError }: {
       setErrorMsg('请填写工作区名称');
       return;
     }
+
+    if (workspaceType === 'project_manager' && !ownerEmployeeName.trim()) {
+      setErrorMsg('请配置该工作区绑定的项目负责人姓名');
+      return;
+    }
+
+    if (workspaceType === 'auditor' && !ownerEmployeeName.trim()) {
+      setErrorMsg('请配置该工作区绑定的绩效核算员姓名');
+      return;
+    }
+
     const pwd = password.trim();
     const confirmPwd = confirmPassword.trim();
     if (pwd && confirmPwd && pwd !== confirmPwd) {
@@ -346,14 +374,59 @@ function WorkspaceGate({ hasLegacyData, onReady, onError }: {
       role: 'admin',
       active: true,
     };
-    const employees = base?.employees?.length ? base.employees : [defaultAdmin];
-    const initial: State = { employees: structuredClone(employees), projects: [], plans: [], audit: [] };
+    const employees = base?.employees?.length ? structuredClone(base.employees) : [defaultAdmin];
+
+    // 如果是项目负责人工作区，确保该负责人在员工列表中
+    let finalOwnerId = ownerEmployeeId.trim();
+    const finalOwnerName = ownerEmployeeName.trim();
+    if (workspaceType === 'project_manager' && finalOwnerName) {
+      if (!finalOwnerId) finalOwnerId = `pm_${Date.now().toString().slice(-4)}`;
+      const existing = employees.find(e => e.id === finalOwnerId || e.name === finalOwnerName);
+      if (!existing) {
+        employees.push({
+          id: finalOwnerId,
+          name: finalOwnerName,
+          department: '研发中心',
+          position: '项目负责人',
+          role: 'member',
+          email: `${finalOwnerId}@local`,
+          active: true,
+        });
+      } else {
+        finalOwnerId = existing.id;
+      }
+    }
+
+    // 如果是绩效核算员工作区，确保该核算员在员工列表中并标记 role: 'auditor'
+    if (workspaceType === 'auditor' && finalOwnerName) {
+      if (!finalOwnerId) finalOwnerId = `aud_${Date.now().toString().slice(-4)}`;
+      const existing = employees.find(e => e.id === finalOwnerId || e.name === finalOwnerName);
+      if (!existing) {
+        employees.push({
+          id: finalOwnerId,
+          name: finalOwnerName,
+          department: '综合管理部',
+          position: '绩效核算员',
+          role: 'auditor',
+          email: `${finalOwnerId}@local`,
+          active: true,
+        });
+      } else {
+        existing.role = 'auditor';
+        finalOwnerId = existing.id;
+      }
+    }
+
+    const initial: State = { employees, projects: [], plans: [], audit: [] };
     try {
       setBusy(true);
       if (typeof window !== 'undefined' && window.meritDesktop?.create) {
         const result = await window.meritDesktop.create({
           name: trimmedName,
           password: pwd,
+          workspaceType,
+          ownerEmployeeId: finalOwnerId,
+          ownerEmployeeName: finalOwnerName,
           state: initial,
           projectGroups: base?.projectGroups || []
         });
@@ -363,11 +436,21 @@ function WorkspaceGate({ hasLegacyData, onReady, onError }: {
       } else {
         // 浏览器环境免密备用存储
         const rev = 1;
-        localStorage.setItem('merit_desktop_state', JSON.stringify({ revision: rev, actorId: 'admin', state: initial }));
+        localStorage.setItem('merit_desktop_state', JSON.stringify({
+          revision: rev,
+          actorId: finalOwnerId || 'admin',
+          workspaceType,
+          ownerEmployeeId: finalOwnerId,
+          ownerEmployeeName: finalOwnerName,
+          state: initial,
+        }));
         onReady({
           name: trimmedName,
           revision: rev,
-          actorId: 'admin',
+          actorId: finalOwnerId || 'admin',
+          workspaceType,
+          ownerEmployeeId: finalOwnerId,
+          ownerEmployeeName: finalOwnerName,
           state: initial,
           projectGroups: base?.projectGroups || [],
           filePath: '本地存储 (Web LocalStorage)'
@@ -430,10 +513,195 @@ function WorkspaceGate({ hasLegacyData, onReady, onError }: {
         <button className="secondary large" onClick={importBase}><Users size={18}/>从共享基础库新建</button>
       </div>}
       {mode === 'create' && <div className="workspace-form">
-        <Field label="工作区名称"><input autoFocus value={name} onChange={event => { setName(event.target.value); setErrorMsg(''); }} placeholder="例如：第四研究室 2026 年绩点"/></Field>
+        <div style={{ marginBottom: '14px' }}>
+          <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '8px' }}>
+            工作区类型与应用场景
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+            <div
+              style={{
+                border: `2px solid ${workspaceType === 'project_manager' ? '#0284c7' : '#e2e8f0'}`,
+                background: workspaceType === 'project_manager' ? '#f0f9ff' : '#ffffff',
+                borderRadius: '10px',
+                padding: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+              onClick={() => {
+                setWorkspaceType('project_manager');
+                if (ownerEmployeeName) setName(`${ownerEmployeeName}负责的项目工作区`);
+                else setName('项目负责人专职工作区');
+                setErrorMsg('');
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#0369a1', fontSize: '13px' }}>
+                <BriefcaseBusiness size={16} />
+                🎯 项目负责人工作区
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '4px', lineHeight: 1.4 }}>
+                专属于指定项目负责人，仅该负责人能分配并一键导出全部数据包发给核算员。
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: `2px solid ${workspaceType === 'auditor' ? '#059669' : '#e2e8f0'}`,
+                background: workspaceType === 'auditor' ? '#f0fdf4' : '#ffffff',
+                borderRadius: '10px',
+                padding: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+              onClick={() => {
+                setWorkspaceType('auditor');
+                setName('部门绩效核算与汇总工作区');
+                setErrorMsg('');
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#047857', fontSize: '13px' }}>
+                <Calculator size={16} />
+                📊 绩效核算员工作区
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '4px', lineHeight: 1.4 }}>
+                导入各负责人提交的项目数据包，汇总部门全员绩点、合同大盘与月/季/年度之星。
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: `2px solid ${workspaceType === 'general' ? '#475569' : '#e2e8f0'}`,
+                background: workspaceType === 'general' ? '#f8fafc' : '#ffffff',
+                borderRadius: '10px',
+                padding: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+              onClick={() => {
+                setWorkspaceType('general');
+                setName('衡绩通用管理工作区');
+                setErrorMsg('');
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#334155', fontSize: '13px' }}>
+                <Building2 size={16} />
+                🏢 综合管理员工作区
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '4px', lineHeight: 1.4 }}>
+                全功能综合工作区，适用于超级管理员统一全局配置、团队花名册与基准库维护。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 若为项目负责人工作区：配置负责人 */}
+        {workspaceType === 'project_manager' && (
+          <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px', padding: '14px', marginBottom: '14px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#0369a1', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <ShieldCheck size={16} />
+              配置工作区绑定的项目负责人（仅该负责人能查看和分配）
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: base?.employees?.length ? '1fr 1fr' : '1fr 1fr', gap: '10px' }}>
+              {base?.employees?.length ? (
+                <Field label="从基础库选择项目负责人">
+                  <select
+                    value={ownerEmployeeId}
+                    onChange={e => {
+                      const emp = base.employees.find(x => x.id === e.target.value);
+                      setOwnerEmployeeId(e.target.value);
+                      if (emp) {
+                        setOwnerEmployeeName(emp.name);
+                        setName(`${emp.name}负责的项目工作区`);
+                      }
+                      setErrorMsg('');
+                    }}
+                  >
+                    <option value="">-- 请选择负责人 --</option>
+                    {base.employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} ({emp.department} - {emp.position || '成员'})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              ) : null}
+              <Field label="负责人姓名">
+                <input
+                  value={ownerEmployeeName}
+                  onChange={e => {
+                    setOwnerEmployeeName(e.target.value);
+                    if (e.target.value) setName(`${e.target.value}负责的项目工作区`);
+                    setErrorMsg('');
+                  }}
+                  placeholder="如：王项目经理"
+                />
+              </Field>
+              <Field label="负责人工号 / ID (选填)">
+                <input
+                  value={ownerEmployeeId}
+                  onChange={e => { setOwnerEmployeeId(e.target.value); setErrorMsg(''); }}
+                  placeholder="如：emp_01 或留空自动生成"
+                />
+              </Field>
+            </div>
+          </div>
+        )}
+
+        {/* 若为核算员工作区：配置核算员 */}
+        {workspaceType === 'auditor' && (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '14px', marginBottom: '14px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#047857', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <ShieldCheck size={16} />
+              配置工作区绑定的绩效核算员
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: base?.employees?.length ? '1fr 1fr' : '1fr 1fr', gap: '10px' }}>
+              {base?.employees?.length ? (
+                <Field label="从基础库选择核算员">
+                  <select
+                    value={ownerEmployeeId}
+                    onChange={e => {
+                      const emp = base.employees.find(x => x.id === e.target.value);
+                      setOwnerEmployeeId(e.target.value);
+                      if (emp) {
+                        setOwnerEmployeeName(emp.name);
+                        setName(`${emp.name}的绩效核算汇总工作区`);
+                      }
+                      setErrorMsg('');
+                    }}
+                  >
+                    <option value="">-- 请选择核算员 --</option>
+                    {base.employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} ({emp.department} - {emp.role === 'auditor' ? '核算员' : emp.position || '成员'})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              ) : null}
+              <Field label="核算员姓名">
+                <input
+                  value={ownerEmployeeName}
+                  onChange={e => {
+                    setOwnerEmployeeName(e.target.value);
+                    setErrorMsg('');
+                  }}
+                  placeholder="如：李核算"
+                />
+              </Field>
+              <Field label="核算员工号 / ID (选填)">
+                <input
+                  value={ownerEmployeeId}
+                  onChange={e => { setOwnerEmployeeId(e.target.value); setErrorMsg(''); }}
+                  placeholder="如：aud_01 或留空自动生成"
+                />
+              </Field>
+            </div>
+          </div>
+        )}
+
+        <Field label="工作区名称"><input autoFocus value={name} onChange={event => { setName(event.target.value); setErrorMsg(''); }} placeholder="例如：张主管负责的项目工作区"/></Field>
         {base && <div className="safe-note green"><Check size={16}/>已载入 {base.employees.length} 名员工及其专业组信息；不包含常用项目组、项目、工作内容或绩点。</div>}
         <div className="workspace-passwords">
-          <Field label="管理员口令 (选填)" hint="若需安全防窥可设置口令；留空则创建免密工作区">
+          <Field label="安全访问口令 (选填)" hint="若需安全防窥可设置口令；留空则创建免密工作区">
             <input type="password" value={password} onChange={event => { setPassword(event.target.value); setErrorMsg(''); }} placeholder="选填，留空则免密直接使用"/>
           </Field>
           <Field label="确认口令" hint="未设口令时无需输入">
@@ -492,6 +760,9 @@ function WorkspaceGate({ hasLegacyData, onReady, onError }: {
 export default function DesktopWorkspace() {
   const [state, setState] = useState<State | null>(null);
   const [workspaceName, setWorkspaceName] = useState('');
+  const [workspaceType, setWorkspaceType] = useState<WorkspaceType>('general');
+  const [ownerEmployeeId, setOwnerEmployeeId] = useState('');
+  const [ownerEmployeeName, setOwnerEmployeeName] = useState('');
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [hasLegacyData, setHasLegacyData] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -536,6 +807,9 @@ export default function DesktopWorkspace() {
           const cleanState = sanitizeState(parsed.state);
           setState(cleanState);
           setRevision(parsed.revision || 1);
+          setWorkspaceType(parsed.workspaceType || 'general');
+          setOwnerEmployeeId(parsed.ownerEmployeeId || '');
+          setOwnerEmployeeName(parsed.ownerEmployeeName || '');
           setActorId(parsed.actorId === 'admin' && !cleanState.employees.some(e => e.id === 'admin') ? (cleanState.employees.find(e => e.role === 'admin')?.id || 'emp_01') : (parsed.actorId || 'emp_01'));
         } else {
           const init = sanitizeState(demoState());
@@ -549,12 +823,40 @@ export default function DesktopWorkspace() {
     }
   }, []);
 
-  function applyWorkspace(data: { name: string; revision: number; actorId: string; state: State; projectGroups: ProjectGroup[]; filePath: string }) {
+  function applyWorkspace(data: {
+    name: string;
+    revision: number;
+    actorId: string;
+    workspaceType?: WorkspaceType;
+    ownerEmployeeId?: string;
+    ownerEmployeeName?: string;
+    state: State;
+    projectGroups: ProjectGroup[];
+    filePath: string;
+  }) {
     const cleanState = sanitizeState(data.state);
-    const adminId = cleanState.employees.find(employee => employee.role === 'admin' && employee.active)?.id || cleanState.employees[0]?.id || 'admin';
+    const wsType = data.workspaceType || 'general';
+    setWorkspaceType(wsType);
+    setOwnerEmployeeId(data.ownerEmployeeId || '');
+    setOwnerEmployeeName(data.ownerEmployeeName || '');
+
+    let chosenActorId = data.actorId;
+    // 如果是项目负责人工作区，自动优先以项目负责人身份进入
+    if (wsType === 'project_manager' && data.ownerEmployeeId) {
+      const pm = cleanState.employees.find(e => e.id === data.ownerEmployeeId);
+      if (pm) chosenActorId = pm.id;
+    } else if (wsType === 'auditor') {
+      const aud = cleanState.employees.find(e => (e.role === 'auditor' || e.id === data.ownerEmployeeId) && e.active);
+      if (aud) chosenActorId = aud.id;
+      setTab('auditor');
+    } else {
+      const adminId = cleanState.employees.find(employee => employee.role === 'admin' && employee.active)?.id || cleanState.employees[0]?.id || 'admin';
+      chosenActorId = adminId;
+    }
+
     setState(cleanState);
     setRevision(data.revision);
-    setActorId(adminId);
+    setActorId(chosenActorId);
     setProjectGroups(Array.isArray(data.projectGroups) ? data.projectGroups : []);
     setDataFile(data.filePath);
     setWorkspaceName(data.name);
@@ -563,13 +865,29 @@ export default function DesktopWorkspace() {
   async function persist(next: State, message: string, groups = projectGroups) {
     validate(next);
     if (typeof window !== 'undefined' && window.meritDesktop?.save) {
-      const saved = await window.meritDesktop.save({ name: workspaceName, revision, actorId, state: next, projectGroups: groups });
+      const saved = await window.meritDesktop.save({
+        name: workspaceName,
+        revision,
+        actorId,
+        workspaceType,
+        ownerEmployeeId,
+        ownerEmployeeName,
+        state: next,
+        projectGroups: groups,
+      });
       setState(saved.state);
       setRevision(saved.revision);
       setDataFile(saved.filePath);
     } else {
       const nextRev = revision + 1;
-      localStorage.setItem('merit_desktop_state', JSON.stringify({ revision: nextRev, actorId, state: next }));
+      localStorage.setItem('merit_desktop_state', JSON.stringify({
+        revision: nextRev,
+        actorId,
+        workspaceType,
+        ownerEmployeeId,
+        ownerEmployeeName,
+        state: next,
+      }));
       setState(next);
       setRevision(nextRev);
     }
@@ -621,6 +939,26 @@ export default function DesktopWorkspace() {
       setNotice(`✅ 已成功导出【${p.name}】绩点分配数据包！请将此数据包发给核算员进行全员汇总。`);
     } catch (err: any) {
       setNotice(`❌ 导出数据包失败：${err.message}`);
+    }
+  };
+
+  // 一键直接导出项目负责人名下全部项目数据包集合 (ProjectManagerBundle)
+  const handleExportManagerAllPackages = async (targetManagerId?: string) => {
+    if (!state) return;
+    const mId = targetManagerId || (workspaceType === 'project_manager' && ownerEmployeeId ? ownerEmployeeId : currentActor.id);
+    const manager = state.employees.find(e => e.id === mId) || currentActor;
+    const myProjects = state.projects.filter(p => p.owner === mId || p.owner === manager.name);
+    if (myProjects.length === 0) {
+      setNotice(`【${manager.name}】名下暂无管理的任何项目。`);
+      return;
+    }
+    try {
+      const bundleJson = exportProjectManagerBundleJson(state, mId, currentActor);
+      const filename = `【项目负责人合包】${manager.name}_负责的全部项目数据包_${new Date().toISOString().slice(0, 10)}.json`;
+      await triggerDownload(bundleJson, filename, 'application/json;charset=utf-8');
+      setNotice(`✅ 已成功一键导出【${manager.name}】管理的全部 ${myProjects.length} 个项目数据包！请直接发给核算员导入。`);
+    } catch (err: any) {
+      setNotice(`❌ 一键导出失败: ${err.message || '未知错误'}`);
     }
   };
 
@@ -789,10 +1127,25 @@ export default function DesktopWorkspace() {
       <main>
         <header className="topbar">
           <div>
-            <span className="eyebrow">MERIT EVALUATION SYSTEM</span>
-            <strong>{tab === 'auditor' ? '全项目全员绩点汇总' : nav.find(item => item.key === tab)?.label}</strong>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+              <span className="eyebrow" style={{ margin: 0 }}>MERIT EVALUATION SYSTEM</span>
+              {workspaceType === 'project_manager' ? (
+                <span style={{ background: '#e0f2fe', color: '#0369a1', fontSize: '11px', padding: '1px 8px', borderRadius: '10px', border: '1px solid #7dd3fc', fontWeight: 600 }}>
+                  🎯 项目负责人工作区 {ownerEmployeeName ? `· 【${ownerEmployeeName}】` : ''}
+                </span>
+              ) : workspaceType === 'auditor' ? (
+                <span style={{ background: '#ecfdf5', color: '#047857', fontSize: '11px', padding: '1px 8px', borderRadius: '10px', border: '1px solid #6ee7b7', fontWeight: 600 }}>
+                  📊 绩效核算员工作区 {ownerEmployeeName ? `· 【${ownerEmployeeName}】` : ''}
+                </span>
+              ) : (
+                <span style={{ background: '#f1f5f9', color: '#475569', fontSize: '11px', padding: '1px 8px', borderRadius: '10px', border: '1px solid #cbd5e1', fontWeight: 600 }}>
+                  🏢 综合管理工作区
+                </span>
+              )}
+            </div>
+            <strong>{tab === 'auditor' ? '全项目全员绩点汇总中心' : nav.find(item => item.key === tab)?.label}</strong>
           </div>
-          <div className="operator" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="operator" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <div
               className="user-profile-badge clickable"
               title="点击修改系统管理员或切换身份"
@@ -813,9 +1166,37 @@ export default function DesktopWorkspace() {
                 </div>
               </div>
             </div>
+            {(isManager || workspaceType === 'project_manager') && (
+              <button
+                className="secondary"
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '12.5px',
+                  gap: '5px',
+                  background: '#ecfdf5',
+                  color: '#065f46',
+                  borderColor: '#a7f3d0',
+                  fontWeight: 600,
+                }}
+                onClick={() => handleExportManagerAllPackages()}
+                title="一键打包导出我负责的所有项目分配绩点数据包（合并为一个总包发给核算员）"
+              >
+                <Package size={14} color="#059669" />
+                📦 一键导出我负责的项目数据包
+              </button>
+            )}
             <button className="secondary" style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }} onClick={async () => {
               if (!state) return;
-              const saved = await window.meritDesktop.saveAs({ name: workspaceName, revision, actorId, state, projectGroups });
+              const saved = await window.meritDesktop.saveAs({
+                name: workspaceName,
+                revision,
+                actorId,
+                workspaceType,
+                ownerEmployeeId,
+                ownerEmployeeName,
+                state,
+                projectGroups,
+              });
               if (saved) { setRevision(saved.revision); setDataFile(saved.filePath); setNotice('工作区已另存为新文件'); }
             }}><Save size={14}/>工作区另存为</button>
             <button className="secondary" style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }} onClick={async () => {
@@ -875,6 +1256,7 @@ export default function DesktopWorkspace() {
                 await command('project.batchConfigureTeam', { projectIds, members, defaultRates, owner: ownerId }, `已成功为 ${projectIds.length} 个项目批量配置项目成员与默认分配比例`);
               }}
               onExportPackage={handleExportProjectPackage}
+              onExportManagerAllPackages={handleExportManagerAllPackages}
             />
           )}
           {tab === 'plans' && (
@@ -1919,7 +2301,7 @@ function BatchProjectTeamModal({
 // -------------------------------------------------------------
 // 2. Projects View (项目库与额度管理：支持多样式布局阅览、删除、多维排序与筛选)
 // -------------------------------------------------------------
-function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups = [], onAdd, onEdit, onDelete, onBatchDelete, onViewDetail, onOpenQuotaSchedule, onArchive, onImportProjects, onBatchConfigureTeam, onExportPackage }: {
+function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups = [], onAdd, onEdit, onDelete, onBatchDelete, onViewDetail, onOpenQuotaSchedule, onArchive, onImportProjects, onBatchConfigureTeam, onExportPackage, onExportManagerAllPackages }: {
   state: State;
   isAdmin: boolean;
   isManager: boolean;
@@ -1935,6 +2317,7 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
   onImportProjects(projects: any[]): Promise<void>;
   onBatchConfigureTeam?(projectIds: string[], members: string[], defaultRates: Record<string, number>, ownerId?: string): Promise<void>;
   onExportPackage?(projectId: string): void;
+  onExportManagerAllPackages?(managerId?: string): void;
 }) {
   const [filter, setFilter] = useState<'all' | 'active' | 'archived'>('all');
   const [quotaFilter, setQuotaFilter] = useState<'all' | 'full' | 'partial' | 'zero'>('all');
@@ -2076,6 +2459,25 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
             {isAdmin && (
               <button className="secondary" onClick={() => prjCsvInputRef.current?.click()}>
                 <Upload size={15} />导入项目合同(CSV格式)
+              </button>
+            )}
+            {onExportManagerAllPackages && (
+              <button
+                className="secondary"
+                style={{
+                  color: '#065f46',
+                  background: '#ecfdf5',
+                  borderColor: '#a7f3d0',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onClick={() => onExportManagerAllPackages()}
+                title="一键直接导出我负责的所有项目数据包（合并为一个总包发给核算员导入）"
+              >
+                <Package size={15} color="#059669" />
+                📦 一键导出我负责的所有项目数据包
               </button>
             )}
             {isAdmin && (

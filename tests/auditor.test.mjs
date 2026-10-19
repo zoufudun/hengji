@@ -15,6 +15,11 @@ import {
   exportAuditorMatrixCsv,
   exportAuditorDetailsCsv,
   exportAuditorFullBundleJson,
+  exportProjectManagerBundle,
+  exportProjectManagerBundleJson,
+  parseMeritPackageOrBundle,
+  calculateDepartmentContracts,
+  calculateHonorStars,
 } from '../lib/core.ts';
 
 test('核算员与管理员角色权限校验', () => {
@@ -207,3 +212,101 @@ test('核算员从当前系统 State 一键全量汇总', () => {
   assert.ok(summary.projectSummaries.length > 0);
   assert.ok(summary.matrix.rows.length > 0);
 });
+
+test('项目负责人管理多个项目：一键导出名下全部项目数据包集合 (ProjectManagerBundle) 与智能导入', () => {
+  const state = demoState();
+  const manager = {
+    id: 'emp_pm_099',
+    name: '周项目',
+    department: '智能网联部',
+    role: 'member',
+    active: true,
+  };
+  state.employees.push(manager);
+
+  // 模拟该项目负责人管理 2 个项目
+  const p1 = {
+    id: 'prj_m_01',
+    code: 'M-01',
+    name: '自主无人机机载飞控系统',
+    client: '航天科工',
+    contract: 150_000_000,
+    owner: manager.id,
+    start: '2026-01',
+    end: '2026-12',
+    status: 'active',
+    members: [manager.id, state.employees[1].id],
+  };
+  const p2 = {
+    id: 'prj_m_02',
+    code: 'M-02',
+    name: '多模态任务载荷软件研制',
+    client: '中航工业',
+    contract: 250_000_000,
+    owner: manager.id,
+    start: '2026-02',
+    end: '2026-10',
+    status: 'active',
+    members: [manager.id, state.employees[2].id],
+  };
+  state.projects.push(p1, p2);
+
+  // 添加月度分配
+  state.plans.push({
+    id: 'plan_m1',
+    projectId: p1.id,
+    month: '2026-03',
+    budget: 800,
+    status: 'published',
+    note: '方案设计阶段',
+    entries: [{ employeeId: manager.id, rate: 10000, workContent: '总体方案设计' }],
+  });
+  state.plans.push({
+    id: 'plan_m2',
+    projectId: p2.id,
+    month: '2026-03',
+    budget: 1200,
+    status: 'published',
+    note: '关键算法突破',
+    entries: [{ employeeId: manager.id, rate: 6000, workContent: '核心算法研发' }, { employeeId: state.employees[2].id, rate: 4000, workContent: '仿真测试' }],
+  });
+
+  // 1. 项目负责人一键导出自己负责的所有数据包合包
+  const bundle = exportProjectManagerBundle(state, manager.id, manager);
+  assert.equal(bundle.format, 'hengji-pm-merit-bundle');
+  assert.equal(bundle.managerId, manager.id);
+  assert.equal(bundle.projectCount, 2);
+  assert.equal(bundle.packages.length, 2);
+  assert.ok(bundle.totalContractWan > 0);
+  assert.ok(bundle.totalAllocatedPoints > 0);
+
+  // 2. 导出 JSON 并使用 parseMeritPackageOrBundle 智能解包
+  const bundleJson = exportProjectManagerBundleJson(state, manager.id, manager);
+  const unpackedPkgs = parseMeritPackageOrBundle(bundleJson);
+  assert.equal(unpackedPkgs.length, 2);
+  assert.equal(unpackedPkgs[0].project.ownerName, manager.name);
+  assert.equal(unpackedPkgs[1].project.ownerName, manager.name);
+
+  // 3. 核算员将此合包与其他单包混合自动汇总
+  const summary = summarizeAuditorPackages(unpackedPkgs, state.employees);
+  assert.equal(summary.projectSummaries.length, 2);
+  assert.ok(summary.employeeSummaries.some(e => e.id === manager.id));
+
+  // 4. 测试全部门合同额度汇总
+  const deptContracts = calculateDepartmentContracts(summary);
+  assert.equal(deptContracts.totalProjects, 2);
+  assert.equal(deptContracts.totalContractWan, bundle.totalContractWan);
+  assert.ok(deptContracts.totalAllocatedWan > 0);
+  assert.ok(deptContracts.totalRemainingWan > 0);
+  assert.ok(deptContracts.overallAllocatedRateBps > 0);
+
+  // 5. 测试荣誉之星评选（月度之星、季度之星、年度之星）
+  const stars = calculateHonorStars(summary);
+  assert.ok(stars.monthlyStars.length > 0);
+  assert.ok(stars.quarterlyStars.length > 0);
+  assert.ok(stars.annualStars.length > 0);
+  // manager 绩效突出，应入选荣誉之星
+  assert.ok(stars.monthlyStars.some(s => s.employeeId === manager.id));
+  assert.ok(stars.annualStars.some(s => s.employeeId === manager.id));
+});
+

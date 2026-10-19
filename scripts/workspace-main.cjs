@@ -24,7 +24,16 @@ function atomicWrite(filePath, content) {
 function saveSession(payload) {
   if (!session) throw new Error('尚未打开工作区');
   if (payload.revision !== session.revision) throw new Error('工作区已在其他操作中更新，请重新打开');
-  const next = { name: cleanName(payload.name || session.name), revision: session.revision + 1, actorId: payload.actorId || 'admin', state: payload.state, projectGroups: Array.isArray(payload.projectGroups) ? payload.projectGroups : [] };
+  const next = {
+    name: cleanName(payload.name || session.name),
+    revision: session.revision + 1,
+    actorId: payload.actorId || 'admin',
+    workspaceType: payload.workspaceType || session.workspaceType || 'general',
+    ownerEmployeeId: payload.ownerEmployeeId || session.ownerEmployeeId || '',
+    ownerEmployeeName: payload.ownerEmployeeName || session.ownerEmployeeName || '',
+    state: payload.state,
+    projectGroups: Array.isArray(payload.projectGroups) ? payload.projectGroups : []
+  };
   const backup = `${session.filePath}.backup`;
   if (fs.existsSync(session.filePath)) fs.copyFileSync(session.filePath, backup);
   atomicWrite(session.filePath, encryptWorkspace(next, session.password));
@@ -34,7 +43,18 @@ function saveSession(payload) {
 
 function publicSession() {
   if (!session) return { open: false };
-  return { open: true, name: session.name, revision: session.revision, actorId: session.actorId, state: session.state, projectGroups: session.projectGroups || [], filePath: session.filePath };
+  return {
+    open: true,
+    name: session.name,
+    revision: session.revision,
+    actorId: session.actorId,
+    workspaceType: session.workspaceType || 'general',
+    ownerEmployeeId: session.ownerEmployeeId || '',
+    ownerEmployeeName: session.ownerEmployeeName || '',
+    state: session.state,
+    projectGroups: session.projectGroups || [],
+    filePath: session.filePath
+  };
 }
 
 function restoreFocus(win) {
@@ -104,6 +124,9 @@ app.whenReady().then(() => {
       name: cleanName(decoded.name || path.basename(filePath, '.hengji')),
       revision: decoded.revision || 0,
       actorId: decoded.actorId || 'admin',
+      workspaceType: decoded.workspaceType || 'general',
+      ownerEmployeeId: decoded.ownerEmployeeId || '',
+      ownerEmployeeName: decoded.ownerEmployeeName || '',
       state: decoded.state,
       projectGroups: decoded.projectGroups || []
     };
@@ -128,6 +151,9 @@ app.whenReady().then(() => {
       name: cleanName(payload.name),
       revision: 1,
       actorId: 'admin',
+      workspaceType: payload.workspaceType || 'general',
+      ownerEmployeeId: payload.ownerEmployeeId || '',
+      ownerEmployeeName: payload.ownerEmployeeName || '',
       state: payload.state,
       projectGroups: payload.projectGroups || []
     };
