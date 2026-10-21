@@ -316,3 +316,178 @@ test('项目负责人管理多个项目：一键导出名下全部项目数据�
   assert.equal(allBundle.packages.length, state.projects.length);
 });
 
+test('【核心Bug修复】基于工号/唯一ID合并跨项目不同数据包中的同一组员，同名不同工号严格隔离，导出报表全量以万元为单位', () => {
+  // 模拟两个独立离线客户端生成的项目数据包：
+  // 负责人A本地生成的员工记录 uuid_A1，姓名="张工"，工号="1008"
+  // 负责人B本地生成的员工记录 uuid_B1，姓名="张工"，工号="1008" (不同离线库生成的不同UUID，但工号相同)
+  // 另外，负责人B本地还有另一位重名员工 uuid_B2，姓名="张工"，工号="2009" (同名不同工号，绝对不能合并)
+  const pkgA = {
+    packageType: 'project_merit_package',
+    version: '0.6.3',
+    exportedAt: '2026-10-21T09:00:00Z',
+    project: {
+      id: 'prj_alpha',
+      code: 'ALPHA-01',
+      name: '智能雷达研发',
+      contractWan: 100,
+      periodAllocatedWan: 10,
+      periodAllocatedPoints: 1000000,
+      remainingWan: 90,
+      ownerName: '赵总',
+    },
+    memberSummaries: [
+      {
+        employeeId: 'uuid_A1',
+        employeeNo: '1008',
+        name: '张工',
+        department: '技术部',
+        group: '雷达组',
+        position: '高级工程师',
+        totalPoints: 600000, // 0.6 万元
+        totalWan: 0.6,
+        ratioInProject: 60,
+      },
+    ],
+    details: [
+      {
+        projectId: 'prj_alpha',
+        projectCode: 'ALPHA-01',
+        projectName: '智能雷达研发',
+        month: '2026-03',
+        employeeId: 'uuid_A1',
+        employeeNo: '1008',
+        employeeName: '张工',
+        department: '技术部',
+        group: '雷达组',
+        position: '高级工程师',
+        rate: 6000,
+        points: 600000,
+        wan: 0.6,
+        workContent: '雷达天线仿真',
+      },
+    ],
+  };
+
+  const pkgB = {
+    packageType: 'project_merit_package',
+    version: '0.6.3',
+    exportedAt: '2026-10-21T09:30:00Z',
+    project: {
+      id: 'prj_beta',
+      code: 'BETA-02',
+      name: '微波射频模组研发',
+      contractWan: 80,
+      periodAllocatedWan: 8,
+      periodAllocatedPoints: 800000,
+      remainingWan: 72,
+      ownerName: '钱总',
+    },
+    memberSummaries: [
+      {
+        employeeId: 'uuid_B1',
+        employeeNo: '1008', // 相同工号，不同本地UUID
+        name: '张工',
+        department: '技术部',
+        group: '雷达组',
+        position: '高级工程师',
+        totalPoints: 500000, // 0.5 万元
+        totalWan: 0.5,
+        ratioInProject: 62.5,
+      },
+      {
+        employeeId: 'uuid_B2',
+        employeeNo: '2009', // 重名但工号不同
+        name: '张工',
+        department: '测试部',
+        group: '微波组',
+        position: '测试工程师',
+        totalPoints: 300000, // 0.3 万元
+        totalWan: 0.3,
+        ratioInProject: 37.5,
+      },
+    ],
+    details: [
+      {
+        projectId: 'prj_beta',
+        projectCode: 'BETA-02',
+        projectName: '微波射频模组研发',
+        month: '2026-03',
+        employeeId: 'uuid_B1',
+        employeeNo: '1008',
+        employeeName: '张工',
+        department: '技术部',
+        group: '雷达组',
+        position: '高级工程师',
+        rate: 5000,
+        points: 500000,
+        wan: 0.5,
+        workContent: '射频匹配调试',
+      },
+      {
+        projectId: 'prj_beta',
+        projectCode: 'BETA-02',
+        projectName: '微波射频模组研发',
+        month: '2026-03',
+        employeeId: 'uuid_B2',
+        employeeNo: '2009',
+        employeeName: '张工',
+        department: '测试部',
+        group: '微波组',
+        position: '测试工程师',
+        rate: 3000,
+        points: 300000,
+        wan: 0.3,
+        workContent: '高低温性能测试',
+      },
+    ],
+  };
+
+  // 核算员端全局员工花名册
+  const allEmployees = [
+    { id: 'master_1008', employeeNo: '1008', name: '张工', department: '技术部', group: '雷达组', position: '高级工程师', role: 'member', active: true },
+    { id: 'master_2009', employeeNo: '2009', name: '张工', department: '测试部', group: '微波组', position: '测试工程师', role: 'member', active: true },
+  ];
+
+  const summary = summarizeAuditorPackages([pkgA, pkgB], allEmployees);
+
+  // 1. 验证合并结果：工号 1008 的张工跨两个项目正确合并，总人数必须为 2 人（而不是 3 条不同记录）
+  assert.equal(summary.employeeSummaries.length, 2, '工号相同的张工必须合并，同名不同工号保持独立');
+
+  const emp1008 = summary.employeeSummaries.find(e => e.employeeNo === '1008');
+  assert.ok(emp1008, '必须存在工号1008的汇总记录');
+  assert.equal(emp1008.name, '张工');
+  assert.equal(emp1008.projectCount, 2, '工号1008参与了2个项目');
+  assert.equal(emp1008.totalPoints, 1100000, '总绩点为 600,000 + 500,000 = 1,100,000');
+  assert.equal(emp1008.totalWan, 1.1, '折合总万元为 1.1000 万元');
+
+  const emp2009 = summary.employeeSummaries.find(e => e.employeeNo === '2009');
+  assert.ok(emp2009, '必须存在工号2009的独立汇总记录');
+  assert.equal(emp2009.name, '张工');
+  assert.equal(emp2009.department, '测试部');
+  assert.equal(emp2009.projectCount, 1);
+  assert.equal(emp2009.totalPoints, 300000);
+  assert.equal(emp2009.totalWan, 0.3);
+
+  // 2. 验证透视矩阵：也必须按工号精确合并
+  assert.equal(summary.matrix.rows.length, 2);
+  const matrix1008 = summary.matrix.rows.find(r => r.employeeNo === '1008');
+  assert.ok(matrix1008);
+  assert.equal(matrix1008.rowTotalPoints, 1100000);
+
+  // 3. 验证 CSV 导出以“万”为单位且含工号
+  const empCsv = exportAuditorEmployeesCsv(summary);
+  assert.ok(empCsv.includes('工号'), '全员汇总CSV必须包含工号列');
+  assert.ok(empCsv.includes('累计获得总绩点(万元)'), '绩点必须明确标明为万元单位');
+  assert.ok(empCsv.includes('1.1000'), '工号1008的累计绩点必须格式化为1.1000万');
+  assert.ok(empCsv.includes('0.3000'), '工号2009的累计绩点必须格式化为0.3000万');
+
+  const matrixCsv = exportAuditorMatrixCsv(summary);
+  assert.ok(matrixCsv.includes('工号'), '矩阵CSV必须包含工号列');
+  assert.ok(matrixCsv.includes('1.1000'), '矩阵个人累加必须为1.1000万');
+
+  const detailsCsv = exportAuditorDetailsCsv(summary);
+  assert.ok(detailsCsv.includes('工号'), '明细流水CSV必须包含工号列');
+  assert.ok(detailsCsv.includes('0.6000'), '单笔明细获得绩点必须为0.6000万');
+});
+
+

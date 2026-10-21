@@ -1517,3 +1517,802 @@ tr:hover td { background: #fafcfb; }
 .owner-check.ref-warn{background:#fefce8;border-color:#fef08a;color:#854d0e}
 button:disabled{opacity:.55;cursor:not-allowed}
 
+/* ============================================================= */
+/* 新手 5 步操作引导与向导样式 (Onboarding Guide & Stepper)       */
+/* ============================================================= */
+
+/* 顶部栏新手引导高亮按钮 */
+.guide-nav-btn {
+  background: #f0fdf4 !important;
+  color: #15803d !important;
+  border-color: #86efac !important;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.guide-nav-btn:hover {
+  background: #dcfce7 !important;
+  border-color: #4ade80 !important;
+  color: #166534 !important;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.15);
+}
+
+/* 欢迎页新手引导入口卡片 */
+.guide-gate-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  border-radius: 9999px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 6px rgba(21, 128, 61, 0.08);
+}
+.guide-gate-trigger:hover {
+  background: #dcfce7;
+  border-color: #86efac;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(21, 128, 61, 0.15);
+}
+
+/* 总览看板：新手 5 步快速上手向导横幅 */
+.quick-guide-banner {
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #16a34a;
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-bottom: 22px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+}
+.quick-guide-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.guide-icon-tag {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #dcfce7;
+  color: #15803d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.guide-view-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.guide-view-all-btn:hover {
+  background: #f0fdfa;
+  border-color: #2dd4bf;
+  color: #115e59;
+}
+.quick-guide-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 1024px) {
+  .quick-guide-steps-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .quick-guide-steps-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.quick-guide-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+.quick-guide-card:hover {
+  border-color: #22c55e;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.12);
+  transform: translateY(-2px);
+}
+.quick-guide-card.active {
+  border-color: #16a34a;
+  background: #f0fdf4;
+}
+.guide-card-step-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 2px 7px;
+  border-radius: 6px;
+  display: inline-block;
+  margin-bottom: 6px;
+  width: fit-content;
+}
+.guide-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 4px;
+  line-height: 1.35;
+}
+.guide-card-desc {
+  font-size: 11.5px;
+  color: #64748b;
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+.guide-card-action {
+  font-size: 11px;
+  font-weight: 600;
+  color: #0f766e;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: auto;
+}
+
+/* 新手引导弹窗 Stepper 进度条 */
+.onboarding-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 8px 12px;
+  margin-bottom: 20px;
+  position: relative;
+  gap: 6px;
+}
+.onboarding-step-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+.onboarding-step-btn:hover {
+  background: #f1f5f9;
+}
+.onboarding-step-btn.active {
+  background: #ffffff;
+  border-color: #86efac;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.12);
+}
+.onboarding-step-btn.completed .step-index-circle {
+  background: #16a34a;
+  color: #ffffff;
+}
+.step-index-circle {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+.onboarding-step-btn.active .step-index-circle {
+  background: #15803d;
+  color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+}
+.step-text-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.step-num-text {
+  font-size: 10px;
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.onboarding-step-btn.active .step-num-text {
+  color: #16a34a;
+}
+.step-label-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.onboarding-step-btn.active .step-label-text {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+/* 视觉流程图卡片 (Workflow Diagram Box) */
+.onboarding-flow-card {
+  background: linear-gradient(145deg, #f0fdf4 0%, #ecfdf5 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(21, 128, 61, 0.05);
+}
+.flow-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #166534;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.flow-steps-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.flow-node {
+  background: #ffffff;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #166534;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.flow-node.highlight {
+  background: #15803d;
+  color: #ffffff;
+  border-color: #166534;
+  box-shadow: 0 2px 8px rgba(21, 128, 61, 0.25);
+}
+.flow-arrow {
+  color: #86efac;
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* 操作要点清单 */
+.onboarding-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  padding: 12px 16px;
+  transition: all 0.15s ease;
+}
+.checklist-item:hover {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+.checklist-item-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ecfdf5;
+  color: #047857;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.checklist-item-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 3px;
+}
+.checklist-item-desc {
+  font-size: 12.5px;
+  color: #64748b;
+  line-height: 1.55;
+}
+
+/* 核心提示/避坑锦囊 */
+.onboarding-tip-box {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.onboarding-tip-box.blue {
+  background: #f0f9ff;
+  border-color: #bae6fd;
+}
+.onboarding-tip-box.blue .tip-title {
+  color: #0369a1;
+}
+.onboarding-tip-box.blue .tip-content {
+  color: #0c4a6e;
+}
+.tip-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.tip-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #92400e;
+  margin-bottom: 2px;
+}
+.tip-content {
+  font-size: 12px;
+  color: #78350f;
+  line-height: 1.5;
+}
+
+/* 底部操作工具条 */
+.onboarding-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.dont-show-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #64748b;
+  cursor: pointer;
+  user-select: none;
+}
+.dont-show-checkbox input {
+  cursor: pointer;
+}
+.onboarding-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ============================================================= */
+/* 简易操作手册弹窗样式 (In-App User Manual Modal)              */
+/* ============================================================= */
+
+/* 顶部栏手册导航按钮 */
+.manual-nav-btn {
+  background: #f0f9ff !important;
+  color: #0369a1 !important;
+  border-color: #bae6fd !important;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.manual-nav-btn:hover {
+  background: #e0f2fe !important;
+  border-color: #7dd3fc !important;
+  color: #0284c7 !important;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.15);
+}
+
+/* 欢迎页手册入口按钮 */
+.manual-gate-trigger {
+  background: #f0f9ff !important;
+  color: #0369a1 !important;
+  border-color: #bae6fd !important;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.08) !important;
+}
+.manual-gate-trigger:hover {
+  background: #e0f2fe !important;
+  border-color: #7dd3fc !important;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15) !important;
+}
+
+/* 手册弹窗主体 */
+.manual-modal-body {
+  padding: 0;
+  max-height: 78vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.manual-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  height: 74vh;
+  overflow: hidden;
+  border-top: 1px solid #e2e8f0;
+}
+
+@media (max-width: 860px) {
+  .manual-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+}
+
+/* 左侧目录侧边栏 */
+.manual-nav-sidebar {
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow-y: auto;
+  padding: 14px 10px;
+}
+
+.manual-nav-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 8px;
+}
+
+.manual-nav-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  letter-spacing: 0.5px;
+}
+
+.manual-switch-guide-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.manual-switch-guide-btn:hover {
+  background: #d1fae5;
+  border-color: #6ee7b7;
+}
+
+.manual-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.manual-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+.manual-nav-item:hover {
+  background: #f1f5f9;
+}
+.manual-nav-item.active {
+  background: #f0fdf4;
+  border-color: #86efac;
+  box-shadow: 0 1px 4px rgba(22, 163, 74, 0.08);
+}
+
+.manual-nav-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #e2e8f0;
+  color: #475569;
+  transition: all 0.2s;
+}
+.manual-nav-item.active .manual-nav-icon {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.manual-nav-text {
+  flex: 1;
+  min-width: 0;
+}
+.manual-nav-item-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.manual-nav-item.active .manual-nav-item-title {
+  color: #15803d;
+}
+.manual-nav-item-sub {
+  font-size: 10.5px;
+  color: #64748b;
+  margin-top: 1px;
+}
+.manual-nav-arrow {
+  color: #cbd5e1;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+.manual-nav-item.active .manual-nav-arrow {
+  color: #16a34a;
+  transform: translateX(2px);
+}
+
+.manual-sidebar-author {
+  padding: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.5;
+  margin-top: 12px;
+}
+
+/* 右侧内容阅读区域 */
+.manual-content-pane {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 24px 28px;
+  background: #ffffff;
+}
+
+.manual-content-header {
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 18px;
+}
+
+.manual-chapter-tag {
+  font-size: 11px;
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-weight: 700;
+}
+
+.manual-jump-module-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #86efac;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.manual-jump-module-btn:hover {
+  background: #dcfce7;
+  border-color: #4ade80;
+  color: #166534;
+}
+
+.manual-chapter-body {
+  flex: 1;
+  font-size: 13.5px;
+  color: #334155;
+  line-height: 1.7;
+}
+
+.manual-section {
+  margin-bottom: 22px;
+}
+
+.manual-section-h3 {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 16px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.manual-ascii-box {
+  background: #0f172a;
+  color: #f8fafc;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 16px 18px;
+  font-family: 'Cascadia Code', Consolas, Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-x: auto;
+  margin: 12px 0 18px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.15);
+}
+
+.manual-callout-box {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-left: 4px solid #16a34a;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 14px 0;
+  font-size: 13px;
+  color: #166534;
+}
+.manual-callout-box.amber {
+  background: #fffbeb;
+  border-color: #fde68a;
+  border-left-color: #f59e0b;
+  color: #92400e;
+}
+.manual-callout-box.blue {
+  background: #f0f9ff;
+  border-color: #bae6fd;
+  border-left-color: #0284c7;
+  color: #075985;
+}
+
+.manual-grid-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+@media (max-width: 720px) {
+  .manual-grid-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.manual-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.manual-card-title {
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.manual-card-desc {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.manual-table-wrap {
+  overflow-x: auto;
+  margin: 12px 0 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+.manual-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.manual-table th {
+  background: #f1f5f9;
+  color: #334155;
+  font-weight: 700;
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid #cbd5e1;
+}
+.manual-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #475569;
+}
+.manual-table tr:last-child td {
+  border-bottom: none;
+}
+.manual-table tr:hover td {
+  background: #f8fafc;
+}
+
+.manual-faq-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.manual-faq-q {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.manual-faq-a {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.manual-bottom-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+  margin-top: 24px;
+}
+
+
+

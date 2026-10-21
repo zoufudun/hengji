@@ -214,7 +214,7 @@ test('周期绩点报表导出CSV按二维矩阵格式导出：第一行为各�
     const row = parsed[r + 1];
     assert.equal(row[0], String(r + 1));
     assert.equal(row[1], rows[r].employee.name);
-    assert.equal(row[row.length - 1], (rows[r].points / 100).toFixed(2));
+    assert.equal(row[row.length - 1], (rows[r].points / 1_000_000).toFixed(4));
   }
 
   // 按照图2：最后一行必须是【项目累加】汇总行
@@ -224,9 +224,9 @@ test('周期绩点报表导出CSV按二维矩阵格式导出：第一行为各�
   assert.equal(totalRow.length, header.length);
   let colSumTotal = 0;
   for (let c = 2; c < totalRow.length - 1; c++) {
-    colSumTotal += Math.round(parseFloat(totalRow[c]) * 100);
+    colSumTotal += Math.round(parseFloat(totalRow[c]) * 1_000_000);
   }
-  const grandTotalFen = Math.round(parseFloat(totalRow[totalRow.length - 1]) * 100);
+  const grandTotalFen = Math.round(parseFloat(totalRow[totalRow.length - 1]) * 1_000_000);
   assert.equal(colSumTotal, grandTotalFen);
 
   // exportPeriodReportCsv 传入 state 兼容支持矩阵导出
@@ -1164,10 +1164,10 @@ test('企业级全量灾备数据 AES-256-GCM 加密导出与权限口令解密�
   assert.equal(legacyDecrypted.state.projects.length, state.projects.length);
 
   // 6. 版本号与更新历史验证
-  assert.equal(APP_VERSION, '0.6.1');
-  assert.ok(UPDATE_HISTORY.length >= 12);
-  assert.equal(UPDATE_HISTORY[0].version, 'v0.6.1');
-  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('工作区') || it.includes('自适应')));
+  assert.equal(APP_VERSION, '0.6.3');
+  assert.ok(UPDATE_HISTORY.length >= 14);
+  assert.equal(UPDATE_HISTORY[0].version, 'v0.6.3');
+  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('工号') || it.includes('合并') || it.includes('万')));
 });
 
 test('月底分配全项目当月集中透视、每个项目月分配批量修改与一键批量发布/撤回', () => {

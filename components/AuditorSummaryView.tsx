@@ -1001,6 +1001,7 @@ export function AuditorSummaryView({
                 <thead>
                   <tr style={{ background: '#f8fafc' }}>
                     <th style={{ width: '60px', textAlign: 'center' }}>全员排名</th>
+                    <th style={{ width: '90px' }}>工号</th>
                     <th>员工姓名</th>
                     <th>所属专业组</th>
                     <th>职务</th>
@@ -1014,7 +1015,7 @@ export function AuditorSummaryView({
                 <tbody>
                   {filteredEmployees.length === 0 ? (
                     <tr>
-                      <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
+                      <td colSpan={10} style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
                         暂未找到匹配的员工分配记录，请检查筛选条件或导入项目数据包。
                       </td>
                     </tr>
@@ -1023,6 +1024,9 @@ export function AuditorSummaryView({
                       <tr key={emp.employeeId} style={{ cursor: 'pointer' }} onClick={() => setInspectEmployee(emp)}>
                         <td style={{ textAlign: 'center', fontWeight: emp.rank <= 3 ? 700 : 500 }}>
                           {emp.rank === 1 ? '🥇 1' : emp.rank === 2 ? '🥈 2' : emp.rank === 3 ? '🥉 3' : emp.rank}
+                        </td>
+                        <td style={{ fontFamily: 'monospace', color: '#0369a1', fontSize: '12px' }}>
+                          {emp.employeeNo ? <span style={{ background: '#e0f2fe', padding: '1px 6px', borderRadius: '4px' }}>{emp.employeeNo}</span> : <span style={{ color: '#94a3b8' }}>-</span>}
                         </td>
                         <td style={{ fontWeight: 600, color: '#0f172a' }}>{emp.name}</td>
                         <td>
@@ -1627,6 +1631,7 @@ export function AuditorSummaryView({
                 <thead>
                   <tr style={{ background: '#f1f5f9' }}>
                     <th style={{ width: '45px', textAlign: 'center', border: '1px solid #e2e8f0' }}>序号</th>
+                    <th style={{ minWidth: '85px', border: '1px solid #e2e8f0' }}>工号</th>
                     <th style={{ minWidth: '90px', border: '1px solid #e2e8f0' }}>姓名</th>
                     <th style={{ minWidth: '80px', border: '1px solid #e2e8f0' }}>职务</th>
                     <th style={{ minWidth: '85px', border: '1px solid #e2e8f0' }}>专业组</th>
@@ -1662,7 +1667,7 @@ export function AuditorSummaryView({
                 <tbody>
                   {summary.matrix.rows.length === 0 ? (
                     <tr>
-                      <td colSpan={5 + summary.matrix.projectHeaders.length} style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
+                      <td colSpan={6 + summary.matrix.projectHeaders.length} style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
                         暂无矩阵透视数据，请导入项目数据包。
                       </td>
                     </tr>
@@ -1671,6 +1676,9 @@ export function AuditorSummaryView({
                       {summary.matrix.rows.map(r => (
                         <tr key={r.employeeId}>
                           <td style={{ textAlign: 'center', border: '1px solid #e2e8f0', color: '#64748b' }}>{r.index}</td>
+                          <td style={{ fontFamily: 'monospace', color: '#0369a1', fontSize: '12px', border: '1px solid #e2e8f0' }}>
+                            {r.employeeNo || '-'}
+                          </td>
                           <td style={{ fontWeight: 600, color: '#0f172a', border: '1px solid #e2e8f0' }}>{r.name}</td>
                           <td style={{ border: '1px solid #e2e8f0', color: '#475569' }}>{r.position || '-'}</td>
                           <td style={{ border: '1px solid #e2e8f0', color: '#475569' }}>{r.group || '-'}</td>
@@ -1703,7 +1711,7 @@ export function AuditorSummaryView({
 
                       {/* 底行：项目累加 */}
                       <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
-                        <td colSpan={4} style={{ textAlign: 'center', border: '1px solid #cbd5e1', color: '#0f172a' }}>
+                        <td colSpan={5} style={{ textAlign: 'center', border: '1px solid #cbd5e1', color: '#0f172a' }}>
                           项目累加
                         </td>
                         {summary.matrix.projectTotals.map((pts, idx) => (
@@ -1751,6 +1759,7 @@ export function AuditorSummaryView({
                     <th>考核月份</th>
                     <th>工作令号</th>
                     <th>项目名称</th>
+                    <th>工号</th>
                     <th>员工姓名</th>
                     <th>专业组</th>
                     <th>职务</th>
@@ -1763,7 +1772,7 @@ export function AuditorSummaryView({
                 <tbody>
                   {filteredDetails.length === 0 ? (
                     <tr>
-                      <td colSpan={11} style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
+                      <td colSpan={12} style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
                         暂未找到匹配的流水明细。
                       </td>
                     </tr>
@@ -1774,6 +1783,9 @@ export function AuditorSummaryView({
                         <td style={{ fontWeight: 600, color: '#0369a1' }}>{d.month}</td>
                         <td style={{ color: '#475569' }}>{d.projectCode || '-'}</td>
                         <td style={{ fontWeight: 600, color: '#0f172a' }}>{d.projectName}</td>
+                        <td style={{ fontFamily: 'monospace', color: '#0369a1', fontSize: '12px' }}>
+                          {d.employeeNo ? <span style={{ background: '#e0f2fe', padding: '1px 5px', borderRadius: '4px' }}>{d.employeeNo}</span> : <span style={{ color: '#94a3b8' }}>-</span>}
+                        </td>
                         <td style={{ fontWeight: 600 }}>{d.employeeName}</td>
                         <td>{d.group || '-'}</td>
                         <td>{d.position || '-'}</td>
@@ -1809,6 +1821,7 @@ export function AuditorSummaryView({
                   【{inspectEmployee.name}】跨项目分配全景档案
                 </h2>
                 <div style={{ fontSize: '12.5px', color: '#64748b', marginTop: '4px' }}>
+                  {inspectEmployee.employeeNo ? <span style={{ color: '#0369a1', background: '#e0f2fe', padding: '1px 6px', borderRadius: '4px', marginRight: '6px', fontWeight: 600 }}>工号: {inspectEmployee.employeeNo}</span> : null}
                   {inspectEmployee.department} · {inspectEmployee.group || '未分组'} · {inspectEmployee.position || '员工'}
                 </div>
               </div>
@@ -1932,6 +1945,7 @@ export function AuditorSummaryView({
               <table className="table" style={{ width: '100%', fontSize: '12px' }}>
                 <thead>
                   <tr style={{ background: '#f1f5f9' }}>
+                    <th style={{ width: '80px' }}>工号</th>
                     <th>成员姓名</th>
                     <th>专业组</th>
                     <th>职务</th>
@@ -1943,6 +1957,9 @@ export function AuditorSummaryView({
                 <tbody>
                   {inspectPackage.memberSummaries.map(m => (
                     <tr key={m.employeeId}>
+                      <td style={{ fontFamily: 'monospace', color: '#0369a1', fontSize: '12px' }}>
+                        {m.employeeNo ? <span style={{ background: '#e0f2fe', padding: '1px 5px', borderRadius: '4px' }}>{m.employeeNo}</span> : '-'}
+                      </td>
                       <td style={{ fontWeight: 600 }}>{m.name}</td>
                       <td>{m.group || '-'}</td>
                       <td>{m.position || '-'}</td>

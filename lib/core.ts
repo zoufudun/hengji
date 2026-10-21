@@ -4,6 +4,7 @@ export type ProfessionalGroup = typeof DEFAULT_GROUPS[number] | string;
 
 export type Employee = {
   id: string;
+  employeeNo?: string; // 工号 / 员工唯一ID号
   name: string;
   department: string;
   group?: string; // 专业组：总体组 / 产品组 / 研发组 或组合如 产品组,研发组
@@ -268,9 +269,12 @@ export function execute(current: State, actorId: string, command: Command, id: s
 
   if (command.type === 'employee.save') {
     if (actor.role !== 'admin') fail('只有管理员可以管理员工');
-    const old = state.employees.find(employee => employee.id === data.id);
+    const rawNo = typeof data.employeeNo === 'string' ? data.employeeNo.trim() : '';
+    const old = state.employees.find(employee => employee.id === data.id || (rawNo && employee.employeeNo === rawNo));
+    const effectiveNo = rawNo || old?.employeeNo || '';
     const employee: Employee = {
-      id: old?.id || id,
+      id: old?.id || effectiveNo || id,
+      employeeNo: effectiveNo || undefined,
       name: text(data.name, '员工姓名', 40),
       department: text(data.department, '部门', 60),
       group: typeof data.group === 'string' && data.group.trim() ? data.group.trim() : '',
@@ -286,7 +290,7 @@ export function execute(current: State, actorId: string, command: Command, id: s
     if (old) state.employees[state.employees.indexOf(old)] = employee;
     else state.employees.push(employee);
     action = old ? '修改员工' : '新增员工';
-    target = `${employee.name}（${employee.group || '未分组'}）`;
+    target = `${employee.name}${employee.employeeNo ? `[${employee.employeeNo}]` : ''}（${employee.group || '未分组'}）`;
   } else if (command.type === 'employee.delete') {
     if (actor.role !== 'admin') fail('只有管理员可以删除员工');
     const old = state.employees.find(employee => employee.id === data.id);
@@ -308,7 +312,12 @@ export function execute(current: State, actorId: string, command: Command, id: s
     for (const item of data.employees) {
       if (!item.name || typeof item.name !== 'string' || !item.name.trim()) continue;
       const empName = item.name.trim();
-      const existing = state.employees.find(e => e.name === empName || (item.id && e.id === item.id));
+      const rawNo = typeof item.employeeNo === 'string' ? item.employeeNo.trim() : '';
+      const existing = state.employees.find(e =>
+        (rawNo && (e.employeeNo === rawNo || e.id === rawNo)) ||
+        (item.id && e.id === item.id) ||
+        e.name === empName
+      );
       const groupVal = typeof item.group === 'string' && item.group.trim() ? item.group.trim() : '';
       const deptVal = typeof item.department === 'string' && item.department.trim() ? item.department.trim() : (groupVal ? `${groupVal.split(',')[0]}部` : '综合部');
       const emailVal = typeof item.email === 'string' ? item.email.trim().toLowerCase() : '';
@@ -317,12 +326,15 @@ export function execute(current: State, actorId: string, command: Command, id: s
       if (existing) {
         existing.department = deptVal;
         existing.group = groupVal;
+        if (rawNo) existing.employeeNo = rawNo;
         if (posVal) existing.position = posVal;
         if (grpRoleVal) existing.groupRole = grpRoleVal;
         if (emailVal) existing.email = emailVal;
       } else {
+        const targetId = item.id || rawNo || `emp_${crypto.randomUUID().slice(0, 8)}`;
         state.employees.push({
-          id: item.id || `emp_${crypto.randomUUID().slice(0, 8)}`,
+          id: targetId,
+          employeeNo: rawNo || undefined,
           name: empName,
           department: deptVal,
           group: groupVal,
@@ -1849,21 +1861,23 @@ export function exportProjectsCsv(state: State): string {
 }
 
 export function exportProjectMembersCsv(state: State): string {
-  const headers = ['工作令号', '项目名称', '成员姓名', '所属部门', '专业组', '是否负责人', '累计获得额度(万元)', '累计获得绩点', '累计占比'];
+  const headers = ['工作令号', '项目名称', '成员工号', '成员姓名', '所属部门', '专业组', '是否负责人', '累计获得额度(万元)', '累计获得绩点(万元)', '累计占比'];
   const rows: (string | number)[][] = [];
   for (const p of state.projects) {
     const detail = projectAllocDetail(state, p.id);
     if (!detail) continue;
     for (const m of detail.memberCumulative) {
+      const emp = state.employees.find(e => e.id === m.employeeId || e.name === m.name);
       rows.push([
         p.code,
         p.name,
+        emp?.employeeNo || emp?.id || '',
         m.name,
         m.department,
         m.group,
         m.isOwner ? '是' : '否',
         m.amountWan,
-        score(m.cumulativePoints),
+        (m.cumulativePoints / 1_000_000).toFixed(4),
         m.cumulativePct,
       ]);
     }
@@ -1872,9 +1886,10 @@ export function exportProjectMembersCsv(state: State): string {
 }
 
 export function exportEmployeesCsv(state: State): string {
-  const headers = ['序号', '姓名', '职务', '专业组', '专业组职务', '所属部门', '邮箱', '系统角色', '状态', '参与项目数'];
+  const headers = ['序号', '工号', '姓名', '职务', '专业组', '专业组职务', '所属部门', '邮箱', '系统角色', '状态', '参与项目数'];
   const rows = state.employees.map((e, index) => [
     index + 1,
+    e.employeeNo || e.id || '',
     e.name,
     e.position || '',
     e.group || '',
@@ -1888,7 +1903,7 @@ export function exportEmployeesCsv(state: State): string {
   return generateCsv(headers, rows);
 }
 
-// 周期绩点报表明细矩阵 CSV 导出（按图2格式：序号、姓名、各个项目合同名称加工作令号、个人累加，最底行计算每个合同的项目累加）
+// 周期绩点报表明细矩阵 CSV 导出（按图2格式：序号、姓名、各个项目合同名称加工作令号、个人累加，最底行计算每个合同的项目累加，以万为单位）
 export function exportPeriodMatrixReportCsv(
   projects: Project[],
   rows: ReturnType<typeof rangeReport>,
@@ -1918,7 +1933,7 @@ export function exportPeriodMatrixReportCsv(
 
       projectPointsSums[pIndex] += fen;
       rowPersonalTotal += fen;
-      return (fen / 100).toFixed(2);
+      return (fen / 1_000_000).toFixed(4);
     });
 
     grandTotalPoints += rowPersonalTotal;
@@ -1927,7 +1942,7 @@ export function exportPeriodMatrixReportCsv(
       index + 1,
       r.employee.name,
       ...projectScores,
-      (rowPersonalTotal / 100).toFixed(2),
+      (rowPersonalTotal / 1_000_000).toFixed(4),
     ];
   });
 
@@ -1935,8 +1950,8 @@ export function exportPeriodMatrixReportCsv(
   const projectTotalsRow = [
     '',
     '项目累加',
-    ...projectPointsSums.map(pts => (pts / 100).toFixed(2)),
-    (grandTotalPoints / 100).toFixed(2),
+    ...projectPointsSums.map(pts => (pts / 1_000_000).toFixed(4)),
+    (grandTotalPoints / 1_000_000).toFixed(4),
   ];
 
   data.push(projectTotalsRow);
@@ -1952,19 +1967,20 @@ export function exportPeriodReportCsv(
   if (options?.projects || options?.state?.projects) {
     return exportPeriodMatrixReportCsv(options.projects || options.state!.projects, rows, periodLabel);
   }
-  const headers = ['统计周期', '排名', '员工姓名', '职务', '专业组', '专业组职务', '所属部门', '贡献项目数', '获得总绩点', '折合总额度(万元)', '参与项目明细'];
+  const headers = ['统计周期', '排名', '员工工号', '员工姓名', '职务', '专业组', '专业组职务', '所属部门', '贡献项目数', '获得总绩点(万元)', '折合总额度(万元)', '参与项目明细'];
   const data = rows.map((r, i) => {
-    const detailStr = r.details.map(d => `${d.month}:${d.project}(${score(d.points)}绩点)`).join('; ');
+    const detailStr = r.details.map(d => `${d.month}:${d.project}(${(d.points / 1_000_000).toFixed(4)}万)`).join('; ');
     return [
       periodLabel,
       i + 1,
+      r.employee.employeeNo || r.employee.id || '',
       r.employee.name,
       r.employee.position || '',
       r.employee.group || '',
       r.employee.groupRole || '',
       r.employee.department,
       r.projectCount,
-      score(r.points),
+      (r.points / 1_000_000).toFixed(4),
       (r.points / 1_000_000).toFixed(4),
       detailStr,
     ];
@@ -1972,18 +1988,44 @@ export function exportPeriodReportCsv(
   return generateCsv(headers, data);
 }
 
-// 部门员工花名册 CSV 模板（标准列：序号、姓名、职务、专业组、专业组职务）
+// 部门员工花名册 CSV 模板（标准列：序号、姓名、职务、专业组、专业组职务、部门、工号）
 export function getEmployeeTemplateCsv(): string {
-  const headers = ['序号', '姓名', '职务', '专业组', '专业组职务'];
+  const headers = ['序号', '姓名', '职务', '专业组', '专业组职务', '部门', '工号'];
   const examples = [
-    ['1', '张三', '副所长,主任', '', ''],
-    ['2', '李四', '副主任', '', ''],
-    ['3', '王五', '主任助理', '总体组', '组长'],
-    ['4', '赵六', '副总工程师', '研发组', '顾问'],
-    ['5', '孙七', '研究员', '总体组', '顾问'],
-    ['6', '周八', '高级工程师', '产品组', '组长'],
-    ['7', '吴九', '工程师', '研发组', '组员'],
-    ['8', '郑十', '助理工程师', '产品组', '组员'],
+    ['1', '周胜增', '副所长,主任', '领导班子', '总负责', '第四研究室', '1001'],
+    ['2', '胡兴刚', '副主任', '领导班子', '分管领导', '第四研究室', '1002'],
+    ['3', '刘杰', '副主任', '领导班子', '分管领导', '第四研究室', '1003'],
+    ['4', '吕赟', '主任助理', '总体组', '组长', '第四研究室', '1004'],
+    ['5', '陈韬', '副总工程师', '研发组', '顾问', '第四研究室', '1005'],
+    ['6', '杜晓啸', '研究员', '总体组', '顾问', '第四研究室', '1006'],
+    ['7', '石芳菲', '研究员', '产品组', '顾问', '第四研究室', '1007'],
+    ['8', '郑珊珊', '研究员', '总体组', '组员', '第四研究室', '1008'],
+    ['9', '洪秋玉', '核算员', '核算', '核算', '第四研究室', '1009'],
+    ['10', '赵淼', '高级工程师', '总体组', '组员', '第四研究室', '1010'],
+    ['11', '张孝华', '高级工程师', '总体组', '组员', '第四研究室', '1011'],
+    ['12', '余烨', '工程师', '总体组', '组员', '第四研究室', '1012'],
+    ['13', '张诗琪', '助理工程师', '总体组', '组员', '第四研究室', '1013'],
+    ['14', '郑祎鹏', '助理工程师', '总体组', '组员', '第四研究室', '1014'],
+    ['15', '刘盟', '工程师', '总体组,研发组', '副组长', '第四研究室', '1015'],
+    ['16', '周陈喜', '工程师', '总体组,研发组', '副组长', '第四研究室', '1016'],
+    ['17', '孙骞', '高级工程师', '产品组', '组长', '第四研究室', '1017'],
+    ['18', '朱圣音', '工程师', '产品组', '副组长', '第四研究室', '1018'],
+    ['19', '蔡欣欣', '工程师', '产品组', '副组长', '第四研究室', '1019'],
+    ['20', '赵鑫亮', '工程师', '产品组', '组员', '第四研究室', '1020'],
+    ['21', '郭岩成', '工程师', '产品组,研发组', '组员', '第四研究室', '1021'],
+    ['22', '孙波', '工程师', '产品组,总体组', '组员', '第四研究室', '1022'],
+    ['23', '赵杰伟', '工程师', '产品组', '组员', '第四研究室', '1023'],
+    ['24', '王富成', '工程师', '产品组', '组员', '第四研究室', '1024'],
+    ['25', '张磊', '助理工程师', '产品组', '组员', '第四研究室', '1025'],
+    ['26', '齐云飞', '助理工程师', '产品组', '组员', '第四研究室', '1026'],
+    ['27', '沈书戎', '助理工程师', '产品组', '组员', '第四研究室', '1027'],
+    ['28', '曹景瑞', '助理工程师', '产品组', '组员', '第四研究室', '1028'],
+    ['29', '邹富墩', '高级工程师', '研发组', '组长', '第四研究室', '1029'],
+    ['30', '杨健', '工程师', '研发组', '副组长', '第四研究室', '1030'],
+    ['31', '杨春迪', '工程师', '研发组', '组员', '第四研究室', '1031'],
+    ['32', '赵计贺', '助理工程师', '研发组', '组员', '第四研究室', '1032'],
+    ['33', '丁泉森', '助理工程师', '研发组,产品组', '组员', '第四研究室', '1033'],
+    ['34', '毕清博', '工程师', '研发组', '组员', '第四研究室', '1034'],
   ];
   return generateCsv(headers, examples);
 }
@@ -2173,20 +2215,21 @@ export function parseProjectCsvText(csvText: string, state?: State) {
   return results;
 }
 
-// 解析部门员工花名册 CSV（支持：序号、姓名、职务、专业组、专业组职务，并智能推断部门与角色）
+// 解析部门员工花名册 CSV（支持：序号、姓名、职务、专业组、专业组职务、部门、工号，并智能推断部门与角色）
 export function parseEmployeeCsvText(csvText: string) {
   const rows = parseCsv(csvText);
   if (rows.length === 0) return [];
 
   const firstRow = rows[0];
-  let nameCol = -1, posCol = -1, grpCol = -1, grpRoleCol = -1, deptCol = -1, emailCol = -1, roleCol = -1;
+  let nameCol = -1, posCol = -1, grpCol = -1, grpRoleCol = -1, deptCol = -1, emailCol = -1, roleCol = -1, noCol = -1;
 
   for (let i = 0; i < firstRow.length; i++) {
     const cell = firstRow[i].trim();
-    if (/^序号$|^编号$|^id$/i.test(cell) && nameCol === -1) {
-      continue; // 跳过序号列
+    if (/^序号$|^编号$/i.test(cell) && nameCol === -1) {
+      continue; // 跳过纯序号列
     }
-    if (/姓名|员工姓名|名字/.test(cell) && nameCol === -1) nameCol = i;
+    if (/^工号$|^员工工号$|^员工编号$|^唯一ID$|^ID$|^工号号$/i.test(cell) && noCol === -1) noCol = i;
+    else if (/姓名|员工姓名|名字/.test(cell) && nameCol === -1) nameCol = i;
     else if (/^职务$|^岗位$|^职位$|^职称$/.test(cell) && posCol === -1) posCol = i;
     else if (/^专业组$|^所属专业组$|^分组$/.test(cell) && grpCol === -1) grpCol = i;
     else if (/专业组职务|组内职务|专业职务|组内角色/.test(cell) && grpRoleCol === -1) grpRoleCol = i;
@@ -2196,12 +2239,28 @@ export function parseEmployeeCsvText(csvText: string) {
   }
 
   let dataRows = rows;
-  const hasHeader = nameCol !== -1 || posCol !== -1 || grpCol !== -1;
+  const hasHeader = nameCol !== -1 || posCol !== -1 || grpCol !== -1 || noCol !== -1;
   if (hasHeader) {
     dataRows = rows.slice(1);
   } else {
-    // 兼容花名册格式（无表头或纯数据行）：序号(0), 姓名(1), 职务(2), 专业组(3), 专业组职务(4)
-    if (firstRow.length >= 5 && /^\d+$/.test(firstRow[0].trim())) {
+    // 兼容花名册格式（无表头或纯数据行）
+    if (firstRow.length >= 7 && /^\d+$/.test(firstRow[0].trim())) {
+      // 序号(0), 姓名(1), 职务(2), 专业组(3), 专业组职务(4), 部门(5), 工号(6)
+      nameCol = 1;
+      posCol = 2;
+      grpCol = 3;
+      grpRoleCol = 4;
+      deptCol = 5;
+      noCol = 6;
+    } else if (firstRow.length >= 6 && /^\d+$/.test(firstRow[0].trim())) {
+      // 序号(0), 姓名(1), 职务(2), 专业组(3), 专业组职务(4), 工号(5)
+      nameCol = 1;
+      posCol = 2;
+      grpCol = 3;
+      grpRoleCol = 4;
+      noCol = 5;
+    } else if (firstRow.length >= 5 && /^\d+$/.test(firstRow[0].trim())) {
+      // 序号(0), 姓名(1), 职务(2), 专业组(3), 专业组职务(4)
       nameCol = 1;
       posCol = 2;
       grpCol = 3;
@@ -2221,6 +2280,8 @@ export function parseEmployeeCsvText(csvText: string) {
   if (grpRoleCol === -1) grpRoleCol = 4;
 
   const results: {
+    id?: string;
+    employeeNo?: string;
     name: string;
     position: string;
     group: string;
@@ -2248,6 +2309,7 @@ export function parseEmployeeCsvText(csvText: string) {
     let rawDept = deptCol !== -1 ? (row[deptCol + offset] || '').trim() : '';
     const rawEmail = emailCol !== -1 ? (row[emailCol + offset] || '').trim().toLowerCase() : '';
     const rawRole = roleCol !== -1 ? (row[roleCol + offset] || '').trim() : '';
+    const rawNo = noCol !== -1 ? (row[noCol + offset] || '').trim() : '';
 
     // 智能推断部门（如果表格中无部门列）
     if (!rawDept) {
@@ -2264,6 +2326,8 @@ export function parseEmployeeCsvText(csvText: string) {
     const isAdmin = rawRole.includes('管理') || /所长|主任|核算|admin/i.test(rawPos);
 
     results.push({
+      id: rawNo || undefined,
+      employeeNo: rawNo || undefined,
       name: rawName,
       position: rawPos,
       group: rawGrp,
@@ -2402,8 +2466,8 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.6.1';
-export const APP_BUILD = '20261019';
+export const APP_VERSION = '0.6.3';
+export const APP_BUILD = '20261021';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
 
@@ -2416,6 +2480,29 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.6.3',
+    date: '2026-10-21',
+    tag: '重大更新',
+    title: '员工唯一工号跨项目数据包精准合并识别机制与全量绩点以万为单位导出规范',
+    items: [
+      '【修复多数据包组员同名合并重大缺陷】彻底解决绩效核算员汇总不同项目负责人发送的数据包时，因本地ID不一致导致同名组员未合并或重名员工误合并的缺陷。',
+      '【部门员工管理全面引入唯一工号列】在员工与专业组管理中增加“工号”核心列与唯一性校验，支持手动编辑、标准花名册 CSV 批量导入导出，项目组名单与团队配置中显式关联并呈现工号。',
+      '【项目分配数据包与全员汇总引擎升级】项目分配绩点数据包（.json）及细目流水中全面记录员工唯一工号；核算员自动汇总时严格以唯一工号/ID为判定准则执行跨项目数据合并与求和，确保同人同号100%精准汇流、不同人同名清晰隔离。',
+      '【导出的绩点数据全量以万为单位】全面规范所有报表导出标准，全员跨项目绩点总表、各项目分配额度对照表、二维透视矩阵、全量明细流水及周期绩效报表等所有 CSV 导出的绩点数据统一以“万元”为标准单位，与财务及合同额度无缝接轨。'
+    ]
+  },
+  {
+    version: 'v0.6.2',
+    date: '2026-10-20',
+    tag: '重大更新',
+    title: '首次启动新手操作引导、五步核心业务闭环向导与简易操作手册',
+    items: [
+      '【首次启动操作引导】初次进入工作区自动弹出“新手操作引导”，提供 5 步核心业务闭环操作指引（第1步新建工作区、第2步导入项目与员工、第3步项目库配置与全周期额度规划、第4步月度分配与一键发布、第5步周期报表与荣誉透视）。',
+      '【全场景便捷入口】在“选择安全工作区”启动页新增新手 5 步向导与图文手册入口，在顶部操作栏常驻“📖 操作手册”与“💡 新手引导”快捷按钮，在侧边栏底部提供常驻手册链接，支持随时查阅并一键跳转对应功能模块。',
+      '【软件界面深度集成简易操作手册】在软件内直接集成完整的图文并茂操作手册（含 7 大章节、ASCII 业务流程图、前低后高额度曲线、二维透视矩阵与新手 FAQ 避坑指南），支持在软件内直接点击阅读，随读随练。'
+    ]
+  },
   {
     version: 'v0.6.1',
     date: '2026-10-19',
@@ -2723,17 +2810,18 @@ export function parseProjectMemberCsvText(csvText: string, stateOrEmployees: Sta
   const rows = parseCsv(csvText);
   if (rows.length === 0) return { memberIds: [], newEmployees: [], memberNames: [] };
   const firstRow = rows[0];
-  let nameCol = -1, groupCol = -1, positionCol = -1, deptCol = -1;
+  let nameCol = -1, groupCol = -1, positionCol = -1, deptCol = -1, noCol = -1;
   for (let i = 0; i < firstRow.length; i++) {
     const cell = firstRow[i].trim();
-    if (/^序号$|^编号$|^id$/i.test(cell) && nameCol === -1) continue;
-    if (/姓名|员工|成员/.test(cell) && nameCol === -1) nameCol = i;
+    if (/^序号$|^编号$/i.test(cell) && nameCol === -1) continue;
+    if (/^工号$|^员工工号$|^员工编号$|^唯一ID$|^ID$/i.test(cell) && noCol === -1) noCol = i;
+    else if (/姓名|员工|成员/.test(cell) && nameCol === -1) nameCol = i;
     else if (/专业组|分组|组别/.test(cell) && groupCol === -1) groupCol = i;
     else if (/职务|岗位|角色|职称/.test(cell) && positionCol === -1) positionCol = i;
     else if (/部门|科室/.test(cell) && deptCol === -1) deptCol = i;
   }
   let dataRows = rows;
-  if (nameCol !== -1) {
+  if (nameCol !== -1 || noCol !== -1) {
     dataRows = rows.slice(1);
   } else {
     nameCol = 0;
@@ -2751,20 +2839,27 @@ export function parseProjectMemberCsvText(csvText: string, stateOrEmployees: Sta
     if (!row || row.length === 0 || row.every(c => !c.trim())) continue;
     const rawName = nameCol !== -1 ? (row[nameCol] || '').trim() : '';
     if (!rawName || rawName === '姓名' || rawName === '员工姓名') continue;
+    const rawNo = noCol !== -1 ? (row[noCol] || '').trim() : '';
     const rawGroup = groupCol !== -1 ? (row[groupCol] || '').trim() : '';
     const rawPos = positionCol !== -1 ? (row[positionCol] || '').trim() : '';
     const rawDept = deptCol !== -1 ? (row[deptCol] || '').trim() : '';
 
-    const existing = employees.find(e => e.name === rawName || e.id === rawName);
+    const existing = employees.find(e =>
+      (rawNo && (e.employeeNo === rawNo || e.id === rawNo)) ||
+      e.name === rawName ||
+      e.id === rawName
+    );
     if (existing) {
+      if (rawNo && !existing.employeeNo) existing.employeeNo = rawNo;
       if (!memberIds.includes(existing.id)) {
         memberIds.push(existing.id);
         memberNames.push(existing.name);
       }
     } else {
-      const newId = `emp_${crypto.randomUUID().slice(0, 8)}`;
+      const newId = rawNo || `emp_${crypto.randomUUID().slice(0, 8)}`;
       const newEmp: Employee = {
         id: newId,
+        employeeNo: rawNo || undefined,
         name: rawName,
         department: rawDept || (rawGroup.includes('总体') ? '总体部' : rawGroup.includes('产品') ? '产品部' : '研发中心'),
         group: rawGroup || '总体组',
@@ -2784,13 +2879,13 @@ export function parseProjectMemberCsvText(csvText: string, stateOrEmployees: Sta
 
 // 需求3/4：月度成员分配比例与工作内容 CSV 模版与解析
 export function getPlanMemberTemplateCsv(): string {
-  const headers = ['员工姓名', '当月分配比例(%)', '当月工作内容描述', '专业组', '部门'];
+  const headers = ['工号', '员工姓名', '当月分配比例(%)', '当月工作内容描述', '专业组', '部门'];
   const examples = [
-    ['张三', '30', '主导系统核心通信架构与关键性能调优', '研发组', '研发中心'],
-    ['李四', '25', '负责数据解析算法研发与接口联调', '研发组', '研发中心'],
-    ['王五', '20', '总体技术指标拆解与需求方案评审', '总体组', '总体部'],
-    ['赵六', '15', '参与单元集成测试与软硬件可靠性验证', '总体组', '总体部'],
-    ['孙七', '10', '产品需求梳理与用户使用手册编制', '产品组', '产品部'],
+    ['1029', '邹富敦', '30', '主导系统核心通信架构与关键性能调优', '研发组', '研发中心'],
+    ['1030', '杨健', '25', '负责数据解析算法研发与接口联调', '研发组', '研发中心'],
+    ['1010', '赵淼', '20', '总体技术指标拆解与需求方案评审', '总体组', '总体部'],
+    ['1012', '余烨', '15', '参与单元集成测试与软硬件可靠性验证', '总体组', '总体部'],
+    ['1017', '孙骞', '10', '产品需求梳理与用户使用手册编制', '产品组', '产品部'],
   ];
   return generateCsv(headers, examples);
 }
@@ -2804,17 +2899,19 @@ export function parsePlanMemberCsvText(csvText: string, stateOrEmployees: State 
   const rows = parseCsv(csvText);
   if (rows.length === 0) return { entries: [], memberNames: [], newEmployees: [] };
   const firstRow = rows[0];
-  let nameCol = -1, rateCol = -1, workCol = -1, groupCol = -1, deptCol = -1;
+  let nameCol = -1, rateCol = -1, workCol = -1, groupCol = -1, deptCol = -1, noCol = -1;
   for (let i = 0; i < firstRow.length; i++) {
     const cell = firstRow[i].trim();
-    if (/姓名|员工|成员/.test(cell) && nameCol === -1) nameCol = i;
+    if (/^序号$|^编号$/i.test(cell) && nameCol === -1) continue;
+    if (/^工号$|^员工工号$|^员工编号$|^唯一ID$|^ID$/i.test(cell) && noCol === -1) noCol = i;
+    else if (/姓名|员工|成员/.test(cell) && nameCol === -1) nameCol = i;
     else if (/比例|额度比例|分配比例/.test(cell) && rateCol === -1) rateCol = i;
     else if (/工作内容|工作描述|任务|职责|内容/.test(cell) && workCol === -1) workCol = i;
     else if (/专业组|分组/.test(cell) && groupCol === -1) groupCol = i;
     else if (/部门|科室/.test(cell) && deptCol === -1) deptCol = i;
   }
   let dataRows = rows;
-  if (nameCol !== -1) {
+  if (nameCol !== -1 || noCol !== -1) {
     dataRows = rows.slice(1);
   } else {
     nameCol = 0;
@@ -2831,6 +2928,7 @@ export function parsePlanMemberCsvText(csvText: string, stateOrEmployees: State 
     if (!row || row.length === 0 || row.every(c => !c.trim())) continue;
     const rawName = nameCol !== -1 ? (row[nameCol] || '').trim() : '';
     if (!rawName || rawName === '姓名' || rawName === '员工姓名') continue;
+    const rawNo = noCol !== -1 ? (row[noCol] || '').trim() : '';
     const rawRate = rateCol !== -1 ? (row[rateCol] || '').trim() : '';
     const rawWork = workCol !== -1 ? (row[workCol] || '').trim() : '';
     const rawGroup = groupCol !== -1 ? (row[groupCol] || '').trim() : '';
@@ -2845,12 +2943,17 @@ export function parsePlanMemberCsvText(csvText: string, stateOrEmployees: State 
       }
     }
 
-    const existing = employees.find(e => e.name === rawName || e.id === rawName);
+    const existing = employees.find(e =>
+      (rawNo && (e.employeeNo === rawNo || e.id === rawNo)) ||
+      e.name === rawName ||
+      e.id === rawName
+    );
     let targetId = existing?.id;
     if (!targetId) {
-      targetId = `emp_${crypto.randomUUID().slice(0, 8)}`;
+      targetId = rawNo || `emp_${crypto.randomUUID().slice(0, 8)}`;
       const newEmp: Employee = {
         id: targetId,
+        employeeNo: rawNo || undefined,
         name: rawName,
         department: rawDept || (rawGroup.includes('总体') ? '总体部' : rawGroup.includes('产品') ? '产品部' : '研发中心'),
         group: rawGroup || '总体组',
@@ -2861,6 +2964,8 @@ export function parsePlanMemberCsvText(csvText: string, stateOrEmployees: State 
         active: true,
       };
       newEmployees.push(newEmp);
+    } else if (rawNo && !existing?.employeeNo) {
+      existing.employeeNo = rawNo;
     }
     entries.push({ employeeId: targetId, rate: parsedRate, workContent: rawWork });
     memberNames.push(rawName);
@@ -2870,13 +2975,13 @@ export function parsePlanMemberCsvText(csvText: string, stateOrEmployees: State 
 
 // 常用项目组模版（含月度默认分配额度比例）
 export function getProjectGroupTemplateCsv(): string {
-  const headers = ['员工姓名', '月度默认分配比例(%)', '当月工作内容', '专业组', '职务', '部门', '备注'];
+  const headers = ['工号', '员工姓名', '月度默认分配比例(%)', '当月工作内容', '专业组', '职务', '部门', '备注'];
   const examples = [
-    ['张三', '35', '主导系统核心通信架构与关键性能调优', '研发组', '高级工程师', '研发中心', '研发负责人'],
-    ['李四', '25', '负责数据解析算法研发与接口联调', '研发组', '工程师', '研发中心', '骨干研发'],
-    ['王五', '20', '总体技术指标拆解与需求方案评审', '总体组', '工程师', '总体部', '总体设计'],
-    ['赵六', '10', '底层驱动适配与联调', '研发组', '工程师', '研发中心', '驱动研发'],
-    ['孙七', '10', '产品需求梳理与文档标准化', '产品组', '工程师', '产品部', '产品规范'],
+    ['1029', '邹富敦', '35', '主导系统核心通信架构与关键性能调优', '研发组', '高级工程师', '研发中心', '研发负责人'],
+    ['1030', '杨健', '25', '负责数据解析算法研发与接口联调', '研发组', '工程师', '研发中心', '骨干研发'],
+    ['1010', '赵淼', '20', '总体技术指标拆解与需求方案评审', '总体组', '工程师', '总体部', '总体设计'],
+    ['1012', '余烨', '10', '底层驱动适配与联调', '总体组', '工程师', '总体部', '驱动研发'],
+    ['1017', '孙骞', '10', '产品需求梳理与文档标准化', '产品组', '高级工程师', '产品部', '产品规范'],
   ];
   return generateCsv(headers, examples);
 }
@@ -3191,6 +3296,7 @@ export type ProjectMeritPackage = {
   generatedAt: string;
   exporter: {
     id: string;
+    employeeNo?: string;
     name: string;
     position?: string;
     group?: string;
@@ -3226,6 +3332,7 @@ export type ProjectMeritPackage = {
   // 每个人的绩点总和
   memberSummaries: {
     employeeId: string;
+    employeeNo?: string;
     name: string;
     department: string;
     group?: string;
@@ -3243,6 +3350,7 @@ export type ProjectMeritPackage = {
     projectCode: string;
     month: string;
     employeeId: string;
+    employeeNo?: string;
     employeeName: string;
     department: string;
     group?: string;
@@ -3274,6 +3382,7 @@ export type AuditorSummaryResult = {
   employeeSummaries: {
     id: string;
     employeeId: string;
+    employeeNo?: string;
     name: string;
     department: string;
     group: string;
@@ -3319,6 +3428,7 @@ export type AuditorSummaryResult = {
     rows: {
       index: number;
       employeeId: string;
+      employeeNo?: string;
       name: string;
       group: string;
       position: string;
@@ -3394,7 +3504,8 @@ export function exportProjectMeritPackage(
     periodAllocatedRateBps += plan.budget;
     const allocations = planAllocations(project, plan);
     for (const alloc of allocations) {
-      const emp = state.employees.find(e => e.id === alloc.employeeId);
+      const emp = state.employees.find(e => e.id === alloc.employeeId || (e.employeeNo && e.employeeNo === alloc.employeeId));
+      const empNo = emp?.employeeNo || (emp && !emp.id.startsWith('emp_') ? emp.id : undefined);
       const entry = plan.entries.find(e => e.employeeId === alloc.employeeId);
       const pts = alloc.points;
       const amountWan = Number((pts / 1_000_000).toFixed(6));
@@ -3416,6 +3527,7 @@ export function exportProjectMeritPackage(
         projectCode: project.code,
         month: plan.month,
         employeeId: alloc.employeeId,
+        employeeNo: empNo,
         employeeName: emp?.name || alloc.employeeId,
         department: emp?.department || '',
         group: emp?.group || '',
@@ -3436,10 +3548,12 @@ export function exportProjectMeritPackage(
   // 计算每个人的绩点总和
   const memberSummaries: ProjectMeritPackage['memberSummaries'] = [];
   for (const [empId, agg] of memberPointsMap.entries()) {
-    const emp = state.employees.find(e => e.id === empId);
+    const emp = state.employees.find(e => e.id === empId || (e.employeeNo && e.employeeNo === empId));
+    const empNo = emp?.employeeNo || (emp && !emp.id.startsWith('emp_') ? emp.id : undefined);
     const ratio = periodAllocatedPoints > 0 ? Number(((agg.points / periodAllocatedPoints) * 100).toFixed(2)) : 0;
     memberSummaries.push({
       employeeId: empId,
+      employeeNo: empNo,
       name: emp?.name || empId,
       department: emp?.department || '',
       group: emp?.group || '',
@@ -3458,6 +3572,7 @@ export function exportProjectMeritPackage(
 
   const exporter: ProjectMeritPackage['exporter'] = {
     id: actor?.id || owner?.id || 'unknown',
+    employeeNo: actor?.employeeNo || owner?.employeeNo,
     name: actor?.name || ownerName,
     position: actor?.position,
     group: actor?.group,
@@ -3542,13 +3657,15 @@ export function parseProjectMeritPackage(raw: string | object): ProjectMeritPack
 
   if (!Array.isArray(data.memberSummaries)) {
     // 自动根据 details 计算 memberSummaries
-    const map = new Map<string, { name: string; dept: string; group: string; pos: string; grpRole: string; points: number; wan: number; months: Set<string> }>();
+    const map = new Map<string, { employeeNo?: string; name: string; dept: string; group: string; pos: string; grpRole: string; points: number; wan: number; months: Set<string> }>();
     let totalPts = 0;
     for (const d of data.details) {
       totalPts += (d.points || 0);
-      let item = map.get(d.employeeId);
+      const key = d.employeeNo || d.employeeId;
+      let item = map.get(key);
       if (!item) {
         item = {
+          employeeNo: d.employeeNo,
           name: d.employeeName || d.employeeId,
           dept: d.department || '',
           group: d.group || '',
@@ -3558,7 +3675,7 @@ export function parseProjectMeritPackage(raw: string | object): ProjectMeritPack
           wan: 0,
           months: new Set(),
         };
-        map.set(d.employeeId, item);
+        map.set(key, item);
       }
       item.points += (d.points || 0);
       item.wan += (d.wan || 0);
@@ -3567,6 +3684,7 @@ export function parseProjectMeritPackage(raw: string | object): ProjectMeritPack
 
     data.memberSummaries = Array.from(map.entries()).map(([empId, item]) => ({
       employeeId: empId,
+      employeeNo: item.employeeNo,
       name: item.name,
       department: item.dept,
       group: item.group,
@@ -3592,7 +3710,7 @@ export function parseProjectMeritPackage(raw: string | object): ProjectMeritPack
 }
 
 /**
- * 核算员自动汇总多个项目分配数据包
+ * 核算员自动汇总多个项目分配数据包（核心：根据唯一ID/工号判定跨数据包合并）
  */
 export function summarizeAuditorPackages(
   packages: ProjectMeritPackage[],
@@ -3686,9 +3804,11 @@ export function summarizeAuditorPackages(
     return b.points - a.points;
   });
 
-  // 4. 全员跨项目绩点总和大表（以人为核心聚合）
+  // 4. 全员跨项目绩点总和大表（以唯一ID/工号为核心跨项目精准合并）
   type EmpAgg = {
+    key: string;
     employeeId: string;
+    employeeNo?: string;
     name: string;
     department: string;
     group: string;
@@ -3711,12 +3831,38 @@ export function summarizeAuditorPackages(
   const empMap = new Map<string, EmpAgg>();
 
   for (const d of allDetails) {
-    let agg = empMap.get(d.employeeId);
+    // 匹配全局花名册中的员工（严格分层：优先按工号精确匹配；其次按ID匹配；只有在未指定工号时才退化至按姓名匹配）
+    let matchEmp: Employee | undefined;
+    if (d.employeeNo && allEmployees) {
+      matchEmp = allEmployees.find(e => (e.employeeNo && e.employeeNo === d.employeeNo) || e.id === d.employeeNo);
+    }
+    if (!matchEmp && d.employeeId && allEmployees) {
+      matchEmp = allEmployees.find(e => e.id === d.employeeId || (e.employeeNo && e.employeeNo === d.employeeId));
+    }
+    if (!matchEmp && allEmployees && !d.employeeNo) {
+      matchEmp = allEmployees.find(e => e.name === d.employeeName);
+    }
+
+    // 核心判定准则：按唯一的ID号/工号判定合并
+    // 优先取数据包中的工号/ID，其次取核算员花名册中的匹配工号/ID，确保不同数据包中同工号/同ID精准归集
+    const uniqueKey = (
+      d.employeeNo?.trim() ||
+      matchEmp?.employeeNo?.trim() ||
+      (matchEmp && !matchEmp.id.startsWith('emp_') ? matchEmp.id.trim() : '') ||
+      d.employeeId?.trim() ||
+      d.employeeName?.trim()
+    );
+
+    const effectiveNo = d.employeeNo || matchEmp?.employeeNo || (matchEmp && !matchEmp.id.startsWith('emp_') ? matchEmp.id : undefined);
+    const effectiveName = d.employeeName || matchEmp?.name || uniqueKey;
+
+    let agg = empMap.get(uniqueKey);
     if (!agg) {
-      const matchEmp = allEmployees?.find(e => e.id === d.employeeId || e.name === d.employeeName);
       agg = {
-        employeeId: d.employeeId,
-        name: d.employeeName || matchEmp?.name || d.employeeId,
+        key: uniqueKey,
+        employeeId: uniqueKey,
+        employeeNo: effectiveNo,
+        name: effectiveName,
         department: matchEmp?.department || d.department || '',
         group: matchEmp?.group || d.group || '',
         position: matchEmp?.position || d.position || '',
@@ -3726,7 +3872,20 @@ export function summarizeAuditorPackages(
         projectsMap: new Map(),
         details: [],
       };
-      empMap.set(d.employeeId, agg);
+      empMap.set(uniqueKey, agg);
+    } else {
+      if (!agg.employeeNo && effectiveNo) {
+        agg.employeeNo = effectiveNo;
+      }
+      if (!agg.department && (matchEmp?.department || d.department)) {
+        agg.department = matchEmp?.department || d.department || '';
+      }
+      if (!agg.group && (matchEmp?.group || d.group)) {
+        agg.group = matchEmp?.group || d.group || '';
+      }
+      if (!agg.position && (matchEmp?.position || d.position)) {
+        agg.position = matchEmp?.position || d.position || '';
+      }
     }
 
     agg.totalPoints += d.points;
@@ -3754,8 +3913,9 @@ export function summarizeAuditorPackages(
 
   const employeeSummaries: AuditorSummaryResult['employeeSummaries'] = Array.from(empMap.values())
     .map(agg => ({
-      id: agg.employeeId,
+      id: agg.key,
       employeeId: agg.employeeId,
+      employeeNo: agg.employeeNo,
       name: agg.name,
       department: agg.department,
       group: agg.group,
@@ -3809,6 +3969,7 @@ export function summarizeAuditorPackages(
     return {
       index: index + 1,
       employeeId: emp.employeeId,
+      employeeNo: emp.employeeNo,
       name: emp.name,
       group: emp.group,
       position: emp.position,
@@ -3903,21 +4064,22 @@ export function summarizeCurrentStateForAuditor(
 }
 
 /**
- * 导出全员跨项目绩点总表 CSV
+ * 导出全员跨项目绩点总表 CSV（以万元为单位）
  */
 export function exportAuditorEmployeesCsv(summary: AuditorSummaryResult): string {
-  const headers = ['全员排名', '员工姓名', '所属专业组', '职务', '专业组职务', '所属部门', '参与项目数', '累计获得总绩点', '折合总金额(万元)', '参与项目明细'];
+  const headers = ['全员排名', '工号', '员工姓名', '所属专业组', '职务', '专业组职务', '所属部门', '参与项目数', '累计获得总绩点(万元)', '折合总金额(万元)', '参与项目明细'];
   const rows = summary.employeeSummaries.map(emp => {
-    const detailStr = emp.projects.map(p => `${p.projectName}(${(p.points / 100).toFixed(2)}绩点)`).join('; ');
+    const detailStr = emp.projects.map(p => `${p.projectName}(${p.wan.toFixed(4)}万)`).join('; ');
     return [
       emp.rank,
+      emp.employeeNo || emp.employeeId || '',
       emp.name,
       emp.group || '未分组',
       emp.position || '',
       emp.groupRole || '',
       emp.department,
       emp.projectCount,
-      (emp.totalPoints / 100).toFixed(2),
+      (emp.totalPoints / 1_000_000).toFixed(4),
       emp.totalWan.toFixed(4),
       detailStr,
     ];
@@ -3926,10 +4088,10 @@ export function exportAuditorEmployeesCsv(summary: AuditorSummaryResult): string
 }
 
 /**
- * 导出项目分配额度情况对照表 CSV
+ * 导出项目分配额度情况对照表 CSV（以万元为单位）
  */
 export function exportAuditorProjectsCsv(summary: AuditorSummaryResult): string {
-  const headers = ['序号', '工作令号', '项目名称', '项目负责人', '客户名称', '合同总额(万元)', '已分配额度(万元)', '已分配比例(%)', '已分配绩点', '剩余额度(万元)', '剩余比例(%)', '分配人数', '核算期数', '额度健康度'];
+  const headers = ['序号', '工作令号', '项目名称', '项目负责人', '客户名称', '合同总额(万元)', '已分配额度(万元)', '已分配比例(%)', '已分配绩点(万元)', '剩余额度(万元)', '剩余比例(%)', '分配人数', '核算期数', '额度健康度'];
   const rows = summary.projectSummaries.map((p, idx) => [
     idx + 1,
     p.code,
@@ -3939,7 +4101,7 @@ export function exportAuditorProjectsCsv(summary: AuditorSummaryResult): string 
     p.contractWan.toFixed(4),
     p.allocatedWan.toFixed(4),
     (p.allocatedRateBps / 100).toFixed(2),
-    (p.allocatedPoints / 100).toFixed(2),
+    (p.allocatedPoints / 1_000_000).toFixed(4),
     p.remainingWan.toFixed(4),
     (p.remainingRateBps / 100).toFixed(2),
     p.headcount,
@@ -3950,17 +4112,18 @@ export function exportAuditorProjectsCsv(summary: AuditorSummaryResult): string 
 }
 
 /**
- * 导出二维透视矩阵 CSV（按图2格式：序号、姓名、职务、专业组、各合同令号...、个人累加，最底行【项目累加】）
+ * 导出二维透视矩阵 CSV（按图2格式：序号、工号、姓名、职务、专业组、各合同令号...、个人累加，最底行【项目累加】，以万元为单位）
  */
 export function exportAuditorMatrixCsv(summary: AuditorSummaryResult): string {
-  const headers = ['序号', '姓名', '职务', '专业组', ...summary.matrix.projectHeaders.map(h => h.label), '个人累加'];
+  const headers = ['序号', '工号', '姓名', '职务', '专业组', ...summary.matrix.projectHeaders.map(h => h.label), '个人累加(万元)'];
   const data = summary.matrix.rows.map(r => [
     r.index,
+    r.employeeNo || r.employeeId || '',
     r.name,
     r.position || '',
     r.group || '',
-    ...r.scores.map(pts => (pts / 100).toFixed(2)),
-    (r.rowTotalPoints / 100).toFixed(2),
+    ...r.scores.map(pts => (pts / 1_000_000).toFixed(4)),
+    (r.rowTotalPoints / 1_000_000).toFixed(4),
   ]);
 
   // 最底行【项目累加】
@@ -3969,8 +4132,9 @@ export function exportAuditorMatrixCsv(summary: AuditorSummaryResult): string {
     '项目累加',
     '',
     '',
-    ...summary.matrix.projectTotals.map(pts => (pts / 100).toFixed(2)),
-    (summary.matrix.grandTotalPoints / 100).toFixed(2),
+    '',
+    ...summary.matrix.projectTotals.map(pts => (pts / 1_000_000).toFixed(4)),
+    (summary.matrix.grandTotalPoints / 1_000_000).toFixed(4),
   ];
 
   data.push(projectTotalsRow);
@@ -3978,21 +4142,22 @@ export function exportAuditorMatrixCsv(summary: AuditorSummaryResult): string {
 }
 
 /**
- * 导出全量明细流水 CSV
+ * 导出全量明细流水 CSV（以万元为单位）
  */
 export function exportAuditorDetailsCsv(summary: AuditorSummaryResult): string {
-  const headers = ['序号', '考核月份', '工作令号', '项目名称', '员工姓名', '专业组', '职务', '所属部门', '分润比例(%)', '获得绩点', '折合金额(万元)', '工作履职内容'];
+  const headers = ['序号', '考核月份', '工作令号', '项目名称', '员工工号', '员工姓名', '专业组', '职务', '所属部门', '分润比例(%)', '获得绩点(万元)', '折合金额(万元)', '工作履职内容'];
   const rows = summary.allDetails.map((d, idx) => [
     idx + 1,
     d.month,
     d.projectCode,
     d.projectName,
+    d.employeeNo || d.employeeId || '',
     d.employeeName,
     d.group || '',
     d.position || '',
     d.department || '',
     (d.rate / 100).toFixed(2),
-    (d.points / 100).toFixed(2),
+    (d.points / 1_000_000).toFixed(4),
     d.wan.toFixed(4),
     d.workContent || '',
   ]);

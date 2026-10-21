@@ -11,8 +11,10 @@ import {
   Check,
   CheckSquare,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronUp,
+  ArrowRight,
   CircleGauge,
   Copy,
   Crown,
@@ -34,6 +36,7 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  BookOpen,
   BookOpenCheck,
   Save,
   Search,
@@ -291,7 +294,7 @@ function sanitizeState(s: State): State {
   };
 }
 
-function WorkspaceGate({ hasLegacyData, onReady, onError }: {
+function WorkspaceGate({ hasLegacyData, onReady, onError, onOpenGuide, onOpenManual }: {
   hasLegacyData: boolean;
   onReady(data: {
     name: string;
@@ -305,6 +308,8 @@ function WorkspaceGate({ hasLegacyData, onReady, onError }: {
     filePath: string;
   }): void;
   onError(message: string): void;
+  onOpenGuide(): void;
+  onOpenManual(): void;
 }) {
   const [mode, setMode] = useState<'home' | 'create' | 'open'>('home');
   const [workspaceType, setWorkspaceType] = useState<WorkspaceType>('general');
@@ -488,6 +493,26 @@ function WorkspaceGate({ hasLegacyData, onReady, onError }: {
         <button className="secondary large" onClick={chooseOpen}><FolderOpen size={18}/>打开工作区</button>
         <button className="secondary large" onClick={importBase}><Users size={18}/>从共享基础库新建</button>
       </div>}
+      {mode === 'home' && (
+        <div style={{ marginTop: '22px', paddingTop: '18px', borderTop: '1px solid #e3e9e5', display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="guide-gate-trigger"
+            onClick={onOpenGuide}
+          >
+            <Sparkles size={15} style={{ color: '#16a34a' }} />
+            💡 5步快速操作向导
+          </button>
+          <button
+            type="button"
+            className="guide-gate-trigger manual-gate-trigger"
+            onClick={onOpenManual}
+          >
+            <BookOpen size={15} style={{ color: '#0284c7' }} />
+            📖 简易操作手册 (图文版)
+          </button>
+        </div>
+      )}
       {mode === 'create' && <div className="workspace-form">
         <div style={{ marginBottom: '14px' }}>
           <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '8px' }}>
@@ -682,6 +707,23 @@ export default function DesktopWorkspace() {
   const [projectGroups, setProjectGroups] = useState<ProjectGroup[]>([]);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [aboutModalOpen, setAboutModalOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(1);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualChapter, setManualChapter] = useState(0);
+
+  // 第一次进入工作区自动展示新手 5 步向导
+  useEffect(() => {
+    if (state && typeof window !== 'undefined') {
+      try {
+        const viewed = localStorage.getItem('hengji_onboarding_viewed_v062');
+        if (!viewed) {
+          setOnboardingStep(1);
+          setOnboardingOpen(true);
+        }
+      } catch {}
+    }
+  }, [Boolean(state)]);
 
   const saveProjectGroups = async (next: ProjectGroup[]) => {
     setProjectGroups(next);
@@ -944,7 +986,48 @@ export default function DesktopWorkspace() {
   };
 
   if (!workspaceReady) return <div className="loading"><div className="spinner" />正在初始化安全工作区…</div>;
-  if (!state) return <WorkspaceGate hasLegacyData={hasLegacyData} onReady={applyWorkspace} onError={message => setNotice(message)} />;
+  if (!state) return (
+    <>
+      <WorkspaceGate
+        hasLegacyData={hasLegacyData}
+        onReady={applyWorkspace}
+        onError={message => setNotice(message)}
+        onOpenGuide={() => {
+          setOnboardingStep(1);
+          setOnboardingOpen(true);
+        }}
+        onOpenManual={() => {
+          setManualChapter(0);
+          setManualOpen(true);
+        }}
+      />
+      {onboardingOpen && (
+        <OnboardingGuideModal
+          step={onboardingStep}
+          onStepChange={setOnboardingStep}
+          onClose={() => setOnboardingOpen(false)}
+          onOpenManual={() => {
+            setManualChapter(onboardingStep);
+            setManualOpen(true);
+          }}
+          onNavigate={() => {}}
+          isGate={true}
+        />
+      )}
+      {manualOpen && (
+        <ManualModal
+          initialChapter={manualChapter}
+          onClose={() => setManualOpen(false)}
+          onOpenGuide={() => {
+            setOnboardingStep(manualChapter >= 1 && manualChapter <= 5 ? manualChapter : 1);
+            setOnboardingOpen(true);
+          }}
+          onNavigate={() => {}}
+          isGate={true}
+        />
+      )}
+    </>
+  );
 
   const nav = [
     { key: 'dashboard', icon: CircleGauge, label: '总览看板' },
@@ -1030,14 +1113,27 @@ export default function DesktopWorkspace() {
         </div>
         <div style={{ padding: '8px 14px', borderTop: '1px solid #1c3b32', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: '#94a3b8' }}>
           <span>版本: v{APP_VERSION}</span>
-          <button
-            type="button"
-            style={{ border: 'none', background: 'transparent', color: '#4ade80', cursor: 'pointer', padding: 0, fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-            onClick={() => setAboutModalOpen(true)}
-            title="查看系统关于与版本更新历史"
-          >
-            <Info size={11} />关于系统
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              style={{ border: 'none', background: 'transparent', color: '#7dd3fc', cursor: 'pointer', padding: 0, fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+              onClick={() => {
+                setManualChapter(0);
+                setManualOpen(true);
+              }}
+              title="查看图文并茂的新手简易操作手册"
+            >
+              <BookOpen size={11} />操作手册
+            </button>
+            <button
+              type="button"
+              style={{ border: 'none', background: 'transparent', color: '#4ade80', cursor: 'pointer', padding: 0, fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+              onClick={() => setAboutModalOpen(true)}
+              title="查看系统关于与版本更新历史"
+            >
+              <Info size={11} />关于系统
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -1088,6 +1184,28 @@ export default function DesktopWorkspace() {
               if (await window.meritDesktop.exportBase({ state, projectGroups })) setNotice('共享基础库已导出：不包含项目、工作内容和绩点');
             }}><Users size={14}/>导出共享基础库</button>
             <button
+              className="secondary manual-nav-btn"
+              style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }}
+              onClick={() => {
+                setManualChapter(0);
+                setManualOpen(true);
+              }}
+              title="查看图文并茂的新手简易操作手册与业务闭环指南"
+            >
+              <BookOpen size={14} style={{ color: '#0284c7' }} />操作手册
+            </button>
+            <button
+              className="secondary guide-nav-btn"
+              style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }}
+              onClick={() => {
+                setOnboardingStep(1);
+                setOnboardingOpen(true);
+              }}
+              title="新手五步快速上手向导与业务闭环指南"
+            >
+              <Sparkles size={14} style={{ color: '#16a34a' }} />新手引导
+            </button>
+            <button
               className="secondary"
               style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }}
               onClick={() => setAboutModalOpen(true)}
@@ -1109,6 +1227,10 @@ export default function DesktopWorkspace() {
               onResetDemo={async () => {
                 if (state.projects.length && !confirm('载入示例会重置当前全部数据，是否继续？')) return;
                 try { await persist(demoState(), '示例数据已成功载入'); } catch (e) { setNotice(errorText(e)); }
+              }}
+              onOpenGuide={(step = 1) => {
+                setOnboardingStep(step);
+                setOnboardingOpen(true);
               }}
             />
           )}
@@ -1347,6 +1469,41 @@ export default function DesktopWorkspace() {
         />
       )}
 
+      {/* Onboarding Guide Modal */}
+      {onboardingOpen && (
+        <OnboardingGuideModal
+          step={onboardingStep}
+          onStepChange={setOnboardingStep}
+          onClose={() => setOnboardingOpen(false)}
+          onOpenManual={() => {
+            setManualChapter(onboardingStep);
+            setManualOpen(true);
+          }}
+          onNavigate={(targetTab) => {
+            setTab(targetTab);
+            setOnboardingOpen(false);
+          }}
+          isGate={false}
+        />
+      )}
+
+      {/* Manual Modal */}
+      {manualOpen && (
+        <ManualModal
+          initialChapter={manualChapter}
+          onClose={() => setManualOpen(false)}
+          onOpenGuide={() => {
+            setOnboardingStep(manualChapter >= 1 && manualChapter <= 5 ? manualChapter : 1);
+            setOnboardingOpen(true);
+          }}
+          onNavigate={(targetTab) => {
+            setTab(targetTab);
+            setManualOpen(false);
+          }}
+          isGate={false}
+        />
+      )}
+
       {/* About & Version History Modal */}
       {aboutModalOpen && (
         <AboutModal onClose={() => setAboutModalOpen(false)} />
@@ -1559,9 +1716,1217 @@ function AboutModal({ onClose }: { onClose(): void }) {
 }
 
 // -------------------------------------------------------------
+// 新手 5 步快速上手操作向导弹窗 (Onboarding Guide Modal)
+// -------------------------------------------------------------
+function OnboardingGuideModal({
+  step,
+  onStepChange,
+  onClose,
+  onOpenManual,
+  onNavigate,
+  isGate = false,
+}: {
+  step: number;
+  onStepChange(step: number): void;
+  onClose(): void;
+  onOpenManual?(): void;
+  onNavigate(tab: Tab): void;
+  isGate?: boolean;
+}) {
+  const [dontShowAgain, setDontShowAgain] = useState(true);
+
+  const handleFinish = () => {
+    if (dontShowAgain && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('hengji_onboarding_viewed_v062', 'true');
+      } catch {}
+    }
+    onClose();
+  };
+
+  const steps = [
+    {
+      num: 1,
+      title: '第一步：新建安全工作区',
+      shortTitle: '1. 新建工作区',
+      stage: '数据安全与存储底座',
+      icon: Database,
+      targetTab: 'dashboard' as Tab,
+    },
+    {
+      num: 2,
+      title: '第二步：导入项目与员工',
+      shortTitle: '2. 导入项目/员工',
+      stage: '初始化业务主体',
+      icon: Users,
+      targetTab: 'employees' as Tab,
+    },
+    {
+      num: 3,
+      title: '第三步：额度规划与项目组',
+      shortTitle: '3. 规划与项目组',
+      stage: '顶层策略与防透支',
+      icon: Sliders,
+      targetTab: 'projects' as Tab,
+    },
+    {
+      num: 4,
+      title: '第四步：月度分配与发布',
+      shortTitle: '4. 月度分配发布',
+      stage: '月度考评与分润',
+      icon: CalendarRange,
+      targetTab: 'plans' as Tab,
+    },
+    {
+      num: 5,
+      title: '第五步：周期报表与荣誉',
+      shortTitle: '5. 周期报表透视',
+      stage: '实时报表与荣誉榜',
+      icon: BarChart3,
+      targetTab: 'reports' as Tab,
+    },
+  ];
+
+  const current = steps[step - 1] || steps[0];
+
+  return (
+    <Modal
+      title="衡绩考核系统 · 新手 5 步快速上手向导"
+      subtitle="端到端业务闭环：从新建安全工作区到月度分配与周期报表透视"
+      wide
+      onClose={handleFinish}
+    >
+      <div className="modal-body" style={{ maxHeight: '76vh', overflowY: 'auto' }}>
+        {/* Stepper 步骤导航栏 */}
+        <div className="onboarding-stepper">
+          {steps.map(s => {
+            const isCompleted = s.num < step;
+            const isActive = s.num === step;
+            return (
+              <button
+                key={s.num}
+                type="button"
+                className={`onboarding-step-btn ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
+                onClick={() => onStepChange(s.num)}
+                title={`切换到第 ${s.num} 步：${s.title}`}
+              >
+                <div className="step-index-circle">
+                  {isCompleted ? <Check size={14} /> : s.num}
+                </div>
+                <div className="step-text-wrap">
+                  <span className="step-num-text">STEP 0{s.num}</span>
+                  <span className="step-label-text">{s.shortTitle}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 步骤标题与阶段徽章 */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span style={{ fontSize: '11px', background: '#ecfdf5', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: '4px', padding: '2px 8px', fontWeight: 700 }}>
+                第 {current.num} 步 / 共 5 步 · {current.stage}
+              </span>
+            </div>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
+              {current.title}
+            </h3>
+          </div>
+          {onOpenManual && (
+            <button
+              type="button"
+              className="secondary"
+              style={{
+                padding: '6px 12px',
+                fontSize: '12px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                background: '#f0f9ff',
+                color: '#0369a1',
+                borderColor: '#bae6fd',
+                fontWeight: 600,
+              }}
+              onClick={() => {
+                onClose();
+                onOpenManual();
+              }}
+              title="切换至完整图文操作手册"
+            >
+              <BookOpen size={13} /> 切换为完整操作手册
+            </button>
+          )}
+        </div>
+
+        {/* Step 1 内容 */}
+        {step === 1 && (
+          <div>
+            <div className="onboarding-flow-card">
+              <div className="flow-card-title">
+                <Sparkles size={14} /> 第 1 步业务流程与安全机制示意
+              </div>
+              <div className="flow-steps-track">
+                <div className="flow-node highlight">
+                  <Database size={15} /> 1. 启动衡绩系统
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node">
+                  📁 选取非系统盘 (D/E盘)
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node">
+                  🔒 设置管理员口令 (AES-256)
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node highlight">
+                  ✨ 生成 .hengji 加密工作区
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node">
+                  🛡️ 自动生成 .backup 灾备
+                </div>
+              </div>
+            </div>
+
+            <div className="onboarding-checklist">
+              <div className="checklist-item">
+                <div className="checklist-item-num">1</div>
+                <div>
+                  <div className="checklist-item-title">在启动页点击【新建工作区】</div>
+                  <div className="checklist-item-desc">
+                    首次打开软件，点击【+ 新建工作区】（亦支持点击【从共享基础库新建】快速继承已有部门员工与常用项目组配置）。
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">2</div>
+                <div>
+                  <div className="checklist-item-title">选择工作区应用场景</div>
+                  <div className="checklist-item-desc">
+                    系统提供两种工作区模式：首选推荐<b>【🏢 综合管理工作区】</b>，适合超级管理员或部门负责人统揽项目配置、额度规划、月度分配与花名册维护；专职核算员可选择<b>【📊 绩效核算工作区】</b>。
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">3</div>
+                <div>
+                  <div className="checklist-item-title">指定非系统盘安全存储目录（后缀为 .hengji）</div>
+                  <div className="checklist-item-desc">
+                    系统彻底摒弃数据默认写入 C 盘隐蔽目录的缺陷。弹出系统保存对话框时，<b>强烈建议保存在非系统盘（如 D 盘、E 盘、单位专用保密盘或受控网盘目录）</b>。
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">4</div>
+                <div>
+                  <div className="checklist-item-title">设置管理员口令或免密快速进入</div>
+                  <div className="checklist-item-desc">
+                    可输入口令通过行业高标准 PBKDF2-SHA256 与 AES-256-GCM 认证加密保护；在个人专用电脑上，口令亦可<b>留空</b>创建免密工作区，日常双击或一键直接秒进，便捷高效。
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">5</div>
+                <div>
+                  <div className="checklist-item-title">每次保存自动生成同名镜像双重灾备</div>
+                  <div className="checklist-item-desc">
+                    每次保存时，系统自动在工作区同目录生成 <code>.hengji.backup</code> 上一版历史备份，随时双重兜底。纯本地离线运行，零网络依赖。
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="onboarding-tip-box">
+              <div className="tip-icon">💡</div>
+              <div>
+                <div className="tip-title">新手提示：工作区随时可另存与备份</div>
+                <div className="tip-content">
+                  进入系统后，随时可使用顶部栏【工作区另存为】制作加密副本，或点击【导出共享基础库】导出不含项目和绩效的基础架构分发给其他组员。
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2 内容 */}
+        {step === 2 && (
+          <div>
+            <div className="onboarding-flow-card">
+              <div className="flow-card-title">
+                <Sparkles size={14} /> 第 2 步业务主体初始化示意
+              </div>
+              <div className="flow-steps-track">
+                <div className="flow-node highlight">
+                  <Users size={15} /> 1. 部门员工花名册
+                </div>
+                <span className="flow-arrow">+</span>
+                <div className="flow-node highlight">
+                  <BriefcaseBusiness size={15} /> 2. 工程合同项目清单
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node">
+                  ⚡ 智能剥离千分位/超长小数
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node highlight">
+                  🎯 考核业务底座就绪
+                </div>
+              </div>
+            </div>
+
+            <div className="onboarding-checklist">
+              <div className="checklist-item">
+                <div className="checklist-item-num">1</div>
+                <div>
+                  <div className="checklist-item-title">导入或添加部门员工（支持总体组、产品组、研发组）</div>
+                  <div className="checklist-item-desc">
+                    点击左侧【员工与专业组】：① 可点击【📥 批量导入员工 CSV】直接拖拽单位现有花名册，智能识别姓名、工号、部门、专业组、职务及邮箱；② 空白工作区可点击【⚡ 一键初始化内置成员】一秒载入标杆架构；③ 亦支持点击【+ 新建员工】手工录入。
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">2</div>
+                <div>
+                  <div className="checklist-item-title">导入或新建工程合同项目</div>
+                  <div className="checklist-item-desc">
+                    点击左侧【项目库与额度】或【数据导入导出与灾备】：① 点击【📥 批量导入项目 CSV】拖拽现有项目台账表格；② 亦可点击【+ 新建项目】录入工程工作令号、项目名称、客户单位、含税合同总额（万元）及计划起止周期。
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">3</div>
+                <div>
+                  <div className="checklist-item-title">财务多位小数、千分位逗号全自动容错解析</div>
+                  <div className="checklist-item-desc">
+                    系统全面适配财务与 OA 导出数据，自动剥离千分位逗号（如 <code>1,309,000.00</code>）、货币符号（¥、￥、$）及超长浮点小数（如 <code>33.33333333</code> 自动四舍五入到分），绝不弹窗报错导致表格报废。
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">4</div>
+                <div>
+                  <div className="checklist-item-title">同令号多子合同独立核算</div>
+                  <div className="checklist-item-desc">
+                    同一工作令号下支持存在多个子项目或不同执行合同，每个合同项目独立归集与分配，彻底杜绝数据串联或克隆。
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="onboarding-tip-box blue">
+              <div className="tip-icon">ℹ️</div>
+              <div>
+                <div className="tip-title">专业组体系贯穿全系统</div>
+                <div className="tip-content">
+                  设置好员工的“总体组”、“产品组”、“研发组”后，在项目团队挑选、专业组月度额度配比柱状图、月度之星评选及报表透视中都会自动分组联动。
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3 内容 */}
+        {step === 3 && (
+          <div>
+            <div className="onboarding-flow-card">
+              <div className="flow-card-title">
+                <Sparkles size={14} /> 第 3 步项目额度规划与稳健交付策略示意
+              </div>
+              <div className="flow-steps-track">
+                <div className="flow-node">
+                  🌱 前期争取阶段 (0~10%可调, 推荐5%)
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node highlight">
+                  📦 成品研制与发货交付 (大头45%+锁定)
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node">
+                  🛡️ 维保支持阶段 (牢固锁定5%)
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node highlight">
+                  👥 绑定常用项目组模版
+                </div>
+              </div>
+            </div>
+
+            <div className="onboarding-checklist">
+              <div className="checklist-item">
+                <div className="checklist-item-num">1</div>
+                <div>
+                  <div className="checklist-item-title">指派项目负责人与配置团队成员</div>
+                  <div className="checklist-item-desc">
+                    在【项目库与额度】中找到对应项目，点击【编辑】指派项目负责人，并勾选参与该项目的团队成员（支持按总体组、产品组、研发组一键全选）。
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">2</div>
+                <div>
+                  <div className="checklist-item-title">制定全周期月度额度规划（防前期透支核心策略）</div>
+                  <div className="checklist-item-desc">
+                    点击项目卡片上的<b>【🎯 额度规划】</b>按钮。系统首创<b>“🎯 稳健交付型（前低后高）”</b>排期策略：
+                    <ul style={{ margin: '6px 0 0 16px', padding: 0, color: '#475569', fontSize: '12px', lineHeight: 1.6 }}>
+                      <li><b>前期项目争取阶段（首月 0%~10% 可调，默认推荐 5%）</b>：用于方案论证与前期商务争取，设立硬性上限，严防初期把钱分完；</li>
+                      <li><b>主体研制与成品交付阶段</b>：将大头（45% 以上额度）牢牢锁定在成品试验联调、发货交付与终检验收阶段；</li>
+                      <li><b>维保阶段额度锁定（置底保留 5%）</b>：在项目最后一个月牢固锁定 5% 绩效额度，确保发货终验后售后维保依然有充沛激励。</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">3</div>
+                <div>
+                  <div className="checklist-item-title">一键稳健排期与阶段里程碑</div>
+                  <div className="checklist-item-desc">
+                    点击“🎯 一键稳健排期”自动秒级排定全生命周期；可按月输入阶段里程碑（如方案评审、试样研制、试验联调、成品发货验收）。
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">4</div>
+                <div>
+                  <div className="checklist-item-title">项目组管理与角色默认分配比例</div>
+                  <div className="checklist-item-desc">
+                    在【项目组管理】中，可沉淀团队常用的项目组模版（如典型型号组：总体组30%、产品组30%、研发组40%），后续月度分配时可一键套用默认比例。
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="onboarding-tip-box">
+              <div className="tip-icon">🎯</div>
+              <div>
+                <div className="tip-title">规划与实际联动基准</div>
+                <div className="tip-content">
+                  排好的全周期规划额度，将在后续月度分配时作为重要标尺；月度分配时系统会实时呈现偏差对比，并提供“⚡ 一键套用当月规划额度”。
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4 内容 */}
+        {step === 4 && (
+          <div>
+            <div className="onboarding-flow-card">
+              <div className="flow-card-title">
+                <Sparkles size={14} /> 第 4 步月底分配与批量发布生效示意
+              </div>
+              <div className="flow-steps-track">
+                <div className="flow-node">
+                  📅 选择考核月份 (如当月)
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node highlight">
+                  📊 全项目当月集中大表
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node">
+                  ⚡ 套用规划 & 成员分配 (100%)
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node highlight">
+                  🚀 一键批量发布生效
+                </div>
+              </div>
+            </div>
+
+            <div className="onboarding-checklist">
+              <div className="checklist-item">
+                <div className="checklist-item-num">1</div>
+                <div>
+                  <div className="checklist-item-title">月底分配全项目集中透视大表（告别逐个点开）</div>
+                  <div className="checklist-item-desc">
+                    点击左侧【月度分配】，默认进入<b>【📊 全项目当月集中管理】</b>大表；顶部选择考核月份，当月所有进行中项目集中呈现在同一张透视大表中。
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">2</div>
+                <div>
+                  <div className="checklist-item-title">调整当月分配额度（支持一键套用规划）</div>
+                  <div className="checklist-item-desc">
+                    表格每行清晰显示项目合同额、负责人及阶段里程碑；可直接微调当月分配比例（%），亦可直接点击<b>“⚡ 套用规划”</b>一键载入第 3 步排好的规划额度。
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">3</div>
+                <div>
+                  <div className="checklist-item-title">配置成员当月分配比例（必须等于 100%）</div>
+                  <div className="checklist-item-desc">
+                    点击每行的【👥 快速配置成员比例】弹窗，为各成员输入分润百分比；支持快捷点击“一键全员均摊”或“套用项目组默认比例”；弹窗底部实时校验比例之和，<b>必须精确等于 100%</b> 方可保存。
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">4</div>
+                <div>
+                  <div className="checklist-item-title">批量保存与一键批量发布/撤回</div>
+                  <div className="checklist-item-desc">
+                    同时调整多个项目的额度与比例后，点击顶部<b>【💾 批量保存当月修改】</b>；点击【📝 全选当月草稿】，点击<b>【🚀 批量发布所选项目】</b>立即正式生效计入考核！如需调整支持<b>【↩ 批量撤回为草稿】</b>。
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="onboarding-tip-box blue">
+              <div className="tip-icon">🧮</div>
+              <div>
+                <div className="tip-title">考核核心计算公式</div>
+                <div className="tip-content">
+                  <b>员工当月获得绩点 = 项目合同金额（元） × 当月项目分配比例（%） × 员工当月分配率（%）</b>。未发布的草稿状态方案不会计入最终考核报表。
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 5 内容 */}
+        {step === 5 && (
+          <div>
+            <div className="onboarding-flow-card">
+              <div className="flow-card-title">
+                <Sparkles size={14} /> 第 5 步报表透视与考核之星闭环示意
+              </div>
+              <div className="flow-steps-track">
+                <div className="flow-node">
+                  🗓️ 选定考核周期 (年/季/月/区间)
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node highlight">
+                  📊 二维透视矩阵大表
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node">
+                  ⚖️ 个人累加 + 浅蓝项目累加
+                </div>
+                <span className="flow-arrow">➔</span>
+                <div className="flow-node highlight">
+                  👑 终极总额双向守恒 & 考核之星
+                </div>
+              </div>
+            </div>
+
+            <div className="onboarding-checklist">
+              <div className="checklist-item">
+                <div className="checklist-item-num">1</div>
+                <div>
+                  <div className="checklist-item-title">多时间维度自由切换（年、季、月、自定义跨度）</div>
+                  <div className="checklist-item-desc">
+                    点击左侧【周期绩点报表】，顶部自由切换：<b>整年度</b>、<b>按季度（Q1~Q4）</b>、<b>单月份</b>或<b>自定义月份跨度区间</b>（如 2026-01 至 2026-06），数据瞬时秒级重算。
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">2</div>
+                <div>
+                  <div className="checklist-item-title">标准二维透视矩阵（图2标准）</div>
+                  <div className="checklist-item-desc">
+                    界面直接呈现高清晰度二维透视矩阵：
+                    <ul style={{ margin: '6px 0 0 16px', padding: 0, color: '#475569', fontSize: '12px', lineHeight: 1.6 }}>
+                      <li><b>横向每行（人员维度）</b>：展示每位员工在各个项目分得的绩点，最右侧深色标示<b>【个人累加】</b>跨项目总和；</li>
+                      <li><b>纵向每列（项目维度）</b>：展示每个合同项目列，<b>矩阵末行整行浅蓝色高亮展示【项目累加】汇总行</b>；</li>
+                      <li><b>右下角全系统终极总累加</b>：行和（所有人累加之和） = 列和（所有项目累加之和），双向交叉验证 100% 严密自洽闭环！</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">3</div>
+                <div>
+                  <div className="checklist-item-title">个人明细下钻与报表 CSV 导出</div>
+                  <div className="checklist-item-desc">
+                    点击任意员工姓名调出其个人履职与分润明细档案；点击【导出本期报表 CSV】，生成的标准二维矩阵报表完全符合财务审计标准，在 Excel/WPS 中直接打开算薪。
+                  </div>
+                </div>
+              </div>
+              <div className="checklist-item">
+                <div className="checklist-item-num">4</div>
+                <div>
+                  <div className="checklist-item-title">考核之星荣誉殿堂与核算员汇总中心</div>
+                  <div className="checklist-item-desc">
+                    在【考核之星殿堂】中，系统根据已发布绩点自动评选出<b>月度之星 🌟</b>、<b>季度之星 🏆</b>、<b>年度之星 👑</b>，金银铜奖牌榜实时闪耀；专职核算员还可在【核算员专区】批量合并各项目负责人的数据包。
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="onboarding-tip-box blue">
+              <div className="tip-icon">🏆</div>
+              <div>
+                <div className="tip-title">五步完成核心闭环！</div>
+                <div className="tip-content">
+                  至此，您已完整掌握从“新建工作区 ➔ 导入主体 ➔ 额度规划 ➔ 月度分配 ➔ 周期报表”的全部核心操作。祝您使用愉快！
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 底部导航控制工具条 */}
+        <div className="onboarding-modal-footer">
+          <label className="dont-show-checkbox">
+            <input
+              type="checkbox"
+              checked={dontShowAgain}
+              onChange={e => setDontShowAgain(e.target.checked)}
+            />
+            <span>下次进入工作区不再自动弹出（随时可点击顶部【新手引导】再次查看）</span>
+          </label>
+
+          <div className="onboarding-btn-group">
+            {step > 1 && (
+              <button
+                type="button"
+                className="secondary"
+                style={{ padding: '7px 16px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                onClick={() => onStepChange(step - 1)}
+              >
+                <ChevronLeft size={16} /> 上一步
+              </button>
+            )}
+
+            {/* 跳转对应功能模块快捷按钮 */}
+            {!isGate && (
+              <button
+                type="button"
+                className="secondary"
+                style={{
+                  padding: '7px 16px',
+                  fontSize: '13px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: '#f0fdf4',
+                  color: '#15803d',
+                  borderColor: '#86efac',
+                  fontWeight: 600,
+                }}
+                onClick={() => {
+                  handleFinish();
+                  onNavigate(current.targetTab);
+                }}
+              >
+                <ArrowRight size={14} /> 立即前往此模块
+              </button>
+            )}
+
+            {step < 5 ? (
+              <button
+                type="button"
+                className="primary"
+                style={{ padding: '7px 18px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                onClick={() => onStepChange(step + 1)}
+              >
+                下一步 <ChevronRight size={16} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="primary"
+                style={{ padding: '7px 20px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#15803d' }}
+                onClick={handleFinish}
+              >
+                <Check size={16} /> 完成引导，开始使用
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// -------------------------------------------------------------
+// 新手简易操作手册弹窗 (Concise Illustrated User Manual Modal)
+// -------------------------------------------------------------
+function ManualModal({
+  initialChapter = 0,
+  onClose,
+  onOpenGuide,
+  onNavigate,
+  isGate = false,
+}: {
+  initialChapter?: number;
+  onClose(): void;
+  onOpenGuide(): void;
+  onNavigate(tab: Tab): void;
+  isGate?: boolean;
+}) {
+  const [activeChapter, setActiveChapter] = useState(initialChapter);
+
+  const chapters = [
+    {
+      id: 0,
+      badge: '业务总览',
+      icon: Sparkles,
+      title: '🧭 五步业务闭环总览',
+      subtitle: '端到端数据量化流转架构与核心闭环',
+      targetTab: 'dashboard' as Tab,
+    },
+    {
+      id: 1,
+      badge: '第 1 步',
+      icon: Database,
+      title: '📌 第一步：新建安全工作区',
+      subtitle: '离线优先 · AES-256 口令加密 · 非系统盘存储根基',
+      targetTab: 'dashboard' as Tab,
+    },
+    {
+      id: 2,
+      badge: '第 2 步',
+      icon: Users,
+      title: '📌 第二步：导入项目与员工',
+      subtitle: '员工名册与工程合同初始化 · 财务格式自动清洗',
+      targetTab: 'employees' as Tab,
+    },
+    {
+      id: 3,
+      badge: '第 3 步',
+      icon: Sliders,
+      title: '📌 第三步：规划与项目组',
+      subtitle: '防前期透支 · 🎯 稳健交付型曲线 · 维保保留 5%',
+      targetTab: 'projects' as Tab,
+    },
+    {
+      id: 4,
+      badge: '第 4 步',
+      icon: CalendarRange,
+      title: '📌 第四步：月度分配与发布',
+      subtitle: '集中管理大表 · ⚡ 套用规划 · 100% 校验 · 批量发布',
+      targetTab: 'plans' as Tab,
+    },
+    {
+      id: 5,
+      badge: '第 5 步',
+      icon: BarChart3,
+      title: '📌 第五步：周期报表与荣誉',
+      subtitle: '二维透视矩阵 · 项目累加行 · 行列双向闭环 · 考核之星',
+      targetTab: 'reports' as Tab,
+    },
+    {
+      id: 6,
+      badge: '常见问答',
+      icon: BookOpenCheck,
+      title: '💡 新手 FAQ 与避坑指南',
+      subtitle: '草稿发布、防误触保护、多合同独立归集与灾备迁移',
+      targetTab: 'dashboard' as Tab,
+    },
+  ];
+
+  const currentCh = chapters[activeChapter] || chapters[0];
+
+  return (
+    <Modal
+      title="衡绩考核系统 · 新手简易操作手册"
+      subtitle={`版本号: v${APP_VERSION} (Build ${APP_BUILD}) · 离线优先安全架构 · 图文并茂业务操作指南`}
+      wide
+      onClose={onClose}
+    >
+      <div className="manual-modal-body">
+        <div className="manual-layout">
+          {/* 左侧目录导航 */}
+          <div className="manual-nav-sidebar">
+            <div>
+              <div className="manual-nav-header">
+                <span className="manual-nav-title">手册目录章节</span>
+                <button
+                  type="button"
+                  className="manual-switch-guide-btn"
+                  onClick={() => {
+                    onClose();
+                    onOpenGuide();
+                  }}
+                  title="切换为 5 步交互式新手向导"
+                >
+                  <Sparkles size={12} /> 5步交互向导
+                </button>
+              </div>
+              <div className="manual-nav-list">
+                {chapters.map((ch) => {
+                  const Icon = ch.icon;
+                  const isActive = ch.id === activeChapter;
+                  return (
+                    <button
+                      key={ch.id}
+                      type="button"
+                      className={`manual-nav-item ${isActive ? 'active' : ''}`}
+                      onClick={() => setActiveChapter(ch.id)}
+                    >
+                      <div className="manual-nav-icon">
+                        <Icon size={15} />
+                      </div>
+                      <div className="manual-nav-text">
+                        <div className="manual-nav-item-title">{ch.title}</div>
+                        <div className="manual-nav-item-sub">{ch.badge}</div>
+                      </div>
+                      <ChevronRight size={13} className="manual-nav-arrow" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="manual-sidebar-author">
+              <div style={{ fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>衡绩考核系统团队</div>
+              <div><b>作者</b>: 邹富敦 (Phudon Zou)</div>
+              <div><b>团队</b>: TOPFIRE 研发团队</div>
+              <div><b>支持</b>: zoufudun@163.com</div>
+            </div>
+          </div>
+
+          {/* 右侧详细内容区域 */}
+          <div className="manual-content-pane">
+            <div className="manual-content-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span className="manual-chapter-tag">{currentCh.badge}</span>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>{currentCh.subtitle}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
+                  {currentCh.title}
+                </h2>
+                {!isGate && currentCh.id > 0 && currentCh.id < 6 && (
+                  <button
+                    type="button"
+                    className="manual-jump-module-btn"
+                    onClick={() => {
+                      onClose();
+                      onNavigate(currentCh.targetTab);
+                    }}
+                    title={`立即打开 ${currentCh.title}`}
+                  >
+                    <ArrowRight size={13} /> 立即前往对应功能模块
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="manual-chapter-body">
+              {/* Chapter 0: 业务总览 */}
+              {activeChapter === 0 && (
+                <div>
+                  <div className="manual-section">
+                    <p>
+                      衡绩系统采用端到端的数据量化流转架构，从建立安全工作区出发，经过业务数据初始化、全周期额度防透支规划、月底集中考评与一键发布，最终在报表中心形成行列双向严密自洽的透视矩阵与荣誉殿堂。
+                    </p>
+                    <div className="manual-grid-cards">
+                      <div className="manual-card">
+                        <div className="manual-card-title">🛡️ 纯本地单机运行</div>
+                        <div className="manual-card-desc">零网络依赖，所有部门员工、项目及分配数据均存储在用户指定的 <code>.hengji</code> 加密文件中，从物理层面杜绝数据泄露。</div>
+                      </div>
+                      <div className="manual-card">
+                        <div className="manual-card-title">🔒 工业级安全防护</div>
+                        <div className="manual-card-desc">PBKDF2-SHA256（100,000次加盐迭代计算）派生密钥，结合 AES-256-GCM 认证加密；自动生成 <code>.backup</code> 镜像兜底。</div>
+                      </div>
+                      <div className="manual-card">
+                        <div className="manual-card-title">🎯 防前期透支规划</div>
+                        <div className="manual-card-desc">首创“稳健交付型（前低后高）”算法，前期项目争取设立硬性上限，成品发货终验锁定大头，维保支持置底保留 5%。</div>
+                      </div>
+                      <div className="manual-card">
+                        <div className="manual-card-title">📊 双向 100% 严密闭环</div>
+                        <div className="manual-card-desc">二维透视矩阵中，横向人员行累加与纵向项目列累加完全相等，右下角全系统终极总额双向交叉自洽闭环。</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="manual-section">
+                    <div className="manual-section-h3">五步核心业务闭环流程图</div>
+                    <pre className="manual-ascii-box">{`┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           衡绩系统 5 步核心业务闭环流程图                           │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+   【第 1 步：建立工作区】       【第 2 步：初始化主体】        【第 3 步：顶层规划设计】
+   ┌───────────────────┐        ┌───────────────────┐        ┌───────────────────┐
+   │  新建安全工作区    │ ─────▶ │  导入部门员工名册  │ ─────▶ │  全周期额度规划    │
+   │  .hengji 本地存储  │        │  (总体/产品/研发) │        │  (稳健交付防透支) │
+   │  AES-256 口令加密 │        │  导入合同项目清单  │        │  项目组模版比例   │
+   └───────────────────┘        └───────────────────┘        └───────────────────┘
+                                                                       │
+                                                                       ▼
+   【第 5 步：报表与荣誉】       【第 4 步：月底考评发布】
+   ┌───────────────────┐        ┌───────────────────┐
+   │  周期绩点报表透视  │ ◀───── │  月度分配集中大表  │
+   │  横向个人·纵向项目 │        │  ⚡ 套用当月规划   │
+   │  双向 100% 闭环求和│        │  配置成员比例 100%│
+   │  考核之星荣誉殿堂  │        │  🚀 一键批量发布   │
+   └───────────────────┘        └───────────────────┘`}</pre>
+                  </div>
+
+                  <div className="manual-callout-box blue">
+                    <strong>💡 新手阅读建议</strong>：点击左侧章节目录或下方“下一章”按钮，即可依次查阅每一步的具体操作指引、避坑锦囊与核算公式。随时可点击右上角【5步交互向导】体验操作。
+                  </div>
+                </div>
+              )}
+
+              {/* Chapter 1: 第一步 */}
+              {activeChapter === 1 && (
+                <div>
+                  <div className="manual-section">
+                    <div className="manual-section-h3">1.1 业务背景与安全架构</div>
+                    <p>
+                      衡绩系统采用<b>完全离线优先架构</b>，零网络依赖。系统不会把业务数据隐蔽放到 C 盘用户目录，所有部门员工、工程项目、月度分配与绩点流水均保存在用户自主指定的 <code>.hengji</code> 工作区文件中，从物理层面杜绝保密数据泄露。
+                    </p>
+                    <pre className="manual-ascii-box">{`┌───────────────────────────────────────────────────────────────┐
+│                      第一步：工作区建立机制示意                │
+└───────────────────────────────────────────────────────────────┘
+   双击运行软件 ──▶ 【+ 新建工作区】 ──▶ 选择非系统盘 (D:/E:/保密盘)
+                                              │
+                      ┌───────────────────────┴───────────────────────┐
+                      ▼                                               ▼
+         【🏢 综合管理工作区 (推荐)】                     【📊 绩效核算工作区】
+         适合超级管理员统揽全局                          适合专职核算员汇总数据包
+                      │                                               │
+                      └───────────────────────┬───────────────────────┘
+                                              ▼
+                                 设置管理员口令 (AES-256)
+                                 (在个人电脑亦可直接留空免密)
+                                              ▼
+                                生成 .hengji 加密工作区文件
+                                (每次保存自动生成 .backup 镜像)`}</pre>
+                  </div>
+
+                  <div className="manual-section">
+                    <div className="manual-section-h3">1.2 具体操作指引</div>
+                    <ol style={{ paddingLeft: '20px', margin: '8px 0', lineHeight: 1.8 }}>
+                      <li><b>启动程序</b>：双击桌面离线版执行程序 <code>衡绩员工绩点考核系统.exe</code>；</li>
+                      <li><b>点击【新建工作区】</b>：在欢迎界面点击【+ 新建工作区】（若已有基础团队，可点【从共享基础库新建】快速继承员工与项目组）；</li>
+                      <li><b>选择工作区应用场景</b>：
+                        <ul style={{ paddingLeft: '20px', marginTop: '4px' }}>
+                          <li><b>🏢 综合管理工作区（首选推荐）</b>：面向超级管理员或部门负责人，拥有项目创建、全周期规划、月度考评及系统全量配置权限。</li>
+                          <li><b>📊 绩效核算工作区</b>：面向专职绩效核算员，用于接收并导入各项目负责人的数据包，开展跨项目汇总与荣誉评选。</li>
+                        </ul>
+                      </li>
+                      <li><b>指定存储位置（强烈推荐非系统盘）</b>：弹出保存窗口时，<b>请务必选择非系统盘</b>（如 D 盘、E 盘、单位专用保密盘或共享受控网盘目录），文件后缀为 <code>.hengji</code>；</li>
+                      <li><b>设置管理员口令（或留空免密）</b>：底层采用 <code>PBKDF2-SHA256</code>（100,000次加盐迭代）派生密钥并结合 <code>AES-256-GCM</code> 加密；若在个人专用电脑使用，口令可直接留空创建免密工作区，日常直接秒进；</li>
+                      <li><b>自动备份机制</b>：每次在系统内点击保存或执行修改前，系统会自动在工作区同目录生成 <code>.hengji.backup</code> 上一版镜像，双重兜底。</li>
+                    </ol>
+                  </div>
+
+                  <div className="manual-callout-box amber">
+                    <strong>⚠️ 避坑提醒</strong>：建议定期将 <code>.hengji</code> 文件冷备份至专用移动硬盘或单位保密服务器。若忘记管理员口令，因高强度加密特性，任何第三方均无法强行破解。
+                  </div>
+                </div>
+              )}
+
+              {/* Chapter 2: 第二步 */}
+              {activeChapter === 2 && (
+                <div>
+                  <div className="manual-section">
+                    <div className="manual-section-h3">2.1 业务背景与主体初始化</div>
+                    <p>
+                      建立考核所需的“人”（员工档案与专业组归属）与“事”（工程合同项目与工作令号）两大基石数据。
+                    </p>
+                    <pre className="manual-ascii-box">{`┌───────────────────────────────────────────────────────────────┐
+│                      第二步：业务主体初始化示意                │
+└───────────────────────────────────────────────────────────────┘
+
+  【员工管理】                                     【项目库管理】
+  [员工与专业组]                                   [项目库与额度]
+       │                                                │
+  ┌────┴─────────────────────────┐                 ┌────┴─────────────────────────┐
+  │ 选项A: 📥 批量导入员工 CSV   │                 │ 选项A: 📥 批量导入项目 CSV   │
+  │ 选项B: ⚡ 一键初始化内置成员 │                 │ 选项B: ➕ 新建单项工程合同   │
+  │ 选项C: ➕ 手动单个添加员工   │                 └──────────────────────────────┘
+  └──────────────────────────────┘                              │
+                 │                                              ▼
+                 ▼                                 【财务格式全自动自适应清洗】
+       【专业组自动归类绑定】                         • 自动剥离千分位逗号 (1,309,000.00)
+       • 总体组 (系统方案/总体协调)                  • 自动清除货币符号 (¥、$、元、万元)
+       • 产品组 (硬件结构/产品定义)                  • 浮点超长小数四舍五入到分 (33.333333)
+       • 研发组 (算法/嵌入式/软件)                   • 同工作令号多子合同独立核算`}</pre>
+                  </div>
+
+                  <div className="manual-section">
+                    <div className="manual-section-h3">2.2 具体操作指引</div>
+                    <h4 style={{ margin: '10px 0 4px', color: '#15803d' }}>1. 导入或添加部门员工</h4>
+                    <p>点击左侧导航栏【员工与专业组】：</p>
+                    <ul style={{ paddingLeft: '20px', lineHeight: 1.8 }}>
+                      <li><b>批量导入</b>：点击【📥 批量导入员工 CSV】，支持直接拖拽单位花名册，智能识别姓名、工号、部门、专业组、职务及邮箱；</li>
+                      <li><b>一键初始化</b>：在新建空白工作区中，直接点击【⚡ 一键初始化内置成员】，一秒载入总体组、产品组、研发组的标准初始团队架构；</li>
+                      <li><b>手动登记</b>：点击右上角【+ 新建员工】逐个登记，可指派“👑 系统管理员”、“📊 绩效核算员”或“👤 普通员工”角色。</li>
+                    </ul>
+
+                    <h4 style={{ margin: '14px 0 4px', color: '#15803d' }}>2. 导入或新建工程合同项目</h4>
+                    <p>点击左侧导航栏【项目库与额度】或【数据导入导出与灾备】：</p>
+                    <ul style={{ paddingLeft: '20px', lineHeight: 1.8 }}>
+                      <li><b>批量导入项目</b>：点击【📥 批量导入项目 CSV】，支持拖拽项目清单（包含合同编号/工作令号、项目名称、客户名称、合同额（万元）、起止年月及项目负责人）；</li>
+                      <li><b>财务格式全容错</b>：系统自动识别千分位逗号（如 <code>1,250,000.00</code>）、货币符号（¥、￥、$、RMB）与科学计数法（<code>1.25E+05</code>），超长小数自动四舍五入到分，绝不报错弹窗；</li>
+                      <li><b>同令号多子项目独立归集</b>：同一工作令号下支持存在多个子项目或不同执行合同，每个合同项目基于 <code>projectId</code> 独立归集与分配，彻底杜绝数据克隆。</li>
+                    </ul>
+                  </div>
+
+                  <div className="manual-callout-box">
+                    <strong>💡 专业组推荐划分</strong>：常规工程型号推荐设立“总体组（方案与总体协调）”、“产品组（硬件结构与产品定义）”和“研发组（算法、嵌入式与系统软件）”，便于后续项目组模版统一配比。
+                  </div>
+                </div>
+              )}
+
+              {/* Chapter 3: 第三步 */}
+              {activeChapter === 3 && (
+                <div>
+                  <div className="manual-section">
+                    <div className="manual-section-h3">3.1 核心痛点与防前期透支策略</div>
+                    <p>
+                      工程与科研项目通常跨越数月乃至整年。若缺乏全生命周期节奏规划，常出现<b>“项目刚立项就把额度分光，后期进入成品发货、试验交付与终检验收阶段时却有货无钱可分”</b>的严重风险。
+                    </p>
+                    <pre className="manual-ascii-box">{`┌───────────────────────────────────────────────────────────────┐
+│               第三步：🎯 稳健交付型（前低后高）额度排期曲线            │
+└───────────────────────────────────────────────────────────────┘
+
+  额度占比 (%)
+   ▲
+50%│                                       ╭─────────────╮ (发货终验期)
+40%│                                       │ 成品发货交付│ (大头 45%+)
+30%│                         ╭─────────────┤ 试验联调验收│
+20%│           ╭─────────────┤ 试样研制加工│
+10%│ ╭─────────┤ 方案评审论证│             │             ╭─────────────╮
+ 0%│ │ 前期争取│             │             │             │ 维保支持阶段│ (置底保留 5%)
+   └─┴─────────┴─────────────┴─────────────┴─────────────┴─────────────┴──▶ 周期月份
+       首月 (0~10%)            中间研制执行交付期              末月 (稳固锁定 5%)`}</pre>
+                  </div>
+
+                  <div className="manual-section">
+                    <div className="manual-section-h3">3.2 具体操作指引</div>
+                    <ol style={{ paddingLeft: '20px', margin: '8px 0', lineHeight: 1.8 }}>
+                      <li><b>配置项目负责人与项目团队</b>：在【项目库与额度】卡片列表中，找到目标项目，点击【编辑】；选定项目负责人，并勾选参与团队成员（支持按总体组、产品组、研发组一键全选）；</li>
+                      <li><b>制定全周期月度额度规划（防前期透支）</b>：
+                        <ul style={{ paddingLeft: '20px', marginTop: '4px' }}>
+                          <li>点击项目卡片上的<b>【🎯 额度规划】</b>按钮，进入全周期月度规划控制台；</li>
+                          <li><b>前期项目争取阶段（首月 0%~10% 可调，默认推荐 5%）</b>：设立硬性上限，严防初期把钱分完；</li>
+                          <li><b>主体研制与成品交付阶段</b>：将大头（45% 以上额度）牢牢锁定在成品试验联调、发货交付与终检验收阶段；</li>
+                          <li><b>维保阶段额度锁定（置底保留 5%）</b>：在项目全周期最后一个月，系统牢固锁定保留 5% 绩效额度，确保发货终验后售后维保依然有充沛激励。</li>
+                        </ul>
+                      </li>
+                      <li><b>常用项目组模版与默认分配比例</b>：点击左侧【项目组管理】，可以预设常用项目组模版（如典型型号研制组：总体组30%、产品组30%、研发组40%），后续月度分配时可“一键套用项目组默认比例”，极大提速。</li>
+                    </ol>
+                  </div>
+
+                  <div className="manual-callout-box amber">
+                    <strong>🎯 黄金法则</strong>：项目立项时建议直接使用“🎯 一键稳健排期”，自动秒级排定全生命周期前低后高节奏，既保证过程激励，又杜绝后期干瘪。
+                  </div>
+                </div>
+              )}
+
+              {/* Chapter 4: 第四步 */}
+              {activeChapter === 4 && (
+                <div>
+                  <div className="manual-section">
+                    <div className="manual-section-h3">4.1 核心痛点与集中透视模式</div>
+                    <p>
+                      过去进行月底考评时，负责人必须逐个搜索并点开每个项目进行填报，耗时费力。当前版本全面升级为<b>【全项目当月集中管理】大表</b>，一屏尽览。
+                    </p>
+                    <pre className="manual-ascii-box">{`┌───────────────────────────────────────────────────────────────┐
+│                      第四步：月底集中考评与发布示意             │
+└───────────────────────────────────────────────────────────────┘
+
+   【顶部考核月份切换器 (如 2026-06)】 ── 统计：当月进行中项目数、当月分配总额
+                     │
+                     ▼
+   【📊 全项目当月集中管理大表 (矩阵模式)】
+   ┌───────────┬──────────┬──────────┬──────────┬─────────────────┬──────────┐
+   │ 项目名称  │ 工作令号 │ 合同额   │ 当月分配 │ 成员分润比例    │ 发布状态 │
+   ├───────────┼──────────┼──────────┼──────────┼─────────────────┼──────────┤
+   │ 某型通信机│ 23-0181  │ 120 万元 │  15.0%   │ 👥 点击配置成员 │ [已发布] │
+   │ 智能控制箱│ 25-0010  │  80 万元 │  [微调]  │ ⚡ 套用组比例   │ [草稿]   │
+   └───────────┴──────────┴──────────┴──────────┴─────────────────┴──────────┘
+                     │
+       ┌─────────────┴─────────────┐
+       ▼                           ▼
+   【💾 批量保存修改】        【🚀 批量发布所选项目】
+   原子化提交所有项目变更      当月方案即刻正式生效计入考核！
+                              (亦可随时 【↩ 批量撤回为草稿】)`}</pre>
+                  </div>
+
+                  <div className="manual-section">
+                    <div className="manual-section-h3">4.2 具体操作指引</div>
+                    <ol style={{ paddingLeft: '20px', margin: '8px 0', lineHeight: 1.8 }}>
+                      <li><b>进入月度分配集中看板</b>：点击左侧【月度分配】，默认进入【📊 全项目当月集中管理】，顶部选择考核月份（如 2026-06），当月所有进行中项目集中呈现在同一张大表中；</li>
+                      <li><b>设置各项目当月分配额度</b>：表格每行显示项目合同额、负责人及阶段里程碑，可直接微调当月分配比例（%），亦可直接点击<b>“⚡ 套用规划”</b>一键载入第 3 步排好的规划额度；</li>
+                      <li><b>配置项目成员当月分润比例</b>：点击每行的【👥 快速配置成员比例】弹窗，为各成员输入分润百分比；支持快捷点击“一键全员均摊”或“套用项目组默认比例”；弹窗底部实时校验比例之和，<b>必须精确等于 100%</b> 方可保存；</li>
+                      <li><b>批量保存与一键批量发布/撤回</b>：同时调整多个项目的额度与比例后，点击顶部<b>【💾 批量保存当月修改】</b>；点击【📝 全选当月草稿】，点击<b>【🚀 批量发布所选项目】</b>立即正式生效计入考核！如需微调，点击<b>【↩ 批量撤回为草稿】</b>即可瞬间撤回重新编辑。</li>
+                    </ol>
+                  </div>
+
+                  <div className="manual-callout-box">
+                    <div style={{ fontWeight: 700, marginBottom: '4px' }}>📐 核心核算公式</div>
+                    <div><b>员工当月获得绩点 = 项目合同金额（元） × 当月项目分配比例（%） × 员工当月分配率（%）</b></div>
+                    <div style={{ fontSize: '11.5px', marginTop: '4px', opacity: 0.85 }}>注：未发布的草稿状态方案不会计入最终考核报表与考核之星殿堂。</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Chapter 5: 第五步 */}
+              {activeChapter === 5 && (
+                <div>
+                  <div className="manual-section">
+                    <div className="manual-section-h3">5.1 二维透视矩阵与双向守恒机制</div>
+                    <p>
+                      方案一旦发布，数据立即实时流转至报表与荣誉中心。报表采用标准的二维透视矩阵：横向看个人累加，纵向看项目累加，右下角全系统终极总额双向完全闭环！
+                    </p>
+                    <pre className="manual-ascii-box">{`┌───────────────────────────────────────────────────────────────────────────────┐
+│                    第五步：标准二维透视矩阵与双向闭环求和图示                   │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+ 序号 │ 姓名   │ 专业组 │ 项目A(令号1) │ 项目B(令号2) │ 项目C(令号3) │ 【个人累加】 
+──────┼────────┼────────┼──────────────┼──────────────┼──────────────┼──────────────
+  1   │ 张工   │ 总体组 │   12,000 点  │    8,500 点  │        0 点  │   20,500 点 
+  2   │ 李工   │ 产品组 │    8,000 点  │        0 点  │   15,000 点  │   23,000 点 
+  3   │ 王工   │ 研发组 │    5,000 点  │   11,500 点  │    9,000 点  │   25,500 点 
+──────┼────────┼────────┼──────────────┼──────────────┼──────────────┼──────────────
+ 【项目累加】 (浅蓝高亮)│   25,000 点  │   20,000 点  │   24,000 点  │ 🌟 69,000 点 
+ (序号为空，整行浅蓝底色)│ (项目A总分润)│ (项目B总分润)│ (项目C总分润)│ (终极双向守恒)
+
+ ※ 右下角终极总额 = 所有员工个人累加之和 (20500+23000+25500=69000)
+                  = 所有合同项目累加之和 (25000+20000+24000=69000)
+                  行列双向交叉验证 100% 严密闭环！`}</pre>
+                  </div>
+
+                  <div className="manual-section">
+                    <div className="manual-section-h3">5.2 具体操作指引</div>
+                    <ol style={{ paddingLeft: '20px', margin: '8px 0', lineHeight: 1.8 }}>
+                      <li><b>多时间维度自由切换</b>：点击左侧【周期绩点报表】，顶部自由切换时间维度：<b>整年度</b>、<b>按季度（Q1~Q4）</b>、<b>单月份</b>或<b>自定义月份跨度区间</b>（如 2026-01 至 2026-06），数据瞬时秒级重算；</li>
+                      <li><b>二维矩阵透视阅览</b>：
+                        <ul style={{ paddingLeft: '20px', marginTop: '4px' }}>
+                          <li><b>横向每行（人员维度）</b>：展现每位员工在各个合同项目下分得的具体绩点，最右侧深色标示<b>【个人累加】</b>跨项目总和；</li>
+                          <li><b>纵向每列（项目维度）</b>：展现每个合同项目列，<b>矩阵末行整行浅蓝色高亮展示【项目累加】汇总行</b>；</li>
+                          <li><b>右下角全系统终极总累加</b>：行和（所有个人累加之和） = 列和（所有项目累加之和），双向交叉验证 100% 严密自洽闭环！</li>
+                        </ul>
+                      </li>
+                      <li><b>明细下钻与报表 CSV 导出</b>：点击任意员工姓名调出其个人履职与分润明细档案；点击【导出本期报表 CSV】，生成的二维矩阵报表完全符合财务审计标准，在 Excel/WPS 中直接打开即可对接薪酬发放；</li>
+                      <li><b>考核之星荣誉殿堂</b>：点击左侧【考核之星殿堂】，系统基于已发布绩点自动评选出<b>月度之星 🌟</b>、<b>季度之星 🏆</b>、<b>年度之星 👑</b>，金银铜奖牌榜实时闪耀，激发团队创新创优活力。</li>
+                    </ol>
+                  </div>
+
+                  <div className="manual-callout-box blue">
+                    <strong>🏆 荣誉驱动</strong>：考核之星支持按总体组、产品组、研发组分别筛选专业之星，兼顾公平与卓越，是部门绩效激励与期末评优的核心参考依据。
+                  </div>
+                </div>
+              )}
+
+              {/* Chapter 6: 新手 FAQ */}
+              {activeChapter === 6 && (
+                <div>
+                  <div className="manual-section">
+                    <div className="manual-faq-item">
+                      <div className="manual-faq-q">
+                        <span style={{ color: '#16a34a' }}>Q1</span>
+                        <span>为什么我填写了月度分配，报表里却没有看到员工的绩点？</span>
+                      </div>
+                      <div className="manual-faq-a">
+                        <b>解答</b>：请检查月度分配方案的状态是否为<b>【已发布】</b>。若为“草稿”状态，数据仅保存在草稿箱中供调整审核，必须点击【🚀 批量发布所选项目】发布生效后，才会正式计入周期报表和考核之星。
+                      </div>
+                    </div>
+
+                    <div className="manual-faq-item">
+                      <div className="manual-faq-q">
+                        <span style={{ color: '#16a34a' }}>Q2</span>
+                        <span>如果不小心点击了外部背景，弹窗会关闭导致正在填写的比例丢失吗？</span>
+                      </div>
+                      <div className="manual-faq-a">
+                        <b>解答</b>：<b>绝对不会</b>。系统全面内置全局防误触保护，点击弹窗外部背景遮罩不会关闭弹窗。只有点击右上角“✕”或底部明确的“取消/关闭”按钮才会退出，彻底保护您的录入进度。
+                      </div>
+                    </div>
+
+                    <div className="manual-faq-item">
+                      <div className="manual-faq-q">
+                        <span style={{ color: '#16a34a' }}>Q3</span>
+                        <span>同一工作令号下有多个不同合同，数值会串联重复吗？</span>
+                      </div>
+                      <div className="manual-faq-a">
+                        <b>解答</b>：<b>不会</b>。系统底层以唯一项目 ID（<code>projectId</code>）进行细目归集，严格隔离相同工作令号下的不同子项目，各合同项目的分配独立核算，末行【项目累加】精准自洽。
+                      </div>
+                    </div>
+
+                    <div className="manual-faq-item">
+                      <div className="manual-faq-q">
+                        <span style={{ color: '#16a34a' }}>Q4</span>
+                        <span>更换办公电脑或重装系统后，如何恢复数据？</span>
+                      </div>
+                      <div className="manual-faq-a">
+                        <b>解答</b>：在旧电脑上将 <code>.hengji</code> 工作区文件拷贝到 U 盘或移动硬盘；在新电脑打开软件后，在欢迎界面点击【打开工作区】，选择该 <code>.hengji</code> 文件并输入管理员口令（若创建时免密则直接进入），全部数据与项目组配置 100% 完整复原。
+                      </div>
+                    </div>
+
+                    <div className="manual-faq-item">
+                      <div className="manual-faq-q">
+                        <span style={{ color: '#16a34a' }}>Q5</span>
+                        <span>如何防止前期就把额度分光，导致后期发货终验无法分配？</span>
+                      </div>
+                      <div className="manual-faq-a">
+                        <b>解答</b>：在【项目库与额度】中点击【🎯 额度规划】，采用<b>“稳健交付型（前低后高）”</b>排期算法，前期争取硬性限制在 0%~10%（推荐5%），大头锁定在成品交付阶段，项目末月系统自动置底保留 5% 维保额度，彻底杜绝前期透支。
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="manual-callout-box">
+                    <div><b>手册制作</b>：邹富敦 (Phudon Zou) / TOPFIRE 研发团队</div>
+                    <div><b>技术支持邮箱</b>：zoufudun@163.com</div>
+                    <div style={{ fontSize: '11.5px', marginTop: '4px', opacity: 0.85 }}>如有任何需求变更或系统建议，欢迎通过技术支持邮箱随时联系我们。</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 底部前后导航栏 */}
+            <div className="manual-bottom-nav">
+              {activeChapter > 0 ? (
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{ padding: '7px 16px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  onClick={() => setActiveChapter(activeChapter - 1)}
+                >
+                  <ChevronLeft size={16} /> 上一章：{chapters[activeChapter - 1].badge}
+                </button>
+              ) : <div />}
+
+              {activeChapter < chapters.length - 1 ? (
+                <button
+                  type="button"
+                  className="primary"
+                  style={{ padding: '7px 18px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  onClick={() => setActiveChapter(activeChapter + 1)}
+                >
+                  下一章：{chapters[activeChapter + 1].badge} <ChevronRight size={16} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="primary"
+                  style={{ padding: '7px 20px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#15803d' }}
+                  onClick={onClose}
+                >
+                  <Check size={16} /> 已完全掌握，关闭手册
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// -------------------------------------------------------------
 // 1. Dashboard View
 // -------------------------------------------------------------
-function DashboardView({ state, onNavigate, onResetDemo }: { state: State; onNavigate(tab: Tab): void; onResetDemo(): void }) {
+function DashboardView({
+  state,
+  onNavigate,
+  onResetDemo,
+  onOpenGuide,
+}: {
+  state: State;
+  onNavigate(tab: Tab): void;
+  onResetDemo(): void;
+  onOpenGuide(step?: number): void;
+}) {
   const published = state.plans.filter(plan => plan.status === 'published');
   const currentRep = report(state, nowMonth());
   const totalScore = total(currentRep.map(row => row.points));
@@ -2059,6 +3424,15 @@ function BatchProjectTeamModal({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 600, color: '#1e293b' }}>
                       {isLeader && <span title="项目负责人">👑</span>}
                       <span>{emp.name}</span>
+                      {emp.employeeNo ? (
+                        <span style={{ fontSize: '10.5px', color: '#0284c7', fontFamily: 'monospace' }}>
+                          [{emp.employeeNo}]
+                        </span>
+                      ) : !emp.id.startsWith('emp_') ? (
+                        <span style={{ fontSize: '10.5px', color: '#0284c7', fontFamily: 'monospace' }}>
+                          [{emp.id}]
+                        </span>
+                      ) : null}
                       <GroupTag group={emp.group} />
                     </div>
                     <small style={{ fontSize: '10px', color: '#64748b', display: 'block', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
@@ -2140,6 +3514,15 @@ function BatchProjectTeamModal({
                     </button>
                     <span style={{ fontSize: '12px', fontWeight: isLeader ? 700 : 500, color: '#1e293b' }}>
                       {emp?.name || empId}
+                      {emp?.employeeNo ? (
+                        <span style={{ fontSize: '10.5px', color: '#0284c7', marginLeft: '4px', fontFamily: 'monospace' }}>
+                          [{emp.employeeNo}]
+                        </span>
+                      ) : !empId.startsWith('emp_') ? (
+                        <span style={{ fontSize: '10.5px', color: '#0284c7', marginLeft: '4px', fontFamily: 'monospace' }}>
+                          [{empId}]
+                        </span>
+                      ) : null}
                     </span>
                   </div>
                   <div
@@ -6250,6 +7633,7 @@ function GroupEditModal({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 600, color: '#1e293b' }}>
                       {isLeader && <span title="组长/负责人">👑</span>}
                       <span>{emp.name}</span>
+                      {emp.employeeNo && <span style={{ fontSize: '10px', color: '#0369a1', background: '#e0f2fe', padding: '0 4px', borderRadius: '4px' }}>[{emp.employeeNo}]</span>}
                       <GroupTag group={emp.group} />
                     </div>
                     <small style={{ fontSize: '10px', color: '#64748b', display: 'block', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{emp.department}</small>
@@ -6778,7 +8162,7 @@ function EmployeesView({ state, isAdmin, currentActorId, onAdd, onEdit, onToggle
 
         <div className="search-input-wrapper">
           <Search size={15} color="#82928a" />
-          <input placeholder="搜索员工姓名、职务、部门或专业组职务..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input placeholder="搜索员工姓名、工号、职务、部门或专业组职务..." value={search} onChange={e => setSearch(e.target.value)} />
           {search && <button className="icon-button" style={{ width: 20, height: 20 }} onClick={() => setSearch('')}><X size={12} /></button>}
         </div>
       </div>
@@ -6786,6 +8170,7 @@ function EmployeesView({ state, isAdmin, currentActorId, onAdd, onEdit, onToggle
       <table>
         <thead>
           <tr>
+            <th style={{ width: '85px' }}>工号</th>
             <th>姓名</th>
             <th>职务</th>
             <th>专业组</th>
@@ -6803,6 +8188,11 @@ function EmployeesView({ state, isAdmin, currentActorId, onAdd, onEdit, onToggle
             const prjCount = state.projects.filter(p => p.members.includes(emp.id)).length;
             return (
               <tr key={emp.id}>
+                <td>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#0369a1', background: '#f0f9ff', padding: '2px 7px', borderRadius: '4px', border: '1px solid #bae6fd', fontSize: '12px' }}>
+                    {emp.employeeNo || emp.id}
+                  </span>
+                </td>
                 <td><b>{emp.name}</b></td>
                 <td><span style={{ color: '#334155', fontWeight: 500, fontSize: '12.5px' }}>{emp.position || '—'}</span></td>
                 <td><GroupTag group={emp.group} /></td>
@@ -6853,7 +8243,7 @@ function EmployeesView({ state, isAdmin, currentActorId, onAdd, onEdit, onToggle
             );
           })}
           {filtered.length === 0 && (
-            <tr><td colSpan={10}><Empty text="未找到符合条件的员工" /></td></tr>
+            <tr><td colSpan={11}><Empty text="未找到符合条件的员工" /></td></tr>
           )}
         </tbody>
       </table>
@@ -8430,23 +9820,27 @@ function DataIoView({
 // -------------------------------------------------------------
 function EmployeeFormModal({ value, onClose, onSave }: { value: Employee | 'new'; onClose(): void; onSave(data: any): void }) {
   const old = value === 'new' ? null : value;
+  const [employeeNo, setEmployeeNo] = useState(old?.employeeNo || (old && !old.id.startsWith('emp_') ? old.id : ''));
   const [name, setName] = useState(old?.name || '');
   const [position, setPosition] = useState(old?.position || '');
-  const [department, setDepartment] = useState(old?.department || '产品部');
+  const [department, setDepartment] = useState(old?.department || '第四研究室');
   const [group, setGroup] = useState(old?.group || '产品组');
   const [groupRole, setGroupRole] = useState(old?.groupRole || '组员');
   const [email, setEmail] = useState(old?.email || '');
   const [role, setRole] = useState<'admin' | 'auditor' | 'member'>(old?.role || 'member');
 
   return (
-    <Modal title={old ? '编辑员工' : '添加员工'} subtitle="维护员工职务、所属专业组及系统管理权限" onClose={onClose}>
+    <Modal title={old ? '编辑员工' : '添加员工'} subtitle="维护员工工号、职务、所属专业组及系统管理权限" onClose={onClose}>
       <form onSubmit={e => {
         e.preventDefault();
-        onSave({ id: old?.id, name, position, department, group, groupRole, email, role, active: true });
+        onSave({ id: old?.id, employeeNo: employeeNo.trim() || undefined, name, position, department, group, groupRole, email, role, active: true });
       }}>
         <div className="form-grid two">
+          <Field label="员工工号 / 唯一ID (核心唯一标识)" hint="用于跨项目数据包唯一识别与合并，建议使用工号（如 1001、1012、TF-001）">
+            <input autoFocus value={employeeNo} onChange={e => setEmployeeNo(e.target.value)} placeholder="例如：1012" required />
+          </Field>
           <Field label="员工姓名">
-            <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="例如：张工" required />
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="例如：张工" required />
           </Field>
           <Field label="职务岗位" hint="例如：副所长,主任 / 副主任 / 高级工程师 / 工程师 / 助理工程师 / 研究员 / 核算">
             <input value={position} onChange={e => setPosition(e.target.value)} placeholder="例如：工程师、高级工程师、主任助理" />
@@ -9319,7 +10713,7 @@ function ProjectFormModal({ state, value, initialGroupId, projectGroups, onSaveG
               <label key={emp.id} className={members.includes(emp.id) ? 'selected' : ''}>
                 <input type="checkbox" checked={members.includes(emp.id)} onChange={() => toggle(emp.id)} />
                 <span>
-                  {emp.name} <GroupTag group={emp.group} />
+                  {emp.name} {emp.employeeNo && <span style={{ fontSize: '11px', color: '#0369a1', background: '#e0f2fe', padding: '1px 5px', borderRadius: '4px', marginLeft: '4px' }}>[{emp.employeeNo}]</span>} <GroupTag group={emp.group} />
                   <small>{emp.department}</small>
                 </span>
                 {members.includes(emp.id) && <Check size={16} color="#15803d" />}
