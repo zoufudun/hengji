@@ -70,7 +70,10 @@ async function main() {
     { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.exe', name: 'hengji-portable.exe' }
   ];
 
-  const existingAssets = release.assets || [];
+  // 刷新获取当前已有资产
+  const relRes = await fetch(`https://api.github.com/repos/${repo}/releases/${release.id}`, { headers });
+  const currentRelease = relRes.ok ? await relRes.json() : release;
+  const existingAssets = currentRelease.assets || [];
 
   for (const item of filesToUpload) {
     if (!fs.existsSync(item.src)) {
@@ -78,16 +81,21 @@ async function main() {
       continue;
     }
 
+    const fileSize = fs.statSync(item.src).size;
     const matchedAsset = existingAssets.find(a => a.name === item.name);
     if (matchedAsset) {
-      console.log(`Asset ${item.name} already exists (id ${matchedAsset.id}), deleting old asset...`);
+      if (Math.abs(matchedAsset.size - fileSize) < 1024) {
+        console.log(`✔ Asset ${item.name} (${(matchedAsset.size / 1024 / 1024).toFixed(2)} MB) already uploaded, skipping.`);
+        continue;
+      }
+      console.log(`Asset ${item.name} exists with different size, deleting old asset...`);
       await fetch(`https://api.github.com/repos/${repo}/releases/assets/${matchedAsset.id}`, {
         method: 'DELETE',
         headers
       });
     }
 
-    console.log(`Uploading ${item.name} (${(fs.statSync(item.src).size / 1024 / 1024).toFixed(2)} MB)...`);
+    console.log(`Uploading ${item.name} (${(fileSize / 1024 / 1024).toFixed(2)} MB)...`);
     const fileBuffer = fs.readFileSync(item.src);
     const uploadUrl = `https://uploads.github.com/repos/${repo}/releases/${release.id}/assets?name=${encodeURIComponent(item.name)}`;
     const contentType = item.name.endsWith('.msi')
