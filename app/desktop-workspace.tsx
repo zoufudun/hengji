@@ -249,6 +249,105 @@ function GroupTag({ group }: { group?: any }) {
   return <span className={`group-tag ${cls}`}>{g}</span>;
 }
 
+// -------------------------------------------------------------
+// 甲骨文“衡”字艺术图标 (Oracle Bone Script "Heng" Icon)
+// -------------------------------------------------------------
+function OracleHengIcon({ size = 32 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}
+      title="甲骨文 · 衡"
+    >
+      <defs>
+        <linearGradient id="oracleJadeBg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#064e3b" />
+          <stop offset="60%" stopColor="#047857" />
+          <stop offset="100%" stopColor="#065f46" />
+        </linearGradient>
+        <linearGradient id="oracleGoldStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#fef08a" />
+          <stop offset="60%" stopColor="#86efac" />
+          <stop offset="100%" stopColor="#4ade80" />
+        </linearGradient>
+      </defs>
+      {/* 典雅青铜古玉圆角底座 */}
+      <rect x="5" y="5" width="90" height="90" rx="18" fill="url(#oracleJadeBg)" stroke="#34d399" strokeWidth="2.5" />
+      {/* 隐隐微光内环 */}
+      <rect x="8" y="8" width="84" height="84" rx="15" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+
+      {/* 甲骨文/金文“衡”字象形篆体：行之左彳、中置牛角天平权衡之横木、行之右亍 */}
+      <g stroke="url(#oracleGoldStroke)" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round">
+        {/* 左侧“彳”字甲骨文象形两段弧折 */}
+        <path d="M 23 27 Q 16 36 24 45" />
+        <path d="M 24 47 Q 15 61 21 73" />
+        <line x1="21" y1="73" x2="21" y2="81" strokeWidth="4" />
+
+        {/* 中间“衡”之牛轭横木与天平悬秤 (双侧权衡之器) */}
+        <path d="M 32 30 C 44 24 56 24 68 30" strokeWidth="4.5" />
+        <line x1="50" y1="24" x2="50" y2="76" strokeWidth="4.5" />
+        {/* 左角/左秤盘 */}
+        <path d="M 37 32 Q 29 46 41 54 Q 45 42 39 34" strokeWidth="3.8" />
+        {/* 右角/右秤盘 */}
+        <path d="M 63 32 Q 71 46 59 54 Q 55 42 61 34" strokeWidth="3.8" />
+        {/* 下承托基座横梁 */}
+        <path d="M 35 67 Q 50 61 65 67" strokeWidth="4" />
+        <line x1="43" y1="76" x2="57" y2="76" strokeWidth="5" />
+
+        {/* 右侧“亍”字甲骨文道轨 */}
+        <line x1="77" y1="27" x2="86" y2="27" strokeWidth="4.5" />
+        <line x1="77" y1="41" x2="85" y2="41" strokeWidth="4.5" />
+        <path d="M 82 27 L 82 71 Q 82 81 74 79" strokeWidth="4.5" />
+      </g>
+    </svg>
+  );
+}
+
+// -------------------------------------------------------------
+// 现代八彩花瓣标识 (CC Switch 经典七彩花瓣图标)
+// -------------------------------------------------------------
+function BurstLogo({ size = 32 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}
+      title="CC Switch 灵感彩瓣"
+    >
+      {/* 8 条圆角彩色花瓣，顺时针各 45 度精密排列 */}
+      <rect x="44" y="6" width="12" height="26" rx="6" fill="#f97316" />
+      <rect x="44" y="6" width="12" height="26" rx="6" transform="rotate(45 50 50)" fill="#6366f1" />
+      <rect x="44" y="6" width="12" height="26" rx="6" transform="rotate(90 50 50)" fill="#f59e0b" />
+      <rect x="44" y="6" width="12" height="26" rx="6" transform="rotate(135 50 50)" fill="#14b8a6" />
+      <rect x="44" y="6" width="12" height="26" rx="6" transform="rotate(180 50 50)" fill="#0ea5e9" />
+      <rect x="44" y="6" width="12" height="26" rx="6" transform="rotate(225 50 50)" fill="#84cc16" />
+      <rect x="44" y="6" width="12" height="26" rx="6" transform="rotate(270 50 50)" fill="#10b981" />
+      <rect x="44" y="6" width="12" height="26" rx="6" transform="rotate(315 50 50)" fill="#ec4899" />
+      {/* 中心翡翠绿圆核 */}
+      <circle cx="50" cy="50" r="14" fill="#00b080" />
+    </svg>
+  );
+}
+
+// -------------------------------------------------------------
+// 双图标形式品牌标识 (Dual-Icon Brand Logo)
+// -------------------------------------------------------------
+function DualBrandLogo({ size = 32 }: { size?: number }) {
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+      <OracleHengIcon size={size} />
+      <BurstLogo size={size} />
+    </div>
+  );
+}
+
 class SafeStarsBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
   constructor(props: any) {
     super(props);
@@ -775,21 +874,23 @@ export default function DesktopWorkspace() {
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [apertureNoticeOpen, setApertureNoticeOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(1);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualChapter, setManualChapter] = useState(0);
 
-  // 启动后 3 秒静默联网检测是否有新版本（不弹窗打扰用户，若有新版则在侧栏优雅提醒）
+  // 启动后自动异步检测更新，存在新版本时采用热门的矩形框动态光圈提示新版本
   useEffect(() => {
     const timer = setTimeout(() => {
       checkAppUpdate(APP_VERSION).then(res => {
         setUpdateResult(res);
         if (res.hasUpdate) {
           setUpdateAvailable(true);
+          setApertureNoticeOpen(true);
         }
       }).catch(() => {});
-    }, 3000);
+    }, 1500);
     return () => clearTimeout(timer);
   }, []);
 
@@ -1249,7 +1350,7 @@ export default function DesktopWorkspace() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">衡</div>
+          <DualBrandLogo size={32} />
           <div>
             <strong>衡绩考核</strong>
             <span>员工绩点考核系统</span>
@@ -1877,6 +1978,18 @@ export default function DesktopWorkspace() {
         />
       )}
 
+      {/* 热门的矩形框动态光圈检测更新提示卡片 */}
+      {apertureNoticeOpen && updateResult?.hasUpdate && (
+        <UpdateApertureNotice
+          result={updateResult}
+          onOpenUpdate={() => {
+            setApertureNoticeOpen(false);
+            setUpdateModalOpen(true);
+          }}
+          onClose={() => setApertureNoticeOpen(false)}
+        />
+      )}
+
     </div>
   );
 }
@@ -1916,21 +2029,8 @@ function AboutModal({
           boxShadow: '0 8px 24px rgba(20,40,34,0.18)'
         }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-              <div style={{
-                width: 36,
-                height: 36,
-                borderRadius: '8px',
-                background: '#4ade80',
-                color: '#142822',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 900,
-                fontSize: '20px'
-              }}>
-                衡
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+              <DualBrandLogo size={38} />
               <div>
                 <h2 style={{ margin: 0, fontSize: '20px', letterSpacing: '0.5px' }}>衡绩 · 员工绩点考核系统</h2>
                 <span style={{ fontSize: '12px', opacity: 0.85, letterSpacing: '1px' }}>MERIT PERFORMANCE EVALUATION SYSTEM</span>
@@ -2132,19 +2232,84 @@ function GithubIcon({ size = 16, color = 'currentColor' }: { size?: number; colo
   );
 }
 
-function BurstLogo({ size = 40 }: { size?: number }) {
+// -------------------------------------------------------------
+// 矩形框动态光圈检测更新提示卡片 (Rotating Neon Border Beam Aperture)
+// -------------------------------------------------------------
+function UpdateApertureNotice({
+  result,
+  onOpenUpdate,
+  onClose,
+}: {
+  result: UpdateCheckResult;
+  onOpenUpdate(): void;
+  onClose(): void;
+}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-      <circle cx="20" cy="20" r="4.5" fill="#10b981" />
-      <rect x="17.5" y="3" width="5" height="10" rx="2.5" fill="#f97316" />
-      <rect x="17.5" y="27" width="5" height="10" rx="2.5" fill="#0ea5e9" />
-      <rect x="3" y="17.5" width="10" height="5" rx="2.5" fill="#10b981" />
-      <rect x="27" y="17.5" width="10" height="5" rx="2.5" fill="#f59e0b" />
-      <rect x="8.5" y="8.5" width="5" height="10" rx="2.5" transform="rotate(-45 11 13.5)" fill="#ec4899" />
-      <rect x="25.5" y="25.5" width="5" height="10" rx="2.5" transform="rotate(-45 28 30.5)" fill="#14b8a6" />
-      <rect x="25.5" y="8.5" width="5" height="10" rx="2.5" transform="rotate(45 28 13.5)" fill="#6366f1" />
-      <rect x="8.5" y="25.5" width="5" height="10" rx="2.5" transform="rotate(45 11 30.5)" fill="#84cc16" />
-    </svg>
+    <div className="aperture-notification-wrapper">
+      <div className="aperture-spinning-beam" />
+      <div className="aperture-card-content">
+        <DualBrandLogo size={28} />
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#0f172a' }}>
+              发现新版本 v{result.latestVersion} 可用！
+            </span>
+            <span style={{ fontSize: '10px', background: '#fef3c7', color: '#b45309', padding: '1px 6px', borderRadius: '10px', fontWeight: 600 }}>
+              全新发布
+            </span>
+          </div>
+          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+            {result.releaseName || '官方新版已就绪，点击立即体验全新功能'}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '8px' }}>
+          <button
+            type="button"
+            style={{
+              background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '7px',
+              padding: '6px 14px',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              boxShadow: '0 2px 8px rgba(234, 88, 12, 0.35)',
+              whiteSpace: 'nowrap',
+              transition: 'transform 0.15s',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-1px)')}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+            onClick={onOpenUpdate}
+          >
+            <CloudDownload size={14} />
+            立即更新
+          </button>
+
+          <button
+            type="button"
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              padding: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              borderRadius: '4px',
+            }}
+            onClick={onClose}
+            title="稍后提醒"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2239,7 +2404,7 @@ function UpdateModal({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <BurstLogo size={42} />
+            <DualBrandLogo size={38} />
             <div>
               <h3
                 style={{
@@ -3069,7 +3234,7 @@ function OnboardingGuideModal({
               <div>
                 <div className="tip-title">考核核心计算公式</div>
                 <div className="tip-content">
-                  <b>员工当月获得绩点 = 项目合同金额（元） × 当月项目分配比例（%） × 员工当月分配率（%）</b>。未发布的草稿状态方案不会计入最终考核报表。
+                  <b>员工当月获得绩点 = 项目合同金额（万元） × 当月项目分配比例（%） × 员工当月分配率（%）</b>。未发布的草稿状态方案不会计入最终考核报表。
                 </div>
               </div>
             </div>
@@ -3645,7 +3810,7 @@ function ManualModal({
 
                   <div className="manual-callout-box">
                     <div style={{ fontWeight: 700, marginBottom: '4px' }}>📐 核心核算公式</div>
-                    <div><b>员工当月获得绩点 = 项目合同金额（元） × 当月项目分配比例（%） × 员工当月分配率（%）</b></div>
+                    <div><b>员工当月获得绩点 = 项目合同金额（万元） × 当月项目分配比例（%） × 员工当月分配率（%）</b></div>
                     <div style={{ fontSize: '11.5px', marginTop: '4px', opacity: 0.85 }}>注：未发布的草稿状态方案不会计入最终考核报表与考核之星殿堂。</div>
                   </div>
                 </div>
@@ -5975,7 +6140,7 @@ function ProjectDetailModal({ state, projectId, onClose, onOpenQuotaSchedule, on
                       <tr>
                         <th style={{ width: '70px' }}>成员</th>
                         <th style={{ width: '60px', textAlign: 'right' }}>比例</th>
-                        <th style={{ width: '75px', textAlign: 'right' }}>绩点</th>
+                        <th style={{ width: '85px', textAlign: 'right' }}>绩点(万)</th>
                         <th>当月工作内容</th>
                       </tr>
                     </thead>
@@ -5984,7 +6149,7 @@ function ProjectDetailModal({ state, projectId, onClose, onOpenQuotaSchedule, on
                         <tr key={m.employeeId}>
                           <td><b>{m.name}</b></td>
                           <td style={{ textAlign: 'right', fontWeight: 600, color: m.rate > 0 ? '#166534' : '#94a3b8' }}>{m.ratePct}</td>
-                          <td style={{ textAlign: 'right', color: '#15803d' }}>{score(m.points)}分</td>
+                          <td style={{ textAlign: 'right', color: '#15803d' }}>{score(m.points)}万</td>
                           <td style={{ color: m.workContent ? '#334155' : '#94a3b8', fontStyle: m.workContent ? 'normal' : 'italic' }}>
                             {m.workContent || '—'}
                           </td>
@@ -7225,7 +7390,7 @@ function QuickMemberAllocModal({
                 <th style={{ width: '32%' }}>成员姓名</th>
                 <th style={{ width: '22%' }}>专业组</th>
                 <th style={{ width: '28%', textAlign: 'center' }}>分配比例 (%)</th>
-                <th style={{ width: '18%', textAlign: 'right' }}>对应额度</th>
+                <th style={{ width: '18%', textAlign: 'right' }}>对应额度(万元)</th>
               </tr>
             </thead>
             <tbody>
@@ -7260,7 +7425,7 @@ function QuickMemberAllocModal({
                       </div>
                     </td>
                     <td style={{ textAlign: 'right', fontWeight: 600, color: curRate > 0 ? '#166534' : '#94a3b8' }}>
-                      {score(memberAmt)} 元
+                      {score(memberAmt)} 万元
                     </td>
                   </tr>
                 );
@@ -8649,7 +8814,7 @@ function PlansView({
                               <th style={{ width: '80px' }}>成员姓名</th>
                               <th style={{ width: '70px' }}>专业组</th>
                               <th style={{ width: '75px', textAlign: 'right' }}>分配比例</th>
-                              <th style={{ width: '95px', textAlign: 'right' }}>当月额度</th>
+                              <th style={{ width: '105px', textAlign: 'right' }}>当月额度(万元)</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -8667,7 +8832,7 @@ function PlansView({
                                     {pct(e.rate)}
                                   </td>
                                   <td style={{ textAlign: 'right', color: '#1e293b', fontWeight: e.rate > 0 ? 600 : 400 }}>
-                                    {score(memberAmount)} 元
+                                    {score(memberAmount)} 万元
                                   </td>
                                 </tr>
                               );
@@ -8684,14 +8849,14 @@ function PlansView({
                               <div
                                 key={e.employeeId}
                                 className={`member-capsule ${e.rate > 0 ? (e.rate >= 2000 ? 'high' : 'normal') : 'zero'}`}
-                                title={`${emp?.name} (${emp?.group || '未分组'}): 分配比例 ${pct(e.rate)}，折合额度 ${score(memberAmount)} 元${e.workContent ? `\n工作内容：${e.workContent}` : ''}`}
+                                title={`${emp?.name} (${emp?.group || '未分组'}): 分配比例 ${pct(e.rate)}，折合额度 ${score(memberAmount)} 万元${e.workContent ? `\n工作内容：${e.workContent}` : ''}`}
                               >
                                 <span className="capsule-name">
                                   {emp?.name || e.employeeId}
                                   {isOwner && <span style={{ fontSize: 10, marginLeft: 2 }}>👑</span>}
                                 </span>
                                 <span className="capsule-rate">{pct(e.rate)}</span>
-                                <span className="capsule-amount">{score(memberAmount)}元</span>
+                                <span className="capsule-amount">{score(memberAmount)}万</span>
                               </div>
                             );
                           })}
@@ -8792,7 +8957,7 @@ function PlansView({
                     className="secondary"
                     style={{ padding: '4px 10px', fontSize: '12px', gap: '4px' }}
                     onClick={() => {
-                      const lines = ['成员姓名,专业组,分配比例,当月折合额度(元),当月工作内容描述'];
+                      const lines = ['成员姓名,专业组,分配比例,当月折合额度(万元),当月工作内容描述'];
                       const amt = singleProject ? monthAmount(singleProject, selectedPlan) : 0;
                       const sorted = [...selectedPlan.entries].sort((a, b) => b.rate - a.rate);
                       for (const e of sorted) {
@@ -8831,7 +8996,7 @@ function PlansView({
                             {pct(e.rate)}
                           </span>
                           <span style={{ fontSize: '12px', color: '#64748b' }}>
-                            {score(memberAmount)} 元
+                            {score(memberAmount)} 万元
                           </span>
                         </div>
                       </div>
@@ -10007,14 +10172,14 @@ function AnalyticsView({ state }: { state: State }) {
                         {label} 获得额度明细
                       </p>
                       <p style={{ margin: '2px 0' }}>折合额度: <strong style={{ color: '#4ade80' }}>{item.wan} 万元</strong></p>
-                      <p style={{ margin: '2px 0' }}>获得绩点: <strong>{score(item.points * 100)} 分</strong></p>
+                      <p style={{ margin: '2px 0' }}>获得绩点: <strong>{score(item.points)} 万绩点</strong></p>
                       <p style={{ margin: '2px 0' }}>累计折合: <strong>{item.cumulativeWan} 万元</strong></p>
                       {item.contributions && item.contributions.length > 0 && (
                         <div style={{ marginTop: '6px', paddingTop: '4px', borderTop: '1px dashed rgba(255,255,255,0.2)' }}>
                           <span style={{ fontSize: '11px', color: '#94a3b8' }}>贡献项目明细:</span>
                           {item.contributions.map((c: any, ci: number) => (
                             <div key={ci} style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '2px' }}>
-                              • {c.project}: {c.wan}万 ({score(c.points)}分)
+                              • {c.project}: {c.wan} 万元 ({score(c.points)} 万绩点)
                             </div>
                           ))}
                         </div>
@@ -13490,7 +13655,7 @@ function PlanFormModal({ state, value, initialProjectId, projectGroups, onSaveGr
                     />
                   </div>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 8px', fontWeight: 600 }}>
-                    <span>当月折合额度</span>
+                    <span>当月折合额度 (万元)</span>
                     <div
                       className="col-resize-handle"
                       title="按住左右拖动调节此列宽度"
@@ -13571,7 +13736,7 @@ function PlanFormModal({ state, value, initialProjectId, projectGroups, onSaveGr
 
                         {/* 折合额度列 */}
                         <strong style={{ color: r > 0 ? '#166534' : '#94a3b8', fontSize: '12.5px', textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 8px' }}>
-                          {preview ? score(Math.round(preview * r / 10000)) : '0.00'} 元
+                          {preview ? score(Math.round(preview * r / 10000)) : '0'} 万元
                         </strong>
 
                         {/* 工作内容专区跳转列 */}
@@ -13672,7 +13837,7 @@ function PlanFormModal({ state, value, initialProjectId, projectGroups, onSaveGr
                           <div style={{ fontSize: '12px', color: '#475569' }}>
                             分配比例：<b style={{ color: r > 0 ? '#166534' : '#64748b' }}>{rates[empId] || '0'}%</b>
                             {preview > 0 && (
-                              <span> · 当月额度：<b style={{ color: '#166534' }}>{score(Math.round(preview * r / 10000))} 元</b></span>
+                              <span> · 当月额度：<b style={{ color: '#166534' }}>{score(Math.round(preview * r / 10000))} 万元</b></span>
                             )}
                           </div>
                         </div>

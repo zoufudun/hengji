@@ -100,8 +100,13 @@ export const points = (amount: number, rate: number) => {
   return Number((safeAmount * safeRate + 5000n) / 10000n);
 };
 export const pct = (rate: number) => `${(rate / 100).toFixed(2).replace(/\.00$/, '')}%`;
-export const wan = (fen: number) => (fen / 1_000_000).toLocaleString('zh-CN', { maximumFractionDigits: 6 });
-export const score = (fen: number) => (fen / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const formatWan = (fen: number, maxDigits = 6): string => {
+  if (fen == null || isNaN(fen)) return '0';
+  const val = Number(fen) / 1_000_000;
+  return Number(val.toFixed(maxDigits)).toLocaleString('zh-CN', { maximumFractionDigits: maxDigits });
+};
+export const wan = (fen: number) => formatWan(fen, 6);
+export const score = (fen: number) => formatWan(fen, 6);
 export const monthAmount = (project: Project, plan: Plan) => points(project.contract, plan.budget);
 
 export function toMoney(value: unknown): number {
@@ -794,7 +799,7 @@ export function projectAllocDetail(state: State, projectId: string) {
         rate: entry?.rate || 0,
         ratePct: pct(entry?.rate || 0),
         points: alloc.points,
-        amountWan: (alloc.points / 1_000_000).toFixed(4),
+        amountWan: (alloc.points / 1_000_000).toFixed(6),
         workContent: entry?.workContent || '',
       };
     }).sort((a, b) => a.rate - b.rate); // 按分配比例从小到大严格排序
@@ -842,7 +847,7 @@ export function projectAllocDetail(state: State, projectId: string) {
       draftPoints,
       cumulativeRate,
       cumulativePct: pct(cumulativeRate),
-      amountWan: (cumulativePoints / 1_000_000).toFixed(4),
+      amountWan: (cumulativePoints / 1_000_000).toFixed(6),
     };
   });
 
@@ -1240,12 +1245,12 @@ export function getProjectQuotaPerspective(state: State, projectId: string) {
       month,
       plannedRate,
       plannedPct: pct(plannedRate),
-      plannedAmountWan: (plannedAmount / 1_000_000).toFixed(4),
+      plannedAmountWan: (plannedAmount / 1_000_000).toFixed(6),
       milestone: planItem?.milestone || '',
       note: planItem?.note || '',
       actualRate,
       actualPct: pct(actualRate),
-      actualAmountWan: (actualAmount / 1_000_000).toFixed(4),
+      actualAmountWan: (actualAmount / 1_000_000).toFixed(6),
       actualStatus,
       actualNote: actualItem?.note || '',
       cumPlannedRate: cumPlanned,
@@ -1304,10 +1309,10 @@ export function getProjectQuotaPerspective(state: State, projectId: string) {
     monthRows,
     totalPlannedRate,
     totalPlannedPct: pct(totalPlannedRate),
-    totalPlannedWan: (points(project.contract, totalPlannedRate) / 1_000_000).toFixed(4),
+    totalPlannedWan: (points(project.contract, totalPlannedRate) / 1_000_000).toFixed(6),
     totalActualRate,
     totalActualPct: pct(totalActualRate),
-    totalActualWan: (monthAmount(project, { budget: totalActualRate } as Plan) / 1_000_000).toFixed(4),
+    totalActualWan: (monthAmount(project, { budget: totalActualRate } as Plan) / 1_000_000).toFixed(6),
     remainingRate,
     remainingPct: pct(remainingRate),
     remainingWan: wan(remainingAmount),
@@ -1739,9 +1744,9 @@ export function getProjectTrendData(state: State, projectId: string) {
       monthlyRate: Number((monthBudgetRate / 100).toFixed(2)),
       cumulativeRate: Number((runningBudgetRate / 100).toFixed(2)),
       remainingRate: Number((remainingRate / 100).toFixed(2)),
-      monthlyAmountWan: Number((monthAmt / 1_000_000).toFixed(4)),
-      cumulativeAmountWan: Number((runningAmount / 1_000_000).toFixed(4)),
-      remainingAmountWan: Number((remainingAmt / 1_000_000).toFixed(4)),
+      monthlyAmountWan: Number((monthAmt / 1_000_000).toFixed(6)),
+      cumulativeAmountWan: Number((runningAmount / 1_000_000).toFixed(6)),
+      remainingAmountWan: Number((remainingAmt / 1_000_000).toFixed(6)),
     };
   });
 }
@@ -1766,7 +1771,7 @@ export function getEmployeeTrendData(state: State, employeeId: string, months: s
         projectContribs.push({
           project: project.name,
           points: alloc.points,
-          wan: Number((alloc.points / 1_000_000).toFixed(4)),
+          wan: Number((alloc.points / 1_000_000).toFixed(6)),
         });
       }
     }
@@ -1775,9 +1780,9 @@ export function getEmployeeTrendData(state: State, employeeId: string, months: s
     return {
       month,
       points: Number((monthPoints / 100).toFixed(2)),
-      wan: Number((monthPoints / 1_000_000).toFixed(4)),
+      wan: Number((monthPoints / 1_000_000).toFixed(6)),
       cumulativePoints: Number((cumulativePoints / 100).toFixed(2)),
-      cumulativeWan: Number((cumulativePoints / 1_000_000).toFixed(4)),
+      cumulativeWan: Number((cumulativePoints / 1_000_000).toFixed(6)),
       projectCount: projectContribs.length,
       contributions: projectContribs,
     };
@@ -1802,9 +1807,9 @@ export function getMonthlyBarData(state: State, months: string[]) {
 
     return {
       month: m,
-      totalWan: Number((totalAmt / 1_000_000).toFixed(4)),
-      publishedWan: Number((publishedAmt / 1_000_000).toFixed(4)),
-      draftWan: Number((draftAmt / 1_000_000).toFixed(4)),
+      totalWan: Number((totalAmt / 1_000_000).toFixed(6)),
+      publishedWan: Number((publishedAmt / 1_000_000).toFixed(6)),
+      draftWan: Number((draftAmt / 1_000_000).toFixed(6)),
       planCount: plans.length,
     };
   });
@@ -1816,18 +1821,18 @@ export function getGroupMonthlyComparison(state: State, months: string[]) {
     const result: Record<string, any> = { month: m, '总体组': 0, '产品组': 0, '研发组': 0, '其他': 0, totalWan: 0 };
     for (const r of rep) {
       const grp = r.employee.group || '其他';
-      const wanVal = Number((r.points / 1_000_000).toFixed(4));
+      const wanVal = Number((r.points / 1_000_000).toFixed(6));
       if (grp === '总体组') result['总体组'] += wanVal;
       else if (grp === '产品组') result['产品组'] += wanVal;
       else if (grp === '研发组') result['研发组'] += wanVal;
       else result['其他'] += wanVal;
       result.totalWan += wanVal;
     }
-    result['总体组'] = Number(result['总体组'].toFixed(4));
-    result['产品组'] = Number(result['产品组'].toFixed(4));
-    result['研发组'] = Number(result['研发组'].toFixed(4));
-    result['其他'] = Number(result['其他'].toFixed(4));
-    result.totalWan = Number(result.totalWan.toFixed(4));
+    result['总体组'] = Number(result['总体组'].toFixed(6));
+    result['产品组'] = Number(result['产品组'].toFixed(6));
+    result['研发组'] = Number(result['研发组'].toFixed(6));
+    result['其他'] = Number(result['其他'].toFixed(6));
+    result.totalWan = Number(result.totalWan.toFixed(6));
     return result;
   });
 }
@@ -1937,7 +1942,7 @@ export function exportProjectMembersCsv(state: State): string {
         m.group,
         m.isOwner ? '是' : '否',
         m.amountWan,
-        (m.cumulativePoints / 1_000_000).toFixed(4),
+        (m.cumulativePoints / 1_000_000).toFixed(6),
         m.cumulativePct,
       ]);
     }
@@ -1993,7 +1998,7 @@ export function exportPeriodMatrixReportCsv(
 
       projectPointsSums[pIndex] += fen;
       rowPersonalTotal += fen;
-      return (fen / 1_000_000).toFixed(4);
+      return (fen / 1_000_000).toFixed(6);
     });
 
     grandTotalPoints += rowPersonalTotal;
@@ -2002,7 +2007,7 @@ export function exportPeriodMatrixReportCsv(
       index + 1,
       r.employee.name,
       ...projectScores,
-      (rowPersonalTotal / 1_000_000).toFixed(4),
+      (rowPersonalTotal / 1_000_000).toFixed(6),
     ];
   });
 
@@ -2010,8 +2015,8 @@ export function exportPeriodMatrixReportCsv(
   const projectTotalsRow = [
     '',
     '项目累加',
-    ...projectPointsSums.map(pts => (pts / 1_000_000).toFixed(4)),
-    (grandTotalPoints / 1_000_000).toFixed(4),
+    ...projectPointsSums.map(pts => (pts / 1_000_000).toFixed(6)),
+    (grandTotalPoints / 1_000_000).toFixed(6),
   ];
 
   data.push(projectTotalsRow);
@@ -2029,7 +2034,7 @@ export function exportPeriodReportCsv(
   }
   const headers = ['统计周期', '排名', '员工工号', '员工姓名', '职务', '专业组', '专业组职务', '所属部门', '贡献项目数', '获得总绩点(万元)', '折合总额度(万元)', '参与项目明细'];
   const data = rows.map((r, i) => {
-    const detailStr = r.details.map(d => `${d.month}:${d.project}(${(d.points / 1_000_000).toFixed(4)}万)`).join('; ');
+    const detailStr = r.details.map(d => `${d.month}:${d.project}(${(d.points / 1_000_000).toFixed(6)}万)`).join('; ');
     return [
       periodLabel,
       i + 1,
@@ -2040,8 +2045,8 @@ export function exportPeriodReportCsv(
       r.employee.groupRole || '',
       r.employee.department,
       r.projectCount,
-      (r.points / 1_000_000).toFixed(4),
-      (r.points / 1_000_000).toFixed(4),
+      (r.points / 1_000_000).toFixed(6),
+      (r.points / 1_000_000).toFixed(6),
       detailStr,
     ];
   });
@@ -2526,7 +2531,7 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.7.3';
+export const APP_VERSION = '0.7.4';
 export const APP_BUILD = '20261023';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
@@ -2689,6 +2694,17 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.7.4',
+    date: '2026-10-23',
+    tag: '重大更新',
+    title: '全量绩点与合同统一为万元与6位小数规范、甲骨文与彩瓣双图标、启动自动检测与动态光圈提醒',
+    items: [
+      '【全量绩点与合同规范统一为万元】系统全链路（大盘概览、项目管理、月度分配、荣誉殿堂、统计报表及 CSV 导出）全面升级为统一的“万元”单位，数值格式化最多保留 6 位小数，杜绝以往“元/分”混淆，精度兼具严谨与纯粹。',
+      '【甲骨文“衡”字艺术标与现代彩瓣双图标】系统品牌标识全面升级为高端双图标架构：左侧呈献古雅高洁的甲骨文“衡”字艺术徽标（天平权衡之形），右侧交相辉映八彩活力花瓣图腾，传统古韵与现代科技相得益彰。',
+      '【软件启动自动检测与矩形框动态光圈提醒】软件冷启动后自动异步检测 GitHub 线上版本；当探测到新版本时，界面呼出极具视觉冲击力的“矩形框旋转动态光圈（Border Beam & Neon Aura）”浮动卡片，醒目而尊贵地引导用户一键直通升级。'
+    ]
+  },
   {
     version: 'v0.7.3',
     date: '2026-10-23',
@@ -4330,7 +4346,7 @@ export function summarizeCurrentStateForAuditor(
 export function exportAuditorEmployeesCsv(summary: AuditorSummaryResult): string {
   const headers = ['全员排名', '工号', '员工姓名', '所属专业组', '职务', '专业组职务', '所属部门', '参与项目数', '累计获得总绩点(万元)', '折合总金额(万元)', '参与项目明细'];
   const rows = summary.employeeSummaries.map(emp => {
-    const detailStr = emp.projects.map(p => `${p.projectName}(${p.wan.toFixed(4)}万)`).join('; ');
+    const detailStr = emp.projects.map(p => `${p.projectName}(${p.wan.toFixed(6)}万)`).join('; ');
     return [
       emp.rank,
       emp.employeeNo || emp.employeeId || '',
@@ -4340,8 +4356,8 @@ export function exportAuditorEmployeesCsv(summary: AuditorSummaryResult): string
       emp.groupRole || '',
       emp.department,
       emp.projectCount,
-      (emp.totalPoints / 1_000_000).toFixed(4),
-      emp.totalWan.toFixed(4),
+      (emp.totalPoints / 1_000_000).toFixed(6),
+      emp.totalWan.toFixed(6),
       detailStr,
     ];
   });
@@ -4359,11 +4375,11 @@ export function exportAuditorProjectsCsv(summary: AuditorSummaryResult): string 
     p.name,
     p.ownerName,
     p.client,
-    p.contractWan.toFixed(4),
-    p.allocatedWan.toFixed(4),
+    p.contractWan.toFixed(6),
+    p.allocatedWan.toFixed(6),
     (p.allocatedRateBps / 100).toFixed(2),
-    (p.allocatedPoints / 1_000_000).toFixed(4),
-    p.remainingWan.toFixed(4),
+    (p.allocatedPoints / 1_000_000).toFixed(6),
+    p.remainingWan.toFixed(6),
     (p.remainingRateBps / 100).toFixed(2),
     p.headcount,
     p.months.join('; '),
@@ -4383,8 +4399,8 @@ export function exportAuditorMatrixCsv(summary: AuditorSummaryResult): string {
     r.name,
     r.position || '',
     r.group || '',
-    ...r.scores.map(pts => (pts / 1_000_000).toFixed(4)),
-    (r.rowTotalPoints / 1_000_000).toFixed(4),
+    ...r.scores.map(pts => (pts / 1_000_000).toFixed(6)),
+    (r.rowTotalPoints / 1_000_000).toFixed(6),
   ]);
 
   // 最底行【项目累加】
@@ -4394,8 +4410,8 @@ export function exportAuditorMatrixCsv(summary: AuditorSummaryResult): string {
     '',
     '',
     '',
-    ...summary.matrix.projectTotals.map(pts => (pts / 1_000_000).toFixed(4)),
-    (summary.matrix.grandTotalPoints / 1_000_000).toFixed(4),
+    ...summary.matrix.projectTotals.map(pts => (pts / 1_000_000).toFixed(6)),
+    (summary.matrix.grandTotalPoints / 1_000_000).toFixed(6),
   ];
 
   data.push(projectTotalsRow);
@@ -4418,8 +4434,8 @@ export function exportAuditorDetailsCsv(summary: AuditorSummaryResult): string {
     d.position || '',
     d.department || '',
     (d.rate / 100).toFixed(2),
-    (d.points / 1_000_000).toFixed(4),
-    d.wan.toFixed(4),
+    (d.points / 1_000_000).toFixed(6),
+    d.wan.toFixed(6),
     d.workContent || '',
   ]);
   return generateCsv(headers, rows);
@@ -4501,7 +4517,7 @@ export function exportProjectManagerBundle(state: State, managerId: string, acto
       managerName: '全系统项目汇总',
       managerDepartment: actor.department || '全部门',
       projectCount: packages.length,
-      totalContractWan: Number(totalContractWan.toFixed(4)),
+      totalContractWan: Number(totalContractWan.toFixed(6)),
       totalAllocatedPoints,
       packages,
     };
@@ -4543,7 +4559,7 @@ export function exportProjectManagerBundle(state: State, managerId: string, acto
     managerName: targetManager.name,
     managerDepartment: targetManager.department,
     projectCount: packages.length,
-    totalContractWan: Number(totalContractWan.toFixed(4)),
+    totalContractWan: Number(totalContractWan.toFixed(6)),
     totalAllocatedPoints,
     packages,
   };
@@ -4666,9 +4682,9 @@ export function calculateDepartmentContracts(summary: AuditorSummaryResult): Dep
 
   return {
     totalProjects: projects.length,
-    totalContractWan: Number(totalContractWan.toFixed(4)),
-    totalAllocatedWan: Number(totalAllocatedWan.toFixed(4)),
-    totalRemainingWan: Number(totalRemainingWan.toFixed(4)),
+    totalContractWan: Number(totalContractWan.toFixed(6)),
+    totalAllocatedWan: Number(totalAllocatedWan.toFixed(6)),
+    totalRemainingWan: Number(totalRemainingWan.toFixed(6)),
     overallAllocatedRateBps: Math.min(10000, overallRate),
     totalAllocatedPoints,
     warningProjectsCount,
@@ -4774,12 +4790,12 @@ export function calculateHonorStars(summary: AuditorSummaryResult): HonorStarsRe
         group: info.group,
         position: info.pos,
         points: data.points,
-        wan: Number((data.points / 10000).toFixed(4)),
+        wan: Number((data.points / 1_000_000).toFixed(6)),
         projectCount: data.projects.size,
         topProjects: Array.from(data.projects).slice(0, 3),
         badge: idx === 0 ? '🌟 月度领跑之星' : '⭐ 月度进取之星',
         rank: idx + 1,
-        reason: `在 ${month} 周期内斩获 ${(data.points / 100).toFixed(2)} 绩点，深度参与 ${data.projects.size} 项核心项目任务，履职交付成果显著。`,
+        reason: `在 ${month} 周期内斩获 ${(data.points / 1_000_000).toFixed(6)} 万绩点，深度参与 ${data.projects.size} 项核心项目任务，履职交付成果显著。`,
       });
     });
   }
@@ -4804,12 +4820,12 @@ export function calculateHonorStars(summary: AuditorSummaryResult): HonorStarsRe
         group: info.group,
         position: info.pos,
         points: data.points,
-        wan: Number((data.points / 10000).toFixed(4)),
+        wan: Number((data.points / 1_000_000).toFixed(6)),
         projectCount: data.projects.size,
         topProjects: Array.from(data.projects).slice(0, 3),
         badge: badges[idx] || '🎖️ 季度标兵',
         rank: idx + 1,
-        reason: `整个 ${q} 季度持续攻坚，累计贡献 ${(data.points / 100).toFixed(2)} 绩点，位列季度绩效排名前列。`,
+        reason: `整个 ${q} 季度持续攻坚，累计贡献 ${(data.points / 1_000_000).toFixed(6)} 万绩点，位列季度绩效排名前列。`,
       });
     });
   }
@@ -4834,12 +4850,12 @@ export function calculateHonorStars(summary: AuditorSummaryResult): HonorStarsRe
         group: info.group,
         position: info.pos,
         points: data.points,
-        wan: Number((data.points / 10000).toFixed(4)),
+        wan: Number((data.points / 1_000_000).toFixed(6)),
         projectCount: data.projects.size,
         topProjects: Array.from(data.projects).slice(0, 4),
         badge: badges[idx] || '👑 年度之星',
         rank: idx + 1,
-        reason: `${yr}年度累计斩获 ${(data.points / 100).toFixed(2)} 总绩点，领跑全团队项目交付，以卓越贡献树立年度标杆！`,
+        reason: `${yr}年度累计斩获 ${(data.points / 1_000_000).toFixed(6)} 万总绩点，领跑全团队项目交付，以卓越贡献树立年度标杆！`,
       });
     });
   }

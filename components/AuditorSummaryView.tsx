@@ -72,6 +72,9 @@ import {
   exportAuditorFullBundleJson,
 } from '../lib/core';
 
+const formatWan6 = (val: number | null | undefined): string =>
+  val == null || isNaN(val) ? '0' : Number(Number(val).toFixed(6)).toLocaleString('zh-CN', { maximumFractionDigits: 6 });
+
 interface AuditorSummaryViewProps {
   state: State;
   currentActor: Employee;
@@ -736,10 +739,10 @@ export function AuditorSummaryView({
             部门合同剩余额度 / 消耗率
           </div>
           <div style={{ fontSize: '24px', fontWeight: 700, color: '#d97706' }}>
-            {deptContracts.totalRemainingWan.toFixed(2)} <span style={{ fontSize: '14px', fontWeight: 500 }}>万元</span>
+            {formatWan6(deptContracts.totalRemainingWan)} <span style={{ fontSize: '14px', fontWeight: 500 }}>万元</span>
           </div>
           <div style={{ fontSize: '12px', color: '#b45309', marginTop: '4px' }}>
-            整体消耗率: {pct(deptContracts.overallAllocatedRateBps)} (已分配 {deptContracts.totalAllocatedWan.toFixed(2)}万)
+            整体消耗率: {pct(deptContracts.overallAllocatedRateBps)} (已分配 {formatWan6(deptContracts.totalAllocatedWan)} 万元)
           </div>
         </div>
 
@@ -1138,7 +1141,7 @@ export function AuditorSummaryView({
                         <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669', fontSize: '13.5px' }}>
                           {score(emp.totalPoints)}
                         </td>
-                        <td style={{ textAlign: 'right', color: '#334155' }}>{emp.totalWan.toFixed(4)} 万元</td>
+                        <td style={{ textAlign: 'right', color: '#334155' }}>{formatWan6(emp.totalWan)} 万元</td>
                         <td>
                           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxWidth: '380px' }}>
                             {emp.projects.slice(0, 3).map(p => (
@@ -1201,7 +1204,7 @@ export function AuditorSummaryView({
                   全部门合同总预算执行总览
                 </span>
                 <span style={{ fontSize: '13px', color: '#0369a1', fontWeight: 600 }}>
-                  已分配 {deptContracts.totalAllocatedWan.toFixed(2)} 万元 / 总额 {deptContracts.totalContractWan.toFixed(2)} 万元 ({pct(deptContracts.overallAllocatedRateBps)})
+                  已分配 {formatWan6(deptContracts.totalAllocatedWan)} 万元 / 总额 {formatWan6(deptContracts.totalContractWan)} 万元 ({pct(deptContracts.overallAllocatedRateBps)})
                 </span>
               </div>
               <div style={{ width: '100%', height: '14px', background: '#e2e8f0', borderRadius: '7px', overflow: 'hidden' }}>
@@ -1221,7 +1224,7 @@ export function AuditorSummaryView({
                 {deptContracts.warningProjectsCount > 0 && (
                   <span style={{ color: '#dc2626', fontWeight: 600 }}>超额预警项目: {deptContracts.warningProjectsCount} 个</span>
                 )}
-                <span>剩余可用总额度: {deptContracts.totalRemainingWan.toFixed(2)} 万元</span>
+                <span>剩余可用总额度: {formatWan6(deptContracts.totalRemainingWan)} 万元</span>
               </div>
             </div>
 
@@ -1257,9 +1260,9 @@ export function AuditorSummaryView({
                         <td style={{ fontWeight: 600, color: '#0f172a' }}>{p.name}</td>
                         <td>{p.ownerName}</td>
                         <td style={{ color: '#475569' }}>{p.client || '-'}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{p.contractWan.toFixed(4)} 万元</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatWan6(p.contractWan)} 万元</td>
                         <td style={{ textAlign: 'right', fontWeight: 600, color: '#059669' }}>
-                          {p.allocatedWan.toFixed(4)} 万元
+                          {formatWan6(p.allocatedWan)} 万元
                         </td>
                         <td style={{ textAlign: 'right' }}>{pct(p.allocatedRateBps)}</td>
                         <td
@@ -1269,7 +1272,7 @@ export function AuditorSummaryView({
                             color: p.remainingWan < 0 ? '#dc2626' : '#334155',
                           }}
                         >
-                          {p.remainingWan.toFixed(4)} 万元
+                          {formatWan6(p.remainingWan)} 万元
                         </td>
                         <td style={{ textAlign: 'center' }}>{p.headcount} 人</td>
                         <td style={{ textAlign: 'center' }}>
@@ -1417,7 +1420,7 @@ export function AuditorSummaryView({
                         <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669', fontSize: '14px' }}>
                           {score(emp.totalPoints)}
                         </td>
-                        <td style={{ textAlign: 'right' }}>{emp.totalWan.toFixed(4)} 万元</td>
+                        <td style={{ textAlign: 'right' }}>{formatWan6(emp.totalWan)} 万元</td>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <div style={{ width: '120px', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
@@ -1888,7 +1891,7 @@ export function AuditorSummaryView({
                         <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>
                           {score(d.points)}
                         </td>
-                        <td style={{ textAlign: 'right', color: '#334155' }}>{d.wan.toFixed(4)} 万</td>
+                        <td style={{ textAlign: 'right', color: '#334155' }}>{formatWan6(d.wan)} 万元</td>
                         <td style={{ color: '#475569', maxWidth: '280px' }} title={d.workContent}>
                           {d.workContent || '-'}
                         </td>
@@ -1937,7 +1940,7 @@ export function AuditorSummaryView({
               </div>
               <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: '11.5px', color: '#475569' }}>折合总金额</div>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>{inspectEmployee.totalWan.toFixed(4)} 万元</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>{formatWan6(inspectEmployee.totalWan)} 万元</div>
               </div>
             </div>
 
@@ -1967,7 +1970,7 @@ export function AuditorSummaryView({
                         <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>
                           {score(p.points)}
                         </td>
-                        <td style={{ textAlign: 'right' }}>{p.wan.toFixed(4)} 万元</td>
+                        <td style={{ textAlign: 'right' }}>{formatWan6(p.wan)} 万元</td>
                         <td style={{ textAlign: 'right', color: '#64748b' }}>{ratio}%</td>
                       </tr>
                     );
@@ -2011,19 +2014,19 @@ export function AuditorSummaryView({
               <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '6px' }}>
                 <div style={{ fontSize: '11px', color: '#64748b' }}>合同总额</div>
                 <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>
-                  {inspectPackage.project.contractWan?.toFixed(2) || '0'} 万元
+                  {formatWan6(inspectPackage.project.contractWan)} 万元
                 </div>
               </div>
               <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '6px' }}>
                 <div style={{ fontSize: '11px', color: '#64748b' }}>已分配额度</div>
                 <div style={{ fontSize: '16px', fontWeight: 700, color: '#059669' }}>
-                  {inspectPackage.project.periodAllocatedWan?.toFixed(2) || '0'} 万元
+                  {formatWan6(inspectPackage.project.periodAllocatedWan)} 万元
                 </div>
               </div>
               <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '6px' }}>
                 <div style={{ fontSize: '11px', color: '#64748b' }}>剩余可用额度</div>
                 <div style={{ fontSize: '16px', fontWeight: 700, color: '#0369a1' }}>
-                  {inspectPackage.project.remainingWan?.toFixed(2) || '0'} 万元
+                  {formatWan6(inspectPackage.project.remainingWan)} 万元
                 </div>
               </div>
               <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '6px' }}>
@@ -2062,7 +2065,7 @@ export function AuditorSummaryView({
                       <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>
                         {score(m.totalPoints)}
                       </td>
-                      <td style={{ textAlign: 'right' }}>{m.totalWan?.toFixed(4)} 万元</td>
+                      <td style={{ textAlign: 'right' }}>{formatWan6(m.totalWan)} 万元</td>
                       <td style={{ textAlign: 'right', color: '#64748b' }}>{m.ratioInProject}%</td>
                     </tr>
                   ))}

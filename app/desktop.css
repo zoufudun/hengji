@@ -2363,5 +2363,57 @@ button:disabled{opacity:.55;cursor:not-allowed}
   animation: pulseGlow 1.8s ease-in-out infinite;
 }
 
+/* ------------------------------------------------------------- */
+/* 矩形框动态光圈提醒 (Rotating Border Beam / Neon Aura Marquee) */
+/* ------------------------------------------------------------- */
+@keyframes auraSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes auraPulseShadow {
+  0%, 100% {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15), 0 0 20px rgba(249, 115, 22, 0.4), 0 0 35px rgba(16, 185, 129, 0.25);
+  }
+  50% {
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.22), 0 0 30px rgba(249, 115, 22, 0.7), 0 0 50px rgba(16, 185, 129, 0.45);
+  }
+}
+
+.aperture-notification-wrapper {
+  position: fixed;
+  bottom: 24px;
+  right: 28px;
+  z-index: 9999;
+  border-radius: 14px;
+  padding: 2.5px;
+  overflow: hidden;
+  animation: auraPulseShadow 3s ease-in-out infinite;
+  display: flex;
+}
+
+.aperture-spinning-beam {
+  position: absolute;
+  top: -100%;
+  left: -100%;
+  width: 300%;
+  height: 300%;
+  background: conic-gradient(from 0deg, #f97316 0%, #ec4899 25%, #6366f1 50%, #0ea5e9 70%, #10b981 85%, #f97316 100%);
+  animation: auraSpin 3.5s linear infinite;
+  z-index: 0;
+}
+
+.aperture-card-content {
+  position: relative;
+  z-index: 1;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #0f172a;
+}
+
 
 
