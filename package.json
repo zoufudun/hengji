@@ -1,6 +1,6 @@
 {
   "name": "site-creator-vinext-starter",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "TOPFIRE 衡绩员工绩点考核系统 - 桌面离线版",
   "author": "邹富敦 (Phudon Zou) / TOPFIRE 研发团队",
   "private": true,
@@ -20,7 +20,8 @@
     "desktop:build": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts",
     "desktop:start": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts && electron .",
     "desktop:pack": "node scripts/check-hooks.mjs && node tests/core.test.mjs && node tests/auditor.test.mjs && vite build --config vite.desktop.config.ts && electron-builder --win portable",
-    "desktop:pack:signed": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts && electron-builder --win portable --config.forceCodeSigning=true"
+    "desktop:pack:signed": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts && electron-builder --win portable --config.forceCodeSigning=true",
+    "pages:build": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts && node -e \"const fs=require('fs'); fs.copyFileSync('build/desktop/desktop.html', 'build/desktop/index.html');\""
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

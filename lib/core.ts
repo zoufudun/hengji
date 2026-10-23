@@ -2526,15 +2526,16 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.7.2';
+export const APP_VERSION = '0.7.3';
 export const APP_BUILD = '20261023';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
 
-// 官方代码与发布仓库
+// 官方代码与发布仓库及 GitHub Pages
 export const GITHUB_REPO = 'zoufudun/hengji';
 export const GITHUB_REPO_URL = 'https://github.com/zoufudun/hengji';
 export const GITHUB_RELEASES_URL = 'https://github.com/zoufudun/hengji/releases';
+export const GITHUB_PAGES_URL = 'https://zoufudun.github.io/hengji/';
 
 export interface UpdateCheckResult {
   hasUpdate: boolean;
@@ -2688,6 +2689,18 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.7.3',
+    date: '2026-10-23',
+    tag: '重大更新',
+    title: '版本更新中心轻奢视觉重构 (CC Switch 风格)、操作手册与底栏精简纯净化、GitHub Pages 自动化部署',
+    items: [
+      '【版本更新中心视觉重构】在线更新弹窗重构为高辨识度现代卡片（参考 CC Switch 风格），整合软件标识、当前版本、醒目橙色一键更新通道、官方网站、更新日志与近期更新快捷抽屉，并新增 GitHub Star 点赞号召横幅。',
+      '【侧栏底栏精简纯净化】侧栏底栏移除繁杂的嵌入更新按钮，优雅保持左侧版本号标识、右侧仅保留“操作手册”与“关于”双核入口，空间布局舒展清爽。',
+      '【检查更新交互升级】关于窗口标签栏新增高质感“检查更新...”按钮，弹窗呼出动效丝滑，检测与一键下载体验一气呵成。',
+      '【GitHub Pages 自动化云端部署】配置自动化 GitHub Actions Pages 工作流，桌面端与网页版无缝同步构建并部署至 https://zoufudun.github.io/hengji/。'
+    ]
+  },
   {
     version: 'v0.7.2',
     date: '2026-10-23',

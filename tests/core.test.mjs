@@ -1167,10 +1167,10 @@ test('企业级全量灾备数据 AES-256-GCM 加密导出与权限口令解密�
   assert.equal(legacyDecrypted.state.projects.length, state.projects.length);
 
   // 6. 版本号与更新历史验证
-  assert.equal(APP_VERSION, '0.7.2');
-  assert.ok(UPDATE_HISTORY.length >= 17);
-  assert.equal(UPDATE_HISTORY[0].version, 'v0.7.2');
-  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('考核之星殿堂') || it.includes('全景合同矩阵') || it.includes('四维排名')));
+  assert.equal(APP_VERSION, '0.7.3');
+  assert.ok(UPDATE_HISTORY.length >= 18);
+  assert.equal(UPDATE_HISTORY[0].version, 'v0.7.3');
+  assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('版本更新中心') || it.includes('CC Switch') || it.includes('GitHub Pages')));
 });
 
 test('月底分配全项目当月集中透视、每个项目月分配批量修改与一键批量发布/撤回', () => {
@@ -1348,18 +1348,18 @@ WO-VAR-01,总预算标识项目,260.80,管理员`;
 
 test('在线版本更新检测与 Semver 语义化版本比对正确', async () => {
   assert.equal(GITHUB_REPO, 'zoufudun/hengji');
-  assert.equal(compareSemver('0.7.2', '0.7.2'), 0);
-  assert.equal(compareSemver('v0.7.2', '0.7.2'), 0);
-  assert.equal(compareSemver('0.7.3', '0.7.2'), 1);
-  assert.equal(compareSemver('v0.8.0', '0.7.2'), 1);
-  assert.equal(compareSemver('1.0.0', '0.7.2'), 1);
-  assert.equal(compareSemver('0.7.1', '0.7.2'), -1);
-  assert.equal(compareSemver('0.6.9', '0.7.2'), -1);
+  assert.equal(compareSemver('0.7.3', '0.7.3'), 0);
+  assert.equal(compareSemver('v0.7.3', '0.7.3'), 0);
+  assert.equal(compareSemver('0.7.4', '0.7.3'), 1);
+  assert.equal(compareSemver('v0.8.0', '0.7.3'), 1);
+  assert.equal(compareSemver('1.0.0', '0.7.3'), 1);
+  assert.equal(compareSemver('0.7.2', '0.7.3'), -1);
+  assert.equal(compareSemver('0.6.9', '0.7.3'), -1);
 
   // 运行检测（容错处理，即使未联网也返回友好结构不崩溃）
-  const result = await checkAppUpdate('0.7.2');
+  const result = await checkAppUpdate('0.7.3');
   assert.ok(result.checkedAt);
-  assert.equal(result.currentVersion, '0.7.2');
+  assert.equal(result.currentVersion, '0.7.3');
 });
 
 

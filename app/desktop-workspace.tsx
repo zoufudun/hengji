@@ -63,6 +63,8 @@ import {
   RefreshCw,
   ExternalLink,
   CheckCircle2,
+  Globe,
+  Star,
   X
 } from 'lucide-react';
 import {
@@ -139,6 +141,7 @@ import {
   GITHUB_REPO,
   GITHUB_REPO_URL,
   GITHUB_RELEASES_URL,
+  GITHUB_PAGES_URL,
   checkAppUpdate,
   type UpdateCheckResult,
   exportEncryptedBackupJson,
@@ -1399,31 +1402,8 @@ export default function DesktopWorkspace() {
           </div>
         </div>
         <div style={{ padding: '8px 14px', borderTop: '1px solid #1c3b32', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: '#94a3b8' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span>v{APP_VERSION}</span>
-            <button
-              type="button"
-              style={{
-                border: 'none',
-                background: updateAvailable ? 'rgba(245,158,11,0.22)' : 'rgba(56,189,248,0.12)',
-                color: updateAvailable ? '#fbbf24' : '#38bdf8',
-                cursor: 'pointer',
-                padding: '1.5px 6px',
-                borderRadius: '4px',
-                fontSize: '10px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '3px',
-                fontWeight: updateAvailable ? 700 : 500,
-              }}
-              onClick={() => setUpdateModalOpen(true)}
-              title={updateAvailable ? '🎉 发现新版本！点击查看与下载' : '在线检测 GitHub 官方最新版本'}
-            >
-              {updateAvailable ? <span className="update-badge-dot" /> : <RefreshCw size={10} />}
-              {updateAvailable ? '新版本' : '检查更新'}
-            </button>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>v{APP_VERSION}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               type="button"
               style={{ border: 'none', background: 'transparent', color: '#7dd3fc', cursor: 'pointer', padding: 0, fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
@@ -1441,7 +1421,7 @@ export default function DesktopWorkspace() {
               onClick={() => setAboutModalOpen(true)}
               title="查看系统关于与版本更新历史"
             >
-              <Info size={11} />关于系统
+              <Info size={11} />关于
             </button>
           </div>
         </div>
@@ -1997,11 +1977,33 @@ function AboutModal({
           {onCheckUpdate && (
             <button
               type="button"
-              className="modal-tab-btn"
-              style={{ marginLeft: 'auto', background: 'rgba(56, 189, 248, 0.12)', color: '#0284c7', border: '1px solid rgba(56,189,248,0.3)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+              style={{
+                marginLeft: 'auto',
+                background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '6px 16px',
+                fontWeight: 600,
+                fontSize: '13px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '7px',
+                boxShadow: '0 2px 8px rgba(2,132,199,0.3)',
+                cursor: 'pointer',
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(2,132,199,0.45)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(2,132,199,0.3)';
+              }}
               onClick={onCheckUpdate}
             >
-              <RefreshCw size={13} /> 在线检查版本更新
+              <RefreshCw size={13.5} /> 检查更新...
             </button>
           )}
         </div>
@@ -2120,7 +2122,34 @@ function AboutModal({
 }
 
 // -------------------------------------------------------------
-// 系统版本在线检测与更新弹窗 (Online Version Update Modal)
+// GitHub 图标与现代彩瓣标识 (CC Switch 灵感组件)
+// -------------------------------------------------------------
+function GithubIcon({ size = 16, color = 'currentColor' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+    </svg>
+  );
+}
+
+function BurstLogo({ size = 40 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+      <circle cx="20" cy="20" r="4.5" fill="#10b981" />
+      <rect x="17.5" y="3" width="5" height="10" rx="2.5" fill="#f97316" />
+      <rect x="17.5" y="27" width="5" height="10" rx="2.5" fill="#0ea5e9" />
+      <rect x="3" y="17.5" width="10" height="5" rx="2.5" fill="#10b981" />
+      <rect x="27" y="17.5" width="10" height="5" rx="2.5" fill="#f59e0b" />
+      <rect x="8.5" y="8.5" width="5" height="10" rx="2.5" transform="rotate(-45 11 13.5)" fill="#ec4899" />
+      <rect x="25.5" y="25.5" width="5" height="10" rx="2.5" transform="rotate(-45 28 30.5)" fill="#14b8a6" />
+      <rect x="25.5" y="8.5" width="5" height="10" rx="2.5" transform="rotate(45 28 13.5)" fill="#6366f1" />
+      <rect x="8.5" y="25.5" width="5" height="10" rx="2.5" transform="rotate(45 11 30.5)" fill="#84cc16" />
+    </svg>
+  );
+}
+
+// -------------------------------------------------------------
+// 系统版本在线检测与更新弹窗 (Online Version Update Modal · CC Switch 风格)
 // -------------------------------------------------------------
 function UpdateModal({
   onClose,
@@ -2131,6 +2160,8 @@ function UpdateModal({
 }) {
   const [checking, setChecking] = useState(!initialResult);
   const [result, setResult] = useState<UpdateCheckResult | null>(initialResult || null);
+  const [showRecent, setShowRecent] = useState(false);
+  const [showStarBanner, setShowStarBanner] = useState(true);
 
   const doCheck = async () => {
     setChecking(true);
@@ -2170,290 +2201,407 @@ function UpdateModal({
   };
 
   return (
-    <Modal
-      title="软件版本在线检测与更新"
-      subtitle={`当前运行版本: v${APP_VERSION} · 官方发布仓库: github.com/${GITHUB_REPO}`}
-      wide
-      onClose={onClose}
+    <div
+      className="modal-backdrop"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(15, 23, 42, 0.65)',
+        backdropFilter: 'blur(6px)',
+        zIndex: 1050,
+      }}
+      onClick={onClose}
     >
-      <div className="modal-body" style={{ maxHeight: '72vh', overflowY: 'auto' }}>
-        {/* 顶部状态大横幅 */}
+      <div
+        style={{
+          width: '680px',
+          maxWidth: '94%',
+          background: '#ffffff',
+          borderRadius: '16px',
+          boxShadow: '0 24px 48px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.06)',
+          border: '1px solid #e2e8f0',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 顶部信息行：Logo + 软件名称与版本 + 右侧醒目操作按钮与关闭 */}
         <div
           style={{
-            background: checking
-              ? 'linear-gradient(135deg, #1e293b 0%, #334155 100%)'
-              : result?.hasUpdate
-              ? 'linear-gradient(135deg, #064e3b 0%, #047857 60%, #059669 100%)'
-              : result?.error
-              ? 'linear-gradient(135deg, #78350f 0%, #92400e 100%)'
-              : 'linear-gradient(135deg, #142822 0%, #1c3b32 60%, #15803d 100%)',
-            borderRadius: '12px',
-            padding: '22px 26px',
-            color: '#ffffff',
+            padding: '22px 28px',
             display: 'flex',
-            justifyContent: 'space-between',
             alignItems: 'center',
-            flexWrap: 'wrap',
+            justifyContent: 'space-between',
             gap: '16px',
-            marginBottom: '20px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: '10px',
-                background: checking ? 'rgba(255,255,255,0.15)' : result?.hasUpdate ? '#34d399' : result?.error ? '#f59e0b' : '#4ade80',
-                color: checking || result?.error ? '#ffffff' : '#142822',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              {checking ? (
-                <RefreshCw size={24} className="spin-icon" />
-              ) : result?.hasUpdate ? (
-                <Sparkles size={24} />
-              ) : result?.error ? (
-                <AlertCircle size={24} />
-              ) : (
-                <CheckCircle2 size={24} />
-              )}
-            </div>
+            <BurstLogo size={42} />
             <div>
-              <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: 700 }}>
-                {checking
-                  ? '正在连接 GitHub 检测最新版本...'
-                  : result?.hasUpdate
-                  ? `发现新版本：v${result.latestVersion} 可用！`
-                  : result?.error
-                  ? '检查更新提示'
-                  : `当前已是最新版本 (v${APP_VERSION})`}
-              </h3>
-              <p style={{ margin: 0, fontSize: '12.5px', opacity: 0.9, lineHeight: 1.5 }}>
-                {checking
-                  ? '正在向 GitHub Releases API 请求最新发行版元数据与安装包，请稍候...'
-                  : result?.hasUpdate
-                  ? `发布时间: ${result.publishedAt || '近期'} · 建议下载最新单文件版获得最佳体验`
-                  : result?.error
-                  ? result.error
-                  : '您的系统已处于官方最新稳定状态，暂无可用更新。'}
-              </p>
-            </div>
-          </div>
-
-          <div
-            style={{
-              background: 'rgba(255,255,255,0.12)',
-              backdropFilter: 'blur(8px)',
-              borderRadius: '10px',
-              padding: '10px 16px',
-              border: '1px solid rgba(255,255,255,0.2)',
-              fontSize: '12px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '4px',
-            }}
-          >
-            <div><span style={{ opacity: 0.75 }}>当前版本：</span><b>v{APP_VERSION}</b></div>
-            <div><span style={{ opacity: 0.75 }}>最新版本：</span><b style={{ color: result?.hasUpdate ? '#fde047' : '#a7f3d0' }}>v{result?.latestVersion || APP_VERSION}</b></div>
-            <div><span style={{ opacity: 0.75 }}>检测时间：</span><span style={{ opacity: 0.9 }}>{result?.checkedAt || '刚刚'}</span></div>
-          </div>
-        </div>
-
-        {/* 详细内容区域 */}
-        {result?.hasUpdate ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div
-              style={{
-                background: '#f0fdf4',
-                border: '1px solid #bbf7d0',
-                borderRadius: '10px',
-                padding: '16px 20px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                <h4 style={{ margin: 0, fontSize: '15px', color: '#166534', fontWeight: 700 }}>
-                  {result.releaseName || `v${result.latestVersion} 发行说明`}
-                </h4>
-                <span style={{ fontSize: '12px', color: '#15803d', background: '#dcfce7', padding: '2px 8px', borderRadius: '12px' }}>
-                  官方正式发行版
-                </span>
-              </div>
-              <div
+              <h3
                 style={{
-                  fontSize: '13px',
-                  color: '#334155',
-                  lineHeight: 1.7,
-                  whiteSpace: 'pre-wrap',
-                  maxHeight: '260px',
-                  overflowY: 'auto',
-                  background: '#ffffff',
-                  border: '1px solid #dcfce7',
-                  borderRadius: '8px',
-                  padding: '12px 16px',
+                  margin: 0,
+                  fontSize: '18px',
+                  fontWeight: 700,
+                  color: '#0f172a',
+                  letterSpacing: '0.2px',
                 }}
               >
-                {result.releaseNotes || '该版本包含稳定性提升与功能改进。'}
+                衡绩 (HengJi)
+              </h3>
+              <div style={{ fontSize: '13px', color: '#64748b', marginTop: '2px' }}>
+                版本 v{APP_VERSION}
               </div>
             </div>
+          </div>
 
-            {/* 操作按钮区 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', paddingTop: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {checking ? (
               <button
                 type="button"
-                className="primary"
+                disabled
                 style={{
-                  background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                  borderColor: '#047857',
-                  padding: '10px 20px',
+                  background: '#f1f5f9',
+                  color: '#64748b',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '8px',
+                  padding: '9px 18px',
+                  fontSize: '13.5px',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  cursor: 'not-allowed',
+                }}
+              >
+                <RefreshCw size={15} className="spin-icon" />
+                检测中...
+              </button>
+            ) : result?.hasUpdate ? (
+              <button
+                type="button"
+                style={{
+                  background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '9px 20px',
                   fontSize: '14px',
                   fontWeight: 600,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
-                  boxShadow: '0 4px 12px rgba(5,150,105,0.3)',
+                  boxShadow: '0 4px 12px rgba(234, 88, 12, 0.35)',
+                  cursor: 'pointer',
+                  transition: 'transform 0.15s, box-shadow 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(234, 88, 12, 0.45)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(234, 88, 12, 0.35)';
                 }}
                 onClick={() => openUrl(result.downloadUrl)}
+                title="立即前往下载或升级新版本"
               >
-                <CloudDownload size={18} />
-                立即下载新版本 (.exe)
+                <CloudDownload size={16} />
+                更新到 v{result.latestVersion}
               </button>
-
+            ) : (
               <button
                 type="button"
-                className="secondary"
                 style={{
-                  padding: '10px 18px',
-                  fontSize: '13.5px',
+                  background: '#f0fdf4',
+                  color: '#15803d',
+                  border: '1px solid #86efac',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  fontWeight: 600,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                }}
-                onClick={() => openUrl(result.htmlUrl)}
-              >
-                <ExternalLink size={15} />
-                在 GitHub 查看发布页
-              </button>
-
-              <button
-                type="button"
-                className="secondary"
-                style={{
-                  padding: '10px 16px',
-                  fontSize: '13.5px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  marginLeft: 'auto',
+                  cursor: 'pointer',
                 }}
                 onClick={doCheck}
-                disabled={checking}
+                title="点击重新检查是否有新版本"
               >
-                <RefreshCw size={14} className={checking ? 'spin-icon' : ''} />
-                重新检测
+                <CheckCircle2 size={15} color="#16a34a" />
+                当前已是最新版
               </button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* 未发现新版本或检测提示 */}
-            <div
+            )}
+
+            <button
+              type="button"
               style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: '10px',
-                padding: '18px 22px',
+                border: 'none',
+                background: 'transparent',
+                color: '#94a3b8',
+                cursor: 'pointer',
+                padding: '6px',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'color 0.15s',
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#0f172a')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = '#94a3b8')}
+              onClick={onClose}
+              title="关闭"
             >
-              <h4 style={{ margin: '0 0 10px', fontSize: '14px', color: '#0f172a' }}>
-                官方仓库与发布源
-              </h4>
-              <p style={{ margin: '0 0 14px', fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
-                衡绩系统代码及所有 Windows 桌面绿色离线版发布文件均托管于 GitHub 官方开源仓库。您可随时通过点击下方链接前往仓库主页或 Release 页面手动浏览、下载或反馈建议。
-              </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  style={{
-                    background: '#ffffff',
-                    border: '1px solid #cbd5e1',
-                    borderRadius: '8px',
-                    padding: '8px 14px',
-                    fontSize: '13px',
-                    color: '#0f172a',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontWeight: 500,
-                  }}
-                  onClick={() => openUrl(GITHUB_RELEASES_URL)}
-                >
-                  <ExternalLink size={14} color="#0284c7" />
-                  GitHub Releases 发行版专区
-                </button>
-                <button
-                  type="button"
-                  style={{
-                    background: '#ffffff',
-                    border: '1px solid #cbd5e1',
-                    borderRadius: '8px',
-                    padding: '8px 14px',
-                    fontSize: '13px',
-                    color: '#0f172a',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontWeight: 500,
-                  }}
-                  onClick={() => openUrl(GITHUB_REPO_URL)}
-                >
-                  <ExternalLink size={14} color="#16a34a" />
-                  GitHub 代码仓库首页
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  style={{
-                    padding: '8px 14px',
-                    fontSize: '13px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    marginLeft: 'auto',
-                  }}
-                  onClick={doCheck}
-                  disabled={checking}
-                >
-                  <RefreshCw size={14} className={checking ? 'spin-icon' : ''} />
-                  重新检测
-                </button>
-              </div>
+              <X size={19} />
+            </button>
+          </div>
+        </div>
+
+        {/* 分割线与新版本提示状态栏 */}
+        <div
+          style={{
+            borderTop: '1px solid #f1f5f9',
+            borderBottom: '1px solid #f1f5f9',
+            padding: '16px 28px',
+            fontSize: '14px',
+            fontWeight: 600,
+            color: '#1e293b',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: '#fafafa',
+          }}
+        >
+          <div>
+            {checking
+              ? '正在连接官方仓库检测最新版本...'
+              : result?.hasUpdate
+              ? `检测到新版本: ${result.latestVersion}`
+              : result?.error
+              ? `检测提示: ${result.error}`
+              : `检测到新版本: 无 (当前已是官方最新版本 ${APP_VERSION})`}
+          </div>
+          {!checking && (
+            <button
+              type="button"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#0284c7',
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontWeight: 500,
+                padding: 0,
+              }}
+              onClick={doCheck}
+            >
+              <RefreshCw size={12} />
+              重新检查
+            </button>
+          )}
+        </div>
+
+        {/* 快捷操作标签栏：官方网站、更新日志、近期更新 */}
+        <div
+          style={{
+            padding: '16px 28px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <button
+            type="button"
+            style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              padding: '7px 16px',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: '#334155',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+              transition: 'background 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#f8fafc';
+              e.currentTarget.style.borderColor = '#cbd5e1';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#ffffff';
+              e.currentTarget.style.borderColor = '#e2e8f0';
+            }}
+            onClick={() => openUrl(GITHUB_PAGES_URL)}
+          >
+            <Globe size={15} color="#0284c7" />
+            官方网站
+          </button>
+
+          <button
+            type="button"
+            style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              padding: '7px 16px',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: '#334155',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+              transition: 'background 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#f8fafc';
+              e.currentTarget.style.borderColor = '#cbd5e1';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#ffffff';
+              e.currentTarget.style.borderColor = '#e2e8f0';
+            }}
+            onClick={() => openUrl(GITHUB_RELEASES_URL)}
+          >
+            <ExternalLink size={15} color="#475569" />
+            更新日志
+          </button>
+
+          <button
+            type="button"
+            style={{
+              background: showRecent ? '#f0fdf4' : '#ffffff',
+              border: `1px solid ${showRecent ? '#86efac' : '#e2e8f0'}`,
+              borderRadius: '8px',
+              padding: '7px 16px',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: showRecent ? '#15803d' : '#334155',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+              transition: 'background 0.15s, border-color 0.15s',
+            }}
+            onClick={() => setShowRecent(!showRecent)}
+          >
+            <Sparkles size={15} color="#f59e0b" />
+            近期更新
+          </button>
+        </div>
+
+        {/* 展开的近期更新日志内容抽屉 */}
+        {showRecent && (
+          <div
+            style={{
+              margin: '0 28px 18px',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '10px',
+              padding: '16px 20px',
+              maxHeight: '220px',
+              overflowY: 'auto',
+              fontSize: '12.5px',
+              color: '#334155',
+              lineHeight: 1.7,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: '8px', fontSize: '13px' }}>
+              📌 {result?.hasUpdate ? `v${result.latestVersion} 发行说明` : `v${APP_VERSION} 近期重点更新亮点`}
+            </div>
+            {result?.hasUpdate && result.releaseNotes ? (
+              <div style={{ whiteSpace: 'pre-wrap', marginBottom: '10px' }}>{result.releaseNotes}</div>
+            ) : null}
+            <ul style={{ margin: 0, paddingLeft: '18px' }}>
+              {UPDATE_HISTORY[0].items.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* 底部暖调 Star 号召横幅 */}
+        {showStarBanner && (
+          <div
+            style={{
+              background: '#fff7ed',
+              borderTop: '1px solid #fed7aa',
+              padding: '13px 28px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '14px',
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '9px', fontSize: '13px', color: '#9a3412', fontWeight: 500 }}>
+              <Star size={17} fill="#f59e0b" color="#f59e0b" style={{ flexShrink: 0 }} />
+              <span>如果 衡绩 帮到了你，请在 GitHub 点个 Star，这对我们意义重大</span>
             </div>
 
-            {/* 温馨提示卡片 */}
-            <div
-              style={{
-                background: '#eff6ff',
-                border: '1px solid #bfdbfe',
-                borderRadius: '10px',
-                padding: '14px 18px',
-                fontSize: '12.5px',
-                color: '#1e40af',
-                lineHeight: 1.6,
-              }}
-            >
-              💡 <strong>无缝升级保障</strong>：本软件为绿色便携设计，下载新版本 <code>.exe</code> 文件后可直接重命名替换运行，无需复杂的安装或卸载过程。您以往创建的所有加密工作区文件（<code>.hengji</code>）与导出的备份数据百分之百向前兼容，升级前后业务数据永久保留。
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                type="button"
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #fed7aa',
+                  borderRadius: '7px',
+                  padding: '5px 13px',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  color: '#0f172a',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  transition: 'background 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#fffbeb')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
+                onClick={() => openUrl(GITHUB_REPO_URL)}
+              >
+                <GithubIcon size={14} />
+                去点 Star
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#c2410c',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  opacity: 0.8,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.8')}
+                onClick={() => setShowStarBanner(false)}
+                title="关闭提示"
+              >
+                <X size={15} />
+              </button>
             </div>
           </div>
         )}
       </div>
-    </Modal>
+    </div>
   );
 }
 
