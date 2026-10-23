@@ -247,7 +247,10 @@ app.whenReady().then(() => {
       if (apiRes.ok) {
         const relData = await apiRes.json();
         const assets = Array.isArray(relData.assets) ? relData.assets : [];
-        if (format === 'msi') {
+        if (format === 'zip') {
+          const zip = assets.find(a => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.zip'));
+          if (zip && zip.browser_download_url) return zip.browser_download_url;
+        } else if (format === 'msi') {
           const msi = assets.find(a => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.msi'));
           if (msi && msi.browser_download_url) return msi.browser_download_url;
         } else if (format === 'setup' || format === 'installer') {
@@ -264,10 +267,12 @@ app.whenReady().then(() => {
   }
 
   ipcMain.handle('workspace:download-update', async (_event, payload) => {
-    const ver = (payload && payload.version) ? String(payload.version).replace(/^v/, '') : '0.7.6';
+    const ver = (payload && payload.version) ? String(payload.version).replace(/^v/, '') : '0.7.7';
     const format = payload && payload.format ? String(payload.format).toLowerCase() : 'exe';
     let filename = format === 'msi'
       ? `衡绩员工绩点考核系统-${ver}.msi`
+      : format === 'zip'
+      ? `衡绩员工绩点考核系统-${ver}.zip`
       : format === 'setup'
       ? `衡绩员工绩点考核系统-Setup-${ver}.exe`
       : `衡绩员工绩点考核系统-${ver}.exe`;
@@ -289,11 +294,13 @@ app.whenReady().then(() => {
       path.join(__dirname, '..', 'dist-desktop', filename),
       path.join(__dirname, '..', 'dist-desktop', `衡绩员工绩点考核系统-Setup-${ver}.exe`),
       path.join(__dirname, '..', 'dist-desktop', `衡绩员工绩点考核系统-${ver}.msi`),
+      path.join(__dirname, '..', 'dist-desktop', `衡绩员工绩点考核系统-${ver}.zip`),
       path.join(__dirname, '..', 'dist-desktop', `衡绩员工绩点考核系统-${ver}.exe`),
       path.join(__dirname, '..', filename),
       path.join(process.cwd(), 'dist-desktop', filename),
       path.join(process.cwd(), 'dist-desktop', `衡绩员工绩点考核系统-Setup-${ver}.exe`),
       path.join(process.cwd(), 'dist-desktop', `衡绩员工绩点考核系统-${ver}.msi`),
+      path.join(process.cwd(), 'dist-desktop', `衡绩员工绩点考核系统-${ver}.zip`),
       path.join(process.cwd(), 'dist-desktop', `衡绩员工绩点考核系统-${ver}.exe`),
       app.isPackaged ? process.execPath : null
     ].filter(Boolean);
@@ -345,23 +352,26 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('workspace:install-update', async (_event, payload) => {
-    const ver = (payload && payload.version) ? String(payload.version).replace(/^v/, '') : '0.7.6';
+    const ver = (payload && payload.version) ? String(payload.version).replace(/^v/, '') : '0.7.7';
     const currentExe = process.execPath;
     const currentDir = path.dirname(currentExe);
     const currentPid = process.pid;
 
-    // 1. 优先获取安装包（Setup.exe 或 .msi 或 portable.exe）
+    // 1. 优先获取安装包（Setup.exe 或 .msi 或 .zip 或 portable.exe）
     let installerPath = null;
     const localCandidateInstallers = [
       path.join(__dirname, '..', 'dist-desktop', `衡绩员工绩点考核系统-Setup-${ver}.exe`),
       path.join(process.cwd(), 'dist-desktop', `衡绩员工绩点考核系统-Setup-${ver}.exe`),
       path.join(__dirname, '..', 'dist-desktop', `衡绩员工绩点考核系统-${ver}.msi`),
       path.join(process.cwd(), 'dist-desktop', `衡绩员工绩点考核系统-${ver}.msi`),
+      path.join(__dirname, '..', 'dist-desktop', `衡绩员工绩点考核系统-${ver}.zip`),
+      path.join(process.cwd(), 'dist-desktop', `衡绩员工绩点考核系统-${ver}.zip`),
       path.join(__dirname, '..', 'dist-desktop', `衡绩员工绩点考核系统-${ver}.exe`),
       path.join(process.cwd(), 'dist-desktop', `衡绩员工绩点考核系统-${ver}.exe`),
       path.join('D:\\', `衡绩员工绩点考核系统-${ver}.exe`),
       path.join('D:\\', `衡绩员工绩点考核系统-Setup-${ver}.exe`),
-      path.join('D:\\', `衡绩员工绩点考核系统-${ver}.msi`)
+      path.join('D:\\', `衡绩员工绩点考核系统-${ver}.msi`),
+      path.join('D:\\', `衡绩员工绩点考核系统-${ver}.zip`)
     ];
 
     for (const src of localCandidateInstallers) {
@@ -377,7 +387,7 @@ app.whenReady().then(() => {
 
     // 若本地未找到打包产物，从远端高速下载到系统临时目录
     if (!installerPath) {
-      const ext = (payload && payload.format === 'msi') ? '.msi' : '.exe';
+      const ext = (payload && payload.format === 'msi') ? '.msi' : (payload && payload.format === 'zip') ? '.zip' : '.exe';
       const tempFilename = `hengji-installer-${ver}-${Date.now()}${ext}`;
       const tempPath = path.join(os.tmpdir(), tempFilename);
 
@@ -406,6 +416,7 @@ app.whenReady().then(() => {
     const scriptPath = path.join(os.tmpdir(), `hengji-apply-update-${Date.now()}.ps1`);
     const isSetupExe = installerPath.toLowerCase().endsWith('.exe') && (installerPath.toLowerCase().includes('setup') || installerPath.toLowerCase().includes('install'));
     const isMsi = installerPath.toLowerCase().endsWith('.msi');
+    const isZip = installerPath.toLowerCase().endsWith('.zip');
 
     const scriptContent = `
 $ErrorActionPreference = "SilentlyContinue"
@@ -425,6 +436,10 @@ if ("${isSetupExe}" -eq "True") {
 } elseif ("${isMsi}" -eq "True") {
     Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "\`"$installer\`"", "/qn", "TARGETDIR=\`"$targetDir\`"" -Wait
     Start-Sleep -Seconds 2
+} elseif ("${isZip}" -eq "True") {
+    # 绿色压缩包直接解压覆盖当前目录
+    Expand-Archive -Path $installer -DestinationPath $targetDir -Force
+    Start-Sleep -Seconds 1
 } else {
     # 便携单文件直接覆盖
     Copy-Item -Path $installer -Destination $currentExe -Force

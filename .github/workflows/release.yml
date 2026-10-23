@@ -31,19 +31,26 @@ jobs:
       - name: Build client assets
         run: npm run desktop:build
 
-      - name: Package Windows installers and portable executables
-        run: npx electron-builder --win nsis msi portable
+      - name: Patch WiX MSI Chinese Template
+        run: node -e "const fs=require('fs'); const p='node_modules/app-builder-lib/templates/msi/template.xml'; if (fs.existsSync(p)) { let c=fs.readFileSync(p,'utf8'); c=c.replace('Language=\"1033\" Codepage=\"65001\"','Language=\"2052\" Codepage=\"936\"'); fs.writeFileSync(p,c,'utf8'); console.log('WiX template patched for zh-CN'); }"
+
+      - name: Package Windows installers, portable executables, and zip archives
+        run: |
+          npx electron-builder --win nsis msi portable
+          node scripts/build-zip.mjs
 
       - name: Prepare release artifacts
         shell: pwsh
         run: |
           $ver = "${{ github.ref_name }}".TrimStart('v')
-          Get-ChildItem -Path dist-desktop -Include "*.exe","*.msi" -Recurse | ForEach-Object {
+          Get-ChildItem -Path dist-desktop -Include "*.exe","*.msi","*.zip" -Recurse | ForEach-Object {
             Write-Host "Found artifact: $($_.FullName)"
             if ($_.Name -like "*Setup*") {
               Copy-Item -Path $_.FullName -Destination "dist-desktop/hengji-Setup-$ver.exe" -Force
             } elseif ($_.Name -like "*.msi") {
               Copy-Item -Path $_.FullName -Destination "dist-desktop/hengji-$ver.msi" -Force
+            } elseif ($_.Name -like "*.zip") {
+              Copy-Item -Path $_.FullName -Destination "dist-desktop/hengji-$ver.zip" -Force
             } elseif ($_.Name -like "*$ver.exe*" -or $_.Name -like "*portable*") {
               Copy-Item -Path $_.FullName -Destination "dist-desktop/hengji-$ver.exe" -Force
               Copy-Item -Path $_.FullName -Destination "dist-desktop/hengji-portable.exe" -Force
@@ -57,6 +64,7 @@ jobs:
           files: |
             dist-desktop/*.exe
             dist-desktop/*.msi
+            dist-desktop/*.zip
           generate_release_notes: true
           draft: false
           prerelease: false

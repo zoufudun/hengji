@@ -366,6 +366,30 @@ function BrandLogo({ size = 42 }: { size?: number }) {
 }
 const DualBrandLogo = BrandLogo;
 
+// -------------------------------------------------------------
+// 现代八彩花瓣品牌标 (Flower Brand Logo: 八彩花瓣图标)
+// -------------------------------------------------------------
+function FlowerBrandLogo({ size = 42 }: { size?: number }) {
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+      <img
+        src={brandBurstFlower}
+        alt="衡绩"
+        width={size}
+        height={size}
+        style={{
+          width: size,
+          height: size,
+          objectFit: 'contain',
+          display: 'inline-block',
+          verticalAlign: 'middle',
+          flexShrink: 0,
+        }}
+      />
+    </div>
+  );
+}
+
 class SafeStarsBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
   constructor(props: any) {
     super(props);
@@ -1613,17 +1637,6 @@ export default function DesktopWorkspace() {
               if (await window.meritDesktop.exportBase({ state, projectGroups })) setNotice('共享基础库已导出：不包含项目、工作内容和绩点');
             }}><Users size={14}/>导出共享基础库</button>
             <button
-              className="secondary manual-nav-btn"
-              style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }}
-              onClick={() => {
-                setManualChapter(0);
-                setManualOpen(true);
-              }}
-              title="查看图文并茂的新手简易操作手册与业务闭环指南"
-            >
-              <BookOpen size={14} style={{ color: '#0284c7' }} />操作手册
-            </button>
-            <button
               className="secondary guide-nav-btn"
               style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }}
               onClick={() => {
@@ -1633,14 +1646,6 @@ export default function DesktopWorkspace() {
               title="新手五步快速上手向导与业务闭环指南"
             >
               <Sparkles size={14} style={{ color: '#16a34a' }} />新手引导
-            </button>
-            <button
-              className="secondary"
-              style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }}
-              onClick={() => setAboutModalOpen(true)}
-              title="查看软件版本、开发作者信息与更新历史"
-            >
-              <Info size={14} />关于 (v{APP_VERSION})
             </button>
             <button className="secondary" style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }} onClick={async () => {
               await window.meritDesktop.lock(); setState(null); setWorkspaceName(''); setDataFile(''); setProjectGroups([]); setNotice('工作区已锁定');
@@ -2354,7 +2359,7 @@ function UpdateModal({
   const [downloadedPath, setDownloadedPath] = useState<string>('');
   const [downloadError, setDownloadError] = useState<string>('');
 
-  const handleAutoInstall = async (format: 'setup' | 'msi' | 'portable' = 'setup') => {
+  const handleAutoInstall = async (format: 'setup' | 'msi' | 'portable' | 'zip' = 'setup') => {
     if (updating || installing) return;
     setInstalling(true);
     setDownloadError('');
@@ -2383,12 +2388,18 @@ function UpdateModal({
     }
   };
 
-  const handleDownloadOrInstall = async (format: 'setup' | 'msi' | 'portable') => {
+  const handleDownloadOrInstall = async (format: 'setup' | 'msi' | 'portable' | 'zip') => {
     if (updating || installing) return;
     setUpdating(true);
     setDownloadError('');
     const targetVer = result?.latestVersion || APP_VERSION;
-    const formatLabel = format === 'msi' ? 'MSI 安装包' : format === 'setup' ? 'EXE 安装向导版' : '便携单文件版';
+    const formatLabel = format === 'msi'
+      ? 'MSI 安装包'
+      : format === 'zip'
+      ? 'ZIP 绿色压缩版'
+      : format === 'setup'
+      ? 'EXE 安装向导版'
+      : '便携单文件版';
     setUpdateStepText(`正在准备下载 ${formatLabel} 到 D盘...`);
 
     try {
@@ -2411,6 +2422,8 @@ function UpdateModal({
         setUpdateStepText(`正在发起浏览器下载 ${formatLabel}...`);
         const filename = format === 'msi'
           ? `衡绩员工绩点考核系统-${targetVer}.msi`
+          : format === 'zip'
+          ? `衡绩员工绩点考核系统-${targetVer}.zip`
           : format === 'setup'
           ? `衡绩员工绩点考核系统-Setup-${targetVer}.exe`
           : `衡绩员工绩点考核系统-${targetVer}.exe`;
@@ -2508,7 +2521,7 @@ function UpdateModal({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <DualBrandLogo size={38} />
+            <FlowerBrandLogo size={42} />
             <div>
               <h3
                 style={{
@@ -2804,7 +2817,7 @@ function UpdateModal({
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
             {/* EXE 安装向导版 */}
             <div
               style={{
@@ -2997,6 +3010,72 @@ function UpdateModal({
                     cursor: (installing || updating) ? 'wait' : 'pointer',
                   }}
                   title="保存便携单文件到 D盘"
+                >
+                  <CloudDownload size={13} />
+                </button>
+              </div>
+            </div>
+
+            {/* ZIP 绿色解压版 */}
+            <div
+              style={{
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <FolderArchive size={14} color="#ea580c" />
+                    <span>ZIP 绿色版</span>
+                  </div>
+                  <span style={{ fontSize: '10.5px', background: '#ffedd5', color: '#9a3412', padding: '1px 5px', borderRadius: '4px', fontWeight: 600 }}>
+                    解压即用
+                  </span>
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#64748b', lineHeight: 1.5 }}>
+                  绿色压缩文件包，下载解压即可直接双击运行，免安装。
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  disabled={installing || updating}
+                  onClick={() => handleAutoInstall('zip')}
+                  style={{
+                    flex: 1,
+                    background: '#ea580c',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '6px 8px',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    cursor: (installing || updating) ? 'wait' : 'pointer',
+                  }}
+                  title="自动下载 ZIP 包解压覆盖当前程序并重启"
+                >
+                  ⚡ 解压覆盖
+                </button>
+                <button
+                  type="button"
+                  disabled={installing || updating}
+                  onClick={() => handleDownloadOrInstall('zip')}
+                  style={{
+                    background: '#f8fafc',
+                    color: '#334155',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '6px',
+                    padding: '6px 10px',
+                    fontSize: '11.5px',
+                    cursor: (installing || updating) ? 'wait' : 'pointer',
+                  }}
+                  title="保存 ZIP 绿色压缩包到 D盘"
                 >
                   <CloudDownload size={13} />
                 </button>

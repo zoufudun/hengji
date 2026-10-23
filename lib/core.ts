@@ -2531,7 +2531,7 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.7.6';
+export const APP_VERSION = '0.7.7';
 export const APP_BUILD = '20261023';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
@@ -2694,6 +2694,19 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.7.7',
+    date: '2026-10-23',
+    tag: '重大更新',
+    title: 'MSI安装包双击安装向导修正、顶部导航栏精简、彩花徽标换新、新增ZIP免安装解压即用版',
+    items: [
+      '【MSI 安装体验全面修正】调整 Windows Installer 配置为 assisted 向导模式（oneClick: false），双击即可调出标准安装向导，支持自由选择安装目录并自动生成快捷方式。',
+      '【顶部导航栏极简纯粹】移除顶部导航栏中的“关于”与“操作手册”按钮，操作界面更聚焦，杜绝冗余视觉干扰。',
+      '【弹窗徽标全面换新】系统版本更新与关于弹窗徽标全面换新为现代明艳的八彩同心绽放花瓣 Logo，带来更具活力的高品质科技感。',
+      '【新增 ZIP 压缩包免安装版】发布标准 .zip 绿色压缩版本，用户下载后直接解压即可运行，无需执行任何安装，适配各类型受限终端。',
+      '【自动化更新支持全格式】更新模块同步支持 Setup EXE、MSI、Portable 与 ZIP 多格式智能静默覆盖安装与自动重启。'
+    ]
+  },
   {
     version: 'v0.7.6',
     date: '2026-10-23',

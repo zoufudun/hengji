@@ -19,7 +19,7 @@ async function getGitHubToken() {
 async function main() {
   const token = await getGitHubToken();
   const repo = 'zoufudun/hengji';
-  const tag = 'v0.7.6';
+  const tag = 'v0.7.7';
   const headers = {
     'Authorization': `token ${token}`,
     'User-Agent': 'HengJi-Release-Publisher',
@@ -37,8 +37,8 @@ async function main() {
     const createBody = {
       tag_name: tag,
       target_commitish: 'main',
-      name: `v0.7.6: 合同金额/员工绩点万为单位、衡徽标加大、安装版(MSI/EXE)与自动覆盖安装发布`,
-      body: `## 衡绩员工绩点考核系统 v0.7.6\n\n### 💡 核心体验升级与更新说明：\n1. **单位统一规范**：合同金额、员工绩点全链路表格与指标卡统一按“万/万元”为单位展示，彻底确立 1万绩点 = 1万元合同额；\n2. **徽标优化**：侧栏 Header 移除八彩花瓣副图，保留金黄圆角“衡”字印章并显著加大至 42px，质感与辨识度大幅提升；\n3. **多格式发布矩阵**：\n   - **EXE 安装版**：\`衡绩员工绩点考核系统-Setup-0.7.6.exe\`（NSIS 安装向导，支持快捷方式与静默安装）；\n   - **MSI 安装包**：\`衡绩员工绩点考核系统-0.7.6.msi\`（Windows Installer 标准格式，支持企业组策略分发）；\n   - **便携绿色版**：\`衡绩员工绩点考核系统-0.7.6.exe\`（单文件免安装，双击即用）；\n4. **一键自动覆盖安装**：客户端新版提示支持一键自动下载并静默覆盖安装到当前目录，关闭旧版本后无缝启动新版本。`,
+      name: `v0.7.7: MSI安装修复、顶部栏精简、弹窗现代彩瓣徽标、新增ZIP绿色解压版发布`,
+      body: `## 衡绩员工绩点考核系统 v0.7.7\n\n### 💡 核心体验升级与更新说明：\n1. **MSI 安装包交互向导修复**：修正 Windows Installer 交互向导与参数配置（关闭静默 oneClick，开启图形安装向导），解决用户双击 MSI 文件后无反应的系统问题，支持标准交互安装与桌面快捷方式创建；\n2. **顶部导航栏极简净化**：移除顶部冗余的【关于】与【操作手册】按钮，工作台视图更为整洁聚焦；\n3. **弹窗徽标品牌升级**：版本更新与关于弹窗顶部标识升级为现代八彩花瓣艺术图标（高分辨率品牌原图），主界面侧栏继续保留大号金黄“衡”字印章；\n4. **新增 ZIP 绿色解压版**：正式引入 \`衡绩员工绩点考核系统-0.7.7.zip\`，用户下载后直接解压即可运行，零依赖、免安装、双击即用；\n5. **四重分发矩阵与一键覆盖安装**：\n   - **EXE 安装版**：\`衡绩员工绩点考核系统-Setup-0.7.7.exe\`（NSIS 安装向导）；\n   - **MSI 安装包**：\`衡绩员工绩点考核系统-0.7.7.msi\`（Windows Installer 标准向导）；\n   - **ZIP 绿色版**：\`衡绩员工绩点考核系统-0.7.7.zip\`（下载解压即用）；\n   - **便携单文件**：\`衡绩员工绩点考核系统-0.7.7.exe\`（单文件免安装）；\n   - 客户端内支持一键静默自动覆盖安装并无缝重启。`,
       draft: false,
       prerelease: false
     };
@@ -59,13 +59,15 @@ async function main() {
 
   // 待上传资产映射列表（中文原名 + ASCII 别名）
   const filesToUpload = [
-    { src: 'dist-desktop/衡绩员工绩点考核系统-Setup-0.7.6.exe', name: '衡绩员工绩点考核系统-Setup-0.7.6.exe' },
-    { src: 'dist-desktop/衡绩员工绩点考核系统-Setup-0.7.6.exe', name: 'hengji-Setup-0.7.6.exe' },
-    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.6.msi', name: '衡绩员工绩点考核系统-0.7.6.msi' },
-    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.6.msi', name: 'hengji-0.7.6.msi' },
-    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.6.exe', name: '衡绩员工绩点考核系统-0.7.6.exe' },
-    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.6.exe', name: 'hengji-0.7.6.exe' },
-    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.6.exe', name: 'hengji-portable.exe' }
+    { src: 'dist-desktop/衡绩员工绩点考核系统-Setup-0.7.7.exe', name: '衡绩员工绩点考核系统-Setup-0.7.7.exe' },
+    { src: 'dist-desktop/衡绩员工绩点考核系统-Setup-0.7.7.exe', name: 'hengji-Setup-0.7.7.exe' },
+    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.msi', name: '衡绩员工绩点考核系统-0.7.7.msi' },
+    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.msi', name: 'hengji-0.7.7.msi' },
+    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.zip', name: '衡绩员工绩点考核系统-0.7.7.zip' },
+    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.zip', name: 'hengji-0.7.7.zip' },
+    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.exe', name: '衡绩员工绩点考核系统-0.7.7.exe' },
+    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.exe', name: 'hengji-0.7.7.exe' },
+    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.exe', name: 'hengji-portable.exe' }
   ];
 
   const existingAssets = release.assets || [];
@@ -88,12 +90,17 @@ async function main() {
     console.log(`Uploading ${item.name} (${(fs.statSync(item.src).size / 1024 / 1024).toFixed(2)} MB)...`);
     const fileBuffer = fs.readFileSync(item.src);
     const uploadUrl = `https://uploads.github.com/repos/${repo}/releases/${release.id}/assets?name=${encodeURIComponent(item.name)}`;
+    const contentType = item.name.endsWith('.msi')
+      ? 'application/x-msi'
+      : item.name.endsWith('.zip')
+      ? 'application/zip'
+      : 'application/vnd.microsoft.portable-executable';
     const uploadRes = await fetch(uploadUrl, {
       method: 'POST',
       headers: {
         'Authorization': `token ${token}`,
         'User-Agent': 'HengJi-Release-Publisher',
-        'Content-Type': item.name.endsWith('.msi') ? 'application/x-msi' : 'application/vnd.microsoft.portable-executable',
+        'Content-Type': contentType,
         'Content-Length': String(fileBuffer.length)
       },
       body: fileBuffer
@@ -108,7 +115,7 @@ async function main() {
     }
   }
 
-  console.log('\n🎉 All v0.7.6 assets uploaded successfully to GitHub Releases!');
+  console.log('\n🎉 All v0.7.7 assets uploaded successfully to GitHub Releases!');
   console.log(`Release URL: ${release.html_url}`);
 }
 
