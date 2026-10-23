@@ -20,6 +20,7 @@ import {
   parseMeritPackageOrBundle,
   calculateDepartmentContracts,
   calculateHonorStars,
+  calculateStars,
 } from '../lib/core.ts';
 
 test('核算员与管理员角色权限校验', () => {
@@ -489,5 +490,135 @@ test('【核心Bug修复】基于工号/唯一ID合并跨项目不同数据包�
   assert.ok(detailsCsv.includes('工号'), '明细流水CSV必须包含工号列');
   assert.ok(detailsCsv.includes('0.6000'), '单笔明细获得绩点必须为0.6000万');
 });
+
+test('v0.7.0：核算员支持批量导入多个数据包、合包与总包，并支持持久化保存', () => {
+  const state = demoState();
+  const prjA = state.projects[0];
+  const prjB = state.projects[1] || { ...prjA, id: 'prj_test_b', name: '测试工程B', code: 'TEST-B' };
+
+  // 1. 导出两个单包
+  const pkgA = exportProjectMeritPackage(state, prjA.id, { actor: state.employees[0] });
+  const pkgB = {
+    ...pkgA,
+    packageId: 'pkg_test_b',
+    project: { ...pkgA.project, id: prjB.id, name: prjB.name, code: prjB.code },
+  };
+
+  // 2. 模拟从字符串/文件导入
+  const jsonA = JSON.stringify(pkgA);
+  const jsonB = JSON.stringify(pkgB);
+
+  const parsedA = parseMeritPackageOrBundle(jsonA);
+  const parsedB = parseMeritPackageOrBundle(jsonB);
+  assert.equal(parsedA.length, 1);
+  assert.equal(parsedB.length, 1);
+
+  // 模拟批量多选/拖拽合并
+  const allImported = [...parsedA, ...parsedB];
+  assert.equal(allImported.length, 2);
+
+  // 3. 汇总与总包导出归档
+  const summary = summarizeAuditorPackages(allImported, state.employees);
+  const fullBundleJson = exportAuditorFullBundleJson(summary, allImported);
+  assert.ok(fullBundleJson.includes('auditor_summary_bundle'));
+
+  // 4. 从总包反向导入恢复所有独立包
+  const restoredPkgs = parseMeritPackageOrBundle(fullBundleJson);
+  assert.equal(restoredPkgs.length, 2);
+  assert.equal(restoredPkgs[0].project.id, prjA.id);
+  assert.equal(restoredPkgs[1].project.id, prjB.id);
+
+  // 5. 验证 State 持久化字段
+  const stateWithAuditor = {
+    ...state,
+    auditorPackages: allImported,
+  };
+  assert.equal(stateWithAuditor.auditorPackages?.length, 2);
+});
+
+test('全项目二维透视 matrix 兼容性与考核之星殿堂全员评选及姓名完整性', () => {
+  const state = demoState();
+  const prj = state.projects[0];
+  const pkg = exportProjectMeritPackage(state, prj.id, 'emp_01');
+
+  const summary = summarizeAuditorPackages([pkg], state.employees);
+  // 验证图1报错修复：matrix.projectHeaders 与 matrix.projects 别名均可安全读取
+  assert.ok(Array.isArray(summary.matrix.projectHeaders));
+  assert.ok(Array.isArray(summary.matrix.projects));
+  assert.equal(summary.matrix.projectHeaders.length, 1);
+  assert.equal(summary.matrix.projects.length, 1);
+
+  // 验证图2：全员汇总中每个员工姓名完整，不会出现 undefined 或空白
+  for (const emp of summary.employeeSummaries) {
+    assert.ok(emp.name, `员工姓名不能为空: ${emp.id}`);
+    assert.notEqual(emp.name, 'undefined');
+  }
+
+  // 验证基于数据包中的月份评选月度之星、季度之星与年度之星
+  const months = summary.overview.months;
+  assert.ok(months.length > 0);
+  const targetMonth = months[0];
+  const targetYear = targetMonth.slice(0, 4);
+  const targetQuarter = Math.ceil(parseInt(targetMonth.slice(5, 7), 10) / 3);
+
+  // 模拟构建派生状态评选
+  const derivedEmployees = summary.employeeSummaries.map(e => ({
+    id: e.id,
+    employeeNo: e.employeeNo,
+    name: e.name,
+    department: e.department,
+    group: e.group,
+    groupRole: e.groupRole || '组员',
+    position: e.position,
+    role: 'member',
+    active: true,
+  }));
+
+  const derivedPlans = [{
+    id: `plan_${prj.id}_${targetMonth}`,
+    projectId: prj.id,
+    month: targetMonth,
+    budget: 10000,
+    status: 'published',
+    publishedAt: new Date().toISOString(),
+    entries: summary.employeeSummaries.map(e => ({ employeeId: e.id, rate: 100 })),
+    records: summary.employeeSummaries.map(e => ({
+      id: `rec_${e.id}`,
+      projectId: prj.id,
+      employeeId: e.id,
+      points: e.totalPoints,
+      createdAt: new Date().toISOString(),
+    })),
+  }];
+
+  const derivedState = {
+    ...state,
+    employees: derivedEmployees,
+    plans: derivedPlans,
+  };
+
+  const stars = calculateStars(derivedState, {
+    year: targetYear,
+    quarter: targetQuarter,
+    month: targetMonth,
+  });
+
+  // 验证月度之星评选出真实榜首且姓名非空
+  assert.ok(stars.monthStar.stars.length > 0, '月度之星应成功评出');
+  assert.ok(stars.monthStar.stars[0].employee.name, '月度之星姓名不能为空');
+  assert.notEqual(stars.monthStar.stars[0].employee.name, 'undefined');
+  assert.ok(stars.monthStar.topPoints > 0, '当月最高绩点应大于0');
+
+  // 验证季度之星评出
+  assert.ok(stars.quarterStar.stars.length > 0, '季度之星应成功评出');
+  assert.ok(stars.quarterStar.stars[0].employee.name, '季度之星姓名不能为空');
+
+  // 验证年度之星评出
+  assert.ok(stars.yearStar.stars.length > 0, '年度之星应成功评出');
+  assert.ok(stars.yearStar.stars[0].employee.name, '年度之星姓名不能为空');
+  assert.ok(stars.yearStar.topPoints > 0, '年度最高绩点应大于0');
+});
+
+
 
 

@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('meritDesktop', {
   lock: () => ipcRenderer.invoke('workspace:lock'),
   exportCsv: payload => ipcRenderer.invoke('workspace:export-csv', payload),
   showData: () => ipcRenderer.invoke('workspace:show-file'),
-  refocusWindow: () => ipcRenderer.invoke('workspace:refocus-window')
+  refocusWindow: () => ipcRenderer.invoke('workspace:refocus-window'),
+  openUrl: (url) => ipcRenderer.invoke('workspace:open-url', url)
 });
 

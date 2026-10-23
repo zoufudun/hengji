@@ -23,8 +23,10 @@ import {
   Eye,
   FileSpreadsheet,
   FileText,
+  Filter,
   GripHorizontal,
   GripVertical,
+  FolderArchive,
   FolderKanban,
   FolderOpen,
   KeyRound,
@@ -32,6 +34,7 @@ import {
   LayoutGrid,
   ListFilter,
   LogOut,
+  Medal,
   Package,
   Pencil,
   Plus,
@@ -56,6 +59,10 @@ import {
   History,
   Lock,
   Unlock,
+  CloudDownload,
+  RefreshCw,
+  ExternalLink,
+  CheckCircle2,
   X
 } from 'lucide-react';
 import {
@@ -129,6 +136,11 @@ import {
   APP_AUTHOR,
   APP_CONTACT,
   UPDATE_HISTORY,
+  GITHUB_REPO,
+  GITHUB_REPO_URL,
+  GITHUB_RELEASES_URL,
+  checkAppUpdate,
+  type UpdateCheckResult,
   exportEncryptedBackupJson,
   parseAndDecryptBackupJson,
   isEncryptedBackup,
@@ -161,8 +173,17 @@ import {
   summarizeAuditorPackages,
   summarizeCurrentStateForAuditor,
   isAuditorRole,
+  calculateDepartmentContracts,
+  calculateHonorStars,
+  exportAuditorEmployeesCsv,
+  exportAuditorProjectsCsv,
+  exportAuditorMatrixCsv,
+  exportAuditorDetailsCsv,
+  exportAuditorFullBundleJson,
+  parseMeritPackageOrBundle,
+  type ProjectMeritPackage,
 } from '../lib/core';
-import { AuditorSummaryView } from '../components/AuditorSummaryView';
+import { AuditorSummaryView, type AuditorTab } from '../components/AuditorSummaryView';
 
 type Tab = 'dashboard' | 'projects' | 'plans' | 'groups' | 'employees' | 'analytics' | 'stars' | 'reports' | 'rules' | 'data_io' | 'auditor';
 
@@ -216,13 +237,52 @@ function Badge({ children, tone = 'neutral', style }: { children: React.ReactNod
   return <span className={`badge ${tone}`} style={style}>{children}</span>;
 }
 
-function GroupTag({ group }: { group?: string }) {
-  const g = group || '未分组';
+function GroupTag({ group }: { group?: any }) {
+  const g = typeof group === 'string' ? group : String(group || '未分组');
   let cls = 'other';
   if (g.includes('总体')) cls = 'zt';
   else if (g.includes('产品')) cls = 'cp';
   else if (g.includes('研发')) cls = 'yf';
   return <span className={`group-tag ${cls}`}>{g}</span>;
+}
+
+class SafeStarsBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: any, info: any) {
+    console.error('StarsView caught error:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '36px', background: '#ffffff', borderRadius: '16px', border: '1px solid #fee2e2', margin: '20px 0', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#dc2626', marginBottom: '12px' }}>
+            <AlertTriangle size={24} />
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>卓越绩星荣誉殿堂渲染提示</h3>
+          </div>
+          <p style={{ color: '#475569', fontSize: '13.5px', lineHeight: 1.6, marginBottom: '16px' }}>
+            检测到当前工作区或数据包中的部分绩效分配记录存在格式差异，系统已为您实施安全隔离保护（{this.state.error?.message || '未知数据格式'}）。
+          </p>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              type="button"
+              className="primary"
+              style={{ background: '#059669', borderColor: '#047857' }}
+              onClick={() => this.setState({ hasError: false, error: null })}
+            >
+              🔄 重新加载荣誉殿堂
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function GroupRoleBadge({ role }: { role?: string }) {
@@ -692,6 +752,8 @@ export default function DesktopWorkspace() {
   const [actorId, setActorId] = useState('admin');
   const [dataFile, setDataFile] = useState('');
   const [tab, setTab] = useState<Tab>('dashboard');
+  const [auditorSubTab, setAuditorSubTab] = useState<AuditorTab>('employees');
+  const [auditorPackages, setAuditorPackages] = useState<ProjectMeritPackage[]>([]);
   const [notice, setNotice] = useState('');
 
   // Modals & form state
@@ -707,10 +769,30 @@ export default function DesktopWorkspace() {
   const [projectGroups, setProjectGroups] = useState<ProjectGroup[]>([]);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [aboutModalOpen, setAboutModalOpen] = useState(false);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(1);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualChapter, setManualChapter] = useState(0);
+
+  // 启动后 3 秒静默联网检测是否有新版本（不弹窗打扰用户，若有新版则在侧栏优雅提醒）
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      checkAppUpdate(APP_VERSION).then(res => {
+        setUpdateResult(res);
+        if (res.hasUpdate) {
+          setUpdateAvailable(true);
+        }
+      }).catch(() => {});
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const derivedAuditorState = useMemo(() => {
+    return buildAuditorDerivedState(auditorPackages, state);
+  }, [auditorPackages, state]);
 
   // 第一次进入工作区自动展示新手 5 步向导
   useEffect(() => {
@@ -751,6 +833,9 @@ export default function DesktopWorkspace() {
           setOwnerEmployeeId(parsed.ownerEmployeeId || '');
           setOwnerEmployeeName(parsed.ownerEmployeeName || '');
           setActorId(parsed.actorId === 'admin' && !cleanState.employees.some(e => e.id === 'admin') ? (cleanState.employees.find(e => e.role === 'admin')?.id || 'emp_01') : (parsed.actorId || 'emp_01'));
+          if (cleanState.auditorPackages && Array.isArray(cleanState.auditorPackages)) {
+            setAuditorPackages(cleanState.auditorPackages);
+          }
         } else {
           const init = sanitizeState(demoState());
           setState(init);
@@ -780,6 +865,9 @@ export default function DesktopWorkspace() {
     setOwnerEmployeeId(data.ownerEmployeeId || '');
     setOwnerEmployeeName(data.ownerEmployeeName || '');
 
+    const pkgs = (cleanState.auditorPackages && Array.isArray(cleanState.auditorPackages)) ? cleanState.auditorPackages : [];
+    setAuditorPackages(pkgs);
+
     let chosenActorId = data.actorId;
     // 如果是项目负责人工作区，自动优先以项目负责人身份进入
     if (wsType === 'project_manager' && data.ownerEmployeeId) {
@@ -788,7 +876,7 @@ export default function DesktopWorkspace() {
     } else if (wsType === 'auditor') {
       const aud = cleanState.employees.find(e => (e.role === 'auditor' || e.id === data.ownerEmployeeId) && e.active);
       if (aud) chosenActorId = aud.id;
-      setTab('auditor');
+      setTab('dashboard');
     } else {
       const adminId = cleanState.employees.find(employee => employee.role === 'admin' && employee.active)?.id || cleanState.employees[0]?.id || 'admin';
       chosenActorId = adminId;
@@ -803,7 +891,11 @@ export default function DesktopWorkspace() {
   }
 
   async function persist(next: State, message: string, groups = projectGroups) {
-    validate(next);
+    const fullState: State = {
+      ...next,
+      auditorPackages: next.auditorPackages !== undefined ? next.auditorPackages : auditorPackages,
+    };
+    validate(fullState);
     if (typeof window !== 'undefined' && window.meritDesktop?.save) {
       const saved = await window.meritDesktop.save({
         name: workspaceName,
@@ -812,12 +904,15 @@ export default function DesktopWorkspace() {
         workspaceType,
         ownerEmployeeId,
         ownerEmployeeName,
-        state: next,
+        state: fullState,
         projectGroups: groups,
       });
       setState(saved.state);
       setRevision(saved.revision);
       setDataFile(saved.filePath);
+      if (saved.state.auditorPackages) {
+        setAuditorPackages(saved.state.auditorPackages);
+      }
     } else {
       const nextRev = revision + 1;
       localStorage.setItem('merit_desktop_state', JSON.stringify({
@@ -826,14 +921,119 @@ export default function DesktopWorkspace() {
         workspaceType,
         ownerEmployeeId,
         ownerEmployeeName,
-        state: next,
+        state: fullState,
       }));
-      setState(next);
+      setState(fullState);
       setRevision(nextRev);
     }
     setNotice(message);
     window.setTimeout(() => setNotice(''), 2800);
   }
+
+  const handleUpdateAuditorPackages = async (newPkgs: ProjectMeritPackage[], message?: string) => {
+    setAuditorPackages(newPkgs);
+    try {
+      localStorage.setItem(`merit_auditor_pkgs_${workspaceName || 'default'}`, JSON.stringify(newPkgs));
+    } catch {}
+    if (state) {
+      const nextState: State = {
+        ...state,
+        auditorPackages: newPkgs,
+      };
+      await persist(nextState, message || `已成功更新并持久化保存 ${newPkgs.length} 个项目数据包`);
+    }
+  };
+
+  const handleImportAuditorFiles = async (files: FileList | null | File[]) => {
+    if (!files || files.length === 0) return;
+    const newPkgs: ProjectMeritPackage[] = [];
+    let errorCount = 0;
+    let bundleCount = 0;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const text = await file.text();
+        const parsedList = parseMeritPackageOrBundle(text);
+        if (parsedList.length > 1) {
+          bundleCount++;
+        }
+        for (const p of parsedList) {
+          newPkgs.push(p);
+        }
+      } catch (err: any) {
+        errorCount++;
+        console.error('导入数据包失败:', file.name, err);
+      }
+    }
+
+    if (newPkgs.length > 0) {
+      const map = new Map<string, ProjectMeritPackage>();
+      auditorPackages.forEach(p => map.set(p.project.id, p));
+      newPkgs.forEach(p => map.set(p.project.id, p));
+      const merged = Array.from(map.values());
+      const bundleHint = bundleCount > 0 ? `（含 ${bundleCount} 个多项目合并包）` : '';
+      const msg = `✅ 成功导入 ${newPkgs.length} 个项目数据包${bundleHint}！已为您自动合并汇总并持久化保存。`;
+      await handleUpdateAuditorPackages(merged, msg);
+    }
+
+    if (errorCount > 0) {
+      setNotice(`⚠️ 有 ${errorCount} 个文件格式不合规或损坏，未成功导入。`);
+    }
+  };
+
+  const handleLoadSystemProjectsToAuditor = () => {
+    if (!state) return;
+    const systemPackages: ProjectMeritPackage[] = [];
+    const employees = state.employees || [];
+    state.projects.forEach(prj => {
+      const plans = state.plans.filter(p => p.projectId === prj.id && p.status === 'published');
+      if (!plans.length) return;
+      const records = plans.flatMap(p => p.records);
+      const pkg = exportProjectMeritPackage(
+        prj,
+        plans,
+        records,
+        employees,
+        currentActor.id,
+        currentActor.name
+      );
+      systemPackages.push(pkg);
+    });
+    if (!systemPackages.length) {
+      setNotice('当前系统内暂无已发布的项目月度分配记录');
+      return;
+    }
+    handleUpdateAuditorPackages(systemPackages, `已从当前系统成功载入 ${systemPackages.length} 个项目的全部分配数据`);
+  };
+
+  const handleExportAuditorFullBundle = async () => {
+    if (!auditorPackages.length) {
+      setNotice('当前尚未载入任何项目数据包，无法导出汇总总包');
+      return;
+    }
+    const employees = state?.employees || [];
+    const summary = summarizeAuditorPackages(auditorPackages, employees);
+    const bundleJson = exportAuditorFullBundleJson(summary, auditorPackages);
+    await triggerDownload(
+      bundleJson,
+      `衡绩_全项目全员核算汇总数据总包_${new Date().toISOString().slice(0, 10)}.json`,
+      'application/json'
+    );
+    setNotice('全项目全员核算汇总数据总包已成功导出');
+  };
+
+  const handleRemoveAuditorPackage = (projectId: string) => {
+    const next = auditorPackages.filter(p => p.project.id !== projectId);
+    handleUpdateAuditorPackages(next, '已从当前核算中移除该项目数据包');
+  };
+
+  const handleClearAllAuditorPackages = () => {
+    if (!auditorPackages.length) return;
+    if (confirm('确定要清空当前已载入的全部项目数据包吗？清空后可重新导入。')) {
+      handleUpdateAuditorPackages([], '已清空当前载入的项目数据包');
+    }
+  };
 
   async function command(type: string, data: any, message: string) {
     if (!state) return false;
@@ -1030,16 +1230,16 @@ export default function DesktopWorkspace() {
   );
 
   const nav = [
-    { key: 'dashboard', icon: CircleGauge, label: '总览看板' },
-    { key: 'projects', icon: BriefcaseBusiness, label: '项目库与额度' },
-    { key: 'plans', icon: CalendarRange, label: '月度分配' },
-    { key: 'groups', icon: FolderKanban, label: '项目组管理' },
-    { key: 'employees', icon: Users, label: '员工与专业组' },
-    { key: 'rules', icon: BookOpenCheck, label: '分配规则准则' },
-    { key: 'analytics', icon: TrendingUp, label: '趋势与柱状图' },
-    { key: 'stars', icon: Trophy, label: '考核之星殿堂' },
-    { key: 'reports', icon: BarChart3, label: '周期绩点报表' },
-    { key: 'data_io', icon: FileSpreadsheet, label: '数据导入导出与灾备' },
+    { key: 'dashboard', icon: CircleGauge, label: '全景总览驾驶舱' },
+    { key: 'projects', icon: BriefcaseBusiness, label: '项目全周期管理' },
+    { key: 'plans', icon: CalendarRange, label: '月度绩效分配' },
+    { key: 'groups', icon: FolderKanban, label: '常用项目组矩阵' },
+    { key: 'employees', icon: Users, label: '团队编制花名册' },
+    { key: 'rules', icon: BookOpenCheck, label: '绩效准则与规范' },
+    { key: 'analytics', icon: TrendingUp, label: '效能趋势与洞察' },
+    { key: 'stars', icon: Trophy, label: '卓越绩星荣誉殿堂' },
+    { key: 'reports', icon: BarChart3, label: '多周期汇总报表' },
+    { key: 'data_io', icon: FileSpreadsheet, label: '数据资产与灾备中心' },
   ] as const;
 
   return (
@@ -1053,50 +1253,137 @@ export default function DesktopWorkspace() {
           </div>
         </div>
 
-        <div className="sidebar-section-title">核心业务</div>
-        <nav>
-          {nav.slice(0, 5).map(({ key, icon: Icon, label }) => (
-            <button
-              key={key}
-              className={tab === key ? 'active' : ''}
-              onClick={() => setTab(key as Tab)}
-            >
-              <Icon size={18} />
-              <span>{label}</span>
-              <ChevronRight size={14} />
-            </button>
-          ))}
-        </nav>
+        {workspaceType === 'auditor' ? (
+          <>
+            <div className="sidebar-section-title">全景驾驶与考核准则</div>
+            <nav>
+              <button
+                className={tab === 'dashboard' ? 'active' : ''}
+                onClick={() => setTab('dashboard')}
+              >
+                <CircleGauge size={18} />
+                <span>全景总览驾驶舱</span>
+                <ChevronRight size={14} />
+              </button>
+              <button
+                className={tab === 'rules' ? 'active' : ''}
+                onClick={() => setTab('rules')}
+              >
+                <BookOpenCheck size={18} />
+                <span>绩效准则与规范</span>
+                <ChevronRight size={14} />
+              </button>
+              <button
+                className={tab === 'analytics' ? 'active' : ''}
+                onClick={() => setTab('analytics')}
+              >
+                <TrendingUp size={18} />
+                <span>效能趋势与洞察</span>
+                <ChevronRight size={14} />
+              </button>
+            </nav>
 
-        <div className="sidebar-section-title">分析与统计</div>
-        <nav>
-          {nav.slice(5).map(({ key, icon: Icon, label }) => (
-            <button
-              key={key}
-              className={tab === key ? 'active' : ''}
-              onClick={() => setTab(key as Tab)}
-            >
-              <Icon size={18} />
-              <span>{label}</span>
-              <ChevronRight size={14} />
-            </button>
-          ))}
-        </nav>
+            <div className="sidebar-section-title">数据包流转中心</div>
+            <nav>
+              <button
+                className={tab === 'auditor' && auditorSubTab === 'import' ? 'active' : ''}
+                onClick={() => { setTab('auditor'); setAuditorSubTab('import'); }}
+              >
+                <Upload size={18} style={{ color: '#059669' }} />
+                <span>数据包导入中心</span>
+                <ChevronRight size={14} />
+              </button>
+            </nav>
 
-        <div className="sidebar-section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span>核算员专区</span>
-          <span style={{ fontSize: '10px', background: '#ecfdf5', color: '#047857', padding: '1px 5px', borderRadius: '4px', border: '1px solid #a7f3d0' }}>专享</span>
-        </div>
-        <nav>
-          <button
-            className={tab === 'auditor' ? 'active' : ''}
-            onClick={() => setTab('auditor')}
-          >
-            <Calculator size={18} style={{ color: '#10b981' }} />
-            <span>全项目全员绩点汇总</span>
-            <ChevronRight size={14} />
-          </button>
-        </nav>
+            <div className="sidebar-section-title">全景绩效审计大盘</div>
+            <nav>
+              <button
+                className={tab === 'auditor' && auditorSubTab === 'employees' ? 'active' : ''}
+                onClick={() => { setTab('auditor'); setAuditorSubTab('employees'); }}
+              >
+                <Users size={18} style={{ color: '#10b981' }} />
+                <span>全员跨项目绩效总表</span>
+                <ChevronRight size={14} />
+              </button>
+              <button
+                className={tab === 'auditor' && auditorSubTab === 'contracts' ? 'active' : ''}
+                onClick={() => { setTab('auditor'); setAuditorSubTab('contracts'); }}
+              >
+                <BriefcaseBusiness size={18} style={{ color: '#0284c7' }} />
+                <span>全景合同矩阵</span>
+                <ChevronRight size={14} />
+              </button>
+              <button
+                className={tab === 'stars' || (tab === 'auditor' && (auditorSubTab === 'stars' || auditorSubTab === 'ranking')) ? 'active' : ''}
+                onClick={() => { setTab('stars'); setAuditorSubTab('stars'); }}
+              >
+                <Crown size={18} style={{ color: '#e11d48' }} />
+                <span>卓越绩星荣誉殿堂</span>
+                <ChevronRight size={14} />
+              </button>
+              <button
+                className={tab === 'auditor' && auditorSubTab === 'matrix' ? 'active' : ''}
+                onClick={() => { setTab('auditor'); setAuditorSubTab('matrix'); }}
+              >
+                <Table2 size={18} style={{ color: '#8b5cf6' }} />
+                <span>全项目多维透视矩阵</span>
+                <ChevronRight size={14} />
+              </button>
+              <button
+                className={tab === 'auditor' && auditorSubTab === 'details' ? 'active' : ''}
+                onClick={() => { setTab('auditor'); setAuditorSubTab('details'); }}
+              >
+                <FileSpreadsheet size={18} style={{ color: '#06b6d4' }} />
+                <span>全量明细审计流水</span>
+                <ChevronRight size={14} />
+              </button>
+            </nav>
+
+            <div className="sidebar-section-title">数据资产与灾备中心</div>
+            <nav>
+              <button
+                className={tab === 'data_io' ? 'active' : ''}
+                onClick={() => setTab('data_io')}
+              >
+                <FolderArchive size={18} />
+                <span>数据资产与灾备中心</span>
+                <ChevronRight size={14} />
+              </button>
+            </nav>
+          </>
+        ) : (
+          <>
+            <div className="sidebar-section-title">核心业务矩阵</div>
+            <nav>
+              {nav.slice(0, 5).map(({ key, icon: Icon, label }) => (
+                <button
+                  key={key}
+                  className={tab === key ? 'active' : ''}
+                  onClick={() => setTab(key as Tab)}
+                >
+                  <Icon size={18} />
+                  <span>{label}</span>
+                  <ChevronRight size={14} />
+                </button>
+              ))}
+            </nav>
+
+            <div className="sidebar-section-title">效能分析与荣誉殿堂</div>
+            <nav>
+              {nav.slice(5).map(({ key, icon: Icon, label }) => (
+                <button
+                  key={key}
+                  className={tab === key ? 'active' : ''}
+                  onClick={() => setTab(key as Tab)}
+                >
+                  <Icon size={18} />
+                  <span>{label}</span>
+                  <ChevronRight size={14} />
+                </button>
+              ))}
+            </nav>
+          </>
+        )}
 
         <div className="sidebar-foot">
           <Database size={16} />
@@ -1112,7 +1399,30 @@ export default function DesktopWorkspace() {
           </div>
         </div>
         <div style={{ padding: '8px 14px', borderTop: '1px solid #1c3b32', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: '#94a3b8' }}>
-          <span>版本: v{APP_VERSION}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span>v{APP_VERSION}</span>
+            <button
+              type="button"
+              style={{
+                border: 'none',
+                background: updateAvailable ? 'rgba(245,158,11,0.22)' : 'rgba(56,189,248,0.12)',
+                color: updateAvailable ? '#fbbf24' : '#38bdf8',
+                cursor: 'pointer',
+                padding: '1.5px 6px',
+                borderRadius: '4px',
+                fontSize: '10px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+                fontWeight: updateAvailable ? 700 : 500,
+              }}
+              onClick={() => setUpdateModalOpen(true)}
+              title={updateAvailable ? '🎉 发现新版本！点击查看与下载' : '在线检测 GitHub 官方最新版本'}
+            >
+              {updateAvailable ? <span className="update-badge-dot" /> : <RefreshCw size={10} />}
+              {updateAvailable ? '新版本' : '检查更新'}
+            </button>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
               type="button"
@@ -1140,9 +1450,28 @@ export default function DesktopWorkspace() {
       <main>
         <header className="topbar">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-            <span className="eyebrow" style={{ margin: 0, fontSize: '10px' }}>MERIT EVALUATION SYSTEM</span>
+            <span className="eyebrow" style={{ margin: 0, fontSize: '10px' }}>
+              MERIT EVALUATION SYSTEM
+            </span>
             <strong style={{ fontSize: '18px', color: '#142822', whiteSpace: 'nowrap' }}>
-              {tab === 'auditor' ? '全项目全员绩点汇总中心' : nav.find(item => item.key === tab)?.label}
+              {workspaceType === 'auditor' ? (
+                tab === 'dashboard' ? '全景总览驾驶舱' :
+                tab === 'auditor' ? (
+                  auditorSubTab === 'import' ? '数据包导入中心' :
+                  auditorSubTab === 'employees' ? '全员跨项目绩效总表' :
+                  auditorSubTab === 'contracts' ? '全景合同矩阵' :
+                  auditorSubTab === 'ranking' || auditorSubTab === 'stars' ? '卓越绩星荣誉殿堂' :
+                  auditorSubTab === 'matrix' ? '全项目多维透视矩阵' :
+                  auditorSubTab === 'details' ? '全量明细审计流水' : '全项目全员绩效大盘'
+                ) :
+                tab === 'data_io' ? '数据资产与灾备中心' :
+                tab === 'rules' ? '绩效准则与规范' :
+                tab === 'analytics' ? '效能趋势与洞察' :
+                tab === 'stars' ? '卓越绩星荣誉殿堂' :
+                nav.find(item => item.key === tab)?.label
+              ) : (
+                tab === 'auditor' ? '全项目全员绩效大盘' : nav.find(item => item.key === tab)?.label
+              )}
             </strong>
           </div>
           <div className="operator" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: 'auto' }}>
@@ -1221,18 +1550,33 @@ export default function DesktopWorkspace() {
 
         <div className="page">
           {tab === 'dashboard' && (
-            <DashboardView
-              state={state}
-              onNavigate={setTab}
-              onResetDemo={async () => {
-                if (state.projects.length && !confirm('载入示例会重置当前全部数据，是否继续？')) return;
-                try { await persist(demoState(), '示例数据已成功载入'); } catch (e) { setNotice(errorText(e)); }
-              }}
-              onOpenGuide={(step = 1) => {
-                setOnboardingStep(step);
-                setOnboardingOpen(true);
-              }}
-            />
+            workspaceType === 'auditor' ? (
+              <AuditorDashboardView
+                state={derivedAuditorState}
+                onNavigate={setTab}
+                onNavigateDataImport={() => {
+                  setTab('auditor');
+                  setAuditorSubTab('import');
+                }}
+                onNavigateRanking={() => {
+                  setTab('auditor');
+                  setAuditorSubTab('ranking');
+                }}
+              />
+            ) : (
+              <DashboardView
+                state={state}
+                onNavigate={setTab}
+                onResetDemo={async () => {
+                  if (state.projects.length && !confirm('载入示例会重置当前全部数据，是否继续？')) return;
+                  try { await persist(demoState(), '示例数据已成功载入'); } catch (e) { setNotice(errorText(e)); }
+                }}
+                onOpenGuide={(step = 1) => {
+                  setOnboardingStep(step);
+                  setOnboardingOpen(true);
+                }}
+              />
+            )
           )}
           {tab === 'projects' && (
             <ProjectsView
@@ -1325,40 +1669,70 @@ export default function DesktopWorkspace() {
             />
           )}
           {tab === 'rules' && <RulesView />}
-          {tab === 'analytics' && <AnalyticsView state={state} />}
-          {tab === 'stars' && <StarsView state={state} />}
-          {tab === 'reports' && <ReportsView state={state} />}
+          {tab === 'analytics' && <AnalyticsView state={workspaceType === 'auditor' ? derivedAuditorState : state!} />}
+          {tab === 'stars' && (
+            <SafeStarsBoundary>
+              <StarsView state={workspaceType === 'auditor' ? derivedAuditorState : (state || demoState())} />
+            </SafeStarsBoundary>
+          )}
+          {tab === 'reports' && <ReportsView state={workspaceType === 'auditor' ? derivedAuditorState : state!} />}
           {tab === 'data_io' && (
-            <DataIoView
-              state={state}
-              isAdmin={isAdmin}
-              projectGroups={projectGroups}
-              workspaceName={workspaceName}
-              onRestoreState={handleRestoreState}
-              onImportEmployees={async employees => {
-                await command('employee.importBatch', { employees }, `成功导入 ${employees.length} 位员工`);
-              }}
-              onImportProjects={async projects => {
-                await command('project.importBatch', { projects }, `成功导入 ${projects.length} 个项目`);
-              }}
-              onExportPackages={handleExportManagerAllPackages}
-              onNavigateAuditor={() => setTab('auditor')}
-            />
+            workspaceType === 'auditor' ? (
+              <AuditorDataIoView
+                state={state}
+                auditorPackages={auditorPackages}
+                workspaceName={workspaceName}
+                onImportPackages={handleImportAuditorFiles}
+                onRemovePackage={handleRemoveAuditorPackage}
+                onClearAllPackages={handleClearAllAuditorPackages}
+                onExportFullBundle={handleExportAuditorFullBundle}
+                triggerDownload={triggerDownload}
+                setNotice={setNotice}
+              />
+            ) : (
+              <DataIoView
+                state={state}
+                isAdmin={isAdmin}
+                projectGroups={projectGroups}
+                workspaceName={workspaceName}
+                onRestoreState={handleRestoreState}
+                onImportEmployees={async employees => {
+                  await command('employee.importBatch', { employees }, `成功导入 ${employees.length} 位员工`);
+                }}
+                onImportProjects={async projects => {
+                  await command('project.importBatch', { projects }, `成功导入 ${projects.length} 个项目`);
+                }}
+                onExportPackages={handleExportManagerAllPackages}
+                onNavigateAuditor={() => setTab('auditor')}
+              />
+            )
           )}
           {tab === 'auditor' && (
-            <AuditorSummaryView
-              state={state}
-              currentActor={currentActor}
-              isAdmin={isAdmin}
-              isAuditor={isAuditor}
-              onSwitchToAuditor={() => {
-                const audEmp = state.employees.find(e => e.role === 'auditor' && e.active) || state.employees.find(e => e.role === 'admin' && e.active);
-                if (audEmp) setActorId(audEmp.id);
-                else setAuthModalOpen(true);
-              }}
-              triggerDownload={triggerDownload}
-              setNotice={setNotice}
-            />
+            auditorSubTab === 'stars' ? (
+              <SafeStarsBoundary>
+                <StarsView state={derivedAuditorState} />
+              </SafeStarsBoundary>
+            ) : (
+              <AuditorSummaryView
+                state={state!}
+                currentActor={currentActor}
+                isAdmin={isAdmin}
+                isAuditor={isAuditor}
+                packages={auditorPackages}
+                onUpdatePackages={handleUpdateAuditorPackages}
+                activeSubTab={auditorSubTab}
+                onSubTabChange={setAuditorSubTab}
+                hideTabBar={workspaceType === 'auditor'}
+                onSwitchToAuditor={() => {
+                  const employees = state?.employees || [];
+                  const audEmp = employees.find(e => e.role === 'auditor' && e.active) || employees.find(e => e.role === 'admin' && e.active);
+                  if (audEmp) setActorId(audEmp.id);
+                  else setAuthModalOpen(true);
+                }}
+                triggerDownload={triggerDownload}
+                setNotice={setNotice}
+              />
+            )
           )}
         </div>
       </main>
@@ -1506,7 +1880,21 @@ export default function DesktopWorkspace() {
 
       {/* About & Version History Modal */}
       {aboutModalOpen && (
-        <AboutModal onClose={() => setAboutModalOpen(false)} />
+        <AboutModal
+          onClose={() => setAboutModalOpen(false)}
+          onCheckUpdate={() => {
+            setAboutModalOpen(false);
+            setUpdateModalOpen(true);
+          }}
+        />
+      )}
+
+      {/* Online Version Update Modal */}
+      {updateModalOpen && (
+        <UpdateModal
+          initialResult={updateResult}
+          onClose={() => setUpdateModalOpen(false)}
+        />
       )}
 
     </div>
@@ -1516,7 +1904,13 @@ export default function DesktopWorkspace() {
 // -------------------------------------------------------------
 // 关于系统弹窗 (About & Update History Modal)
 // -------------------------------------------------------------
-function AboutModal({ onClose }: { onClose(): void }) {
+function AboutModal({
+  onClose,
+  onCheckUpdate,
+}: {
+  onClose(): void;
+  onCheckUpdate?: () => void;
+}) {
   const [activeTab, setActiveTab] = useState<'intro' | 'history'>('intro');
 
   return (
@@ -1585,7 +1979,7 @@ function AboutModal({ onClose }: { onClose(): void }) {
         </div>
 
         {/* 标签栏：系统简介与理念 vs 版本演进更新历史 */}
-        <div className="modal-nav-tabs" style={{ marginBottom: '18px' }}>
+        <div className="modal-nav-tabs" style={{ marginBottom: '18px', display: 'flex', alignItems: 'center' }}>
           <button
             type="button"
             className={`modal-tab-btn ${activeTab === 'intro' ? 'active' : ''}`}
@@ -1600,6 +1994,16 @@ function AboutModal({ onClose }: { onClose(): void }) {
           >
             <History size={14} /> 版本更新历史 ({UPDATE_HISTORY.length} 个版本)
           </button>
+          {onCheckUpdate && (
+            <button
+              type="button"
+              className="modal-tab-btn"
+              style={{ marginLeft: 'auto', background: 'rgba(56, 189, 248, 0.12)', color: '#0284c7', border: '1px solid rgba(56,189,248,0.3)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+              onClick={onCheckUpdate}
+            >
+              <RefreshCw size={13} /> 在线检查版本更新
+            </button>
+          )}
         </div>
 
         {activeTab === 'intro' ? (
@@ -1710,6 +2114,344 @@ function AboutModal({ onClose }: { onClose(): void }) {
         <button type="button" className="primary" onClick={onClose}>
           我知道了
         </button>
+      </div>
+    </Modal>
+  );
+}
+
+// -------------------------------------------------------------
+// 系统版本在线检测与更新弹窗 (Online Version Update Modal)
+// -------------------------------------------------------------
+function UpdateModal({
+  onClose,
+  initialResult,
+}: {
+  onClose(): void;
+  initialResult?: UpdateCheckResult | null;
+}) {
+  const [checking, setChecking] = useState(!initialResult);
+  const [result, setResult] = useState<UpdateCheckResult | null>(initialResult || null);
+
+  const doCheck = async () => {
+    setChecking(true);
+    try {
+      const res = await checkAppUpdate(APP_VERSION);
+      setResult(res);
+    } catch (e: any) {
+      setResult({
+        hasUpdate: false,
+        currentVersion: APP_VERSION,
+        latestVersion: APP_VERSION,
+        releaseName: '',
+        releaseNotes: '',
+        publishedAt: '',
+        downloadUrl: GITHUB_RELEASES_URL,
+        htmlUrl: GITHUB_RELEASES_URL,
+        checkedAt: new Date().toLocaleString(),
+        error: e.message || '网络连接超时，未能连通 GitHub 服务器',
+      });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!initialResult) {
+      doCheck();
+    }
+  }, []);
+
+  const openUrl = (url: string) => {
+    if (typeof window !== 'undefined' && window.meritDesktop?.openUrl) {
+      window.meritDesktop.openUrl(url);
+    } else if (typeof window !== 'undefined') {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  return (
+    <Modal
+      title="软件版本在线检测与更新"
+      subtitle={`当前运行版本: v${APP_VERSION} · 官方发布仓库: github.com/${GITHUB_REPO}`}
+      wide
+      onClose={onClose}
+    >
+      <div className="modal-body" style={{ maxHeight: '72vh', overflowY: 'auto' }}>
+        {/* 顶部状态大横幅 */}
+        <div
+          style={{
+            background: checking
+              ? 'linear-gradient(135deg, #1e293b 0%, #334155 100%)'
+              : result?.hasUpdate
+              ? 'linear-gradient(135deg, #064e3b 0%, #047857 60%, #059669 100%)'
+              : result?.error
+              ? 'linear-gradient(135deg, #78350f 0%, #92400e 100%)'
+              : 'linear-gradient(135deg, #142822 0%, #1c3b32 60%, #15803d 100%)',
+            borderRadius: '12px',
+            padding: '22px 26px',
+            color: '#ffffff',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '16px',
+            marginBottom: '20px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: '10px',
+                background: checking ? 'rgba(255,255,255,0.15)' : result?.hasUpdate ? '#34d399' : result?.error ? '#f59e0b' : '#4ade80',
+                color: checking || result?.error ? '#ffffff' : '#142822',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              {checking ? (
+                <RefreshCw size={24} className="spin-icon" />
+              ) : result?.hasUpdate ? (
+                <Sparkles size={24} />
+              ) : result?.error ? (
+                <AlertCircle size={24} />
+              ) : (
+                <CheckCircle2 size={24} />
+              )}
+            </div>
+            <div>
+              <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: 700 }}>
+                {checking
+                  ? '正在连接 GitHub 检测最新版本...'
+                  : result?.hasUpdate
+                  ? `发现新版本：v${result.latestVersion} 可用！`
+                  : result?.error
+                  ? '检查更新提示'
+                  : `当前已是最新版本 (v${APP_VERSION})`}
+              </h3>
+              <p style={{ margin: 0, fontSize: '12.5px', opacity: 0.9, lineHeight: 1.5 }}>
+                {checking
+                  ? '正在向 GitHub Releases API 请求最新发行版元数据与安装包，请稍候...'
+                  : result?.hasUpdate
+                  ? `发布时间: ${result.publishedAt || '近期'} · 建议下载最新单文件版获得最佳体验`
+                  : result?.error
+                  ? result.error
+                  : '您的系统已处于官方最新稳定状态，暂无可用更新。'}
+              </p>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.12)',
+              backdropFilter: 'blur(8px)',
+              borderRadius: '10px',
+              padding: '10px 16px',
+              border: '1px solid rgba(255,255,255,0.2)',
+              fontSize: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+            }}
+          >
+            <div><span style={{ opacity: 0.75 }}>当前版本：</span><b>v{APP_VERSION}</b></div>
+            <div><span style={{ opacity: 0.75 }}>最新版本：</span><b style={{ color: result?.hasUpdate ? '#fde047' : '#a7f3d0' }}>v{result?.latestVersion || APP_VERSION}</b></div>
+            <div><span style={{ opacity: 0.75 }}>检测时间：</span><span style={{ opacity: 0.9 }}>{result?.checkedAt || '刚刚'}</span></div>
+          </div>
+        </div>
+
+        {/* 详细内容区域 */}
+        {result?.hasUpdate ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div
+              style={{
+                background: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                borderRadius: '10px',
+                padding: '16px 20px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', color: '#166534', fontWeight: 700 }}>
+                  {result.releaseName || `v${result.latestVersion} 发行说明`}
+                </h4>
+                <span style={{ fontSize: '12px', color: '#15803d', background: '#dcfce7', padding: '2px 8px', borderRadius: '12px' }}>
+                  官方正式发行版
+                </span>
+              </div>
+              <div
+                style={{
+                  fontSize: '13px',
+                  color: '#334155',
+                  lineHeight: 1.7,
+                  whiteSpace: 'pre-wrap',
+                  maxHeight: '260px',
+                  overflowY: 'auto',
+                  background: '#ffffff',
+                  border: '1px solid #dcfce7',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                }}
+              >
+                {result.releaseNotes || '该版本包含稳定性提升与功能改进。'}
+              </div>
+            </div>
+
+            {/* 操作按钮区 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', paddingTop: '8px' }}>
+              <button
+                type="button"
+                className="primary"
+                style={{
+                  background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                  borderColor: '#047857',
+                  padding: '10px 20px',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 12px rgba(5,150,105,0.3)',
+                }}
+                onClick={() => openUrl(result.downloadUrl)}
+              >
+                <CloudDownload size={18} />
+                立即下载新版本 (.exe)
+              </button>
+
+              <button
+                type="button"
+                className="secondary"
+                style={{
+                  padding: '10px 18px',
+                  fontSize: '13.5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onClick={() => openUrl(result.htmlUrl)}
+              >
+                <ExternalLink size={15} />
+                在 GitHub 查看发布页
+              </button>
+
+              <button
+                type="button"
+                className="secondary"
+                style={{
+                  padding: '10px 16px',
+                  fontSize: '13.5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  marginLeft: 'auto',
+                }}
+                onClick={doCheck}
+                disabled={checking}
+              >
+                <RefreshCw size={14} className={checking ? 'spin-icon' : ''} />
+                重新检测
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* 未发现新版本或检测提示 */}
+            <div
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '10px',
+                padding: '18px 22px',
+              }}
+            >
+              <h4 style={{ margin: '0 0 10px', fontSize: '14px', color: '#0f172a' }}>
+                官方仓库与发布源
+              </h4>
+              <p style={{ margin: '0 0 14px', fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
+                衡绩系统代码及所有 Windows 桌面绿色离线版发布文件均托管于 GitHub 官方开源仓库。您可随时通过点击下方链接前往仓库主页或 Release 页面手动浏览、下载或反馈建议。
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    padding: '8px 14px',
+                    fontSize: '13px',
+                    color: '#0f172a',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontWeight: 500,
+                  }}
+                  onClick={() => openUrl(GITHUB_RELEASES_URL)}
+                >
+                  <ExternalLink size={14} color="#0284c7" />
+                  GitHub Releases 发行版专区
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    padding: '8px 14px',
+                    fontSize: '13px',
+                    color: '#0f172a',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontWeight: 500,
+                  }}
+                  onClick={() => openUrl(GITHUB_REPO_URL)}
+                >
+                  <ExternalLink size={14} color="#16a34a" />
+                  GitHub 代码仓库首页
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{
+                    padding: '8px 14px',
+                    fontSize: '13px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    marginLeft: 'auto',
+                  }}
+                  onClick={doCheck}
+                  disabled={checking}
+                >
+                  <RefreshCw size={14} className={checking ? 'spin-icon' : ''} />
+                  重新检测
+                </button>
+              </div>
+            </div>
+
+            {/* 温馨提示卡片 */}
+            <div
+              style={{
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: '10px',
+                padding: '14px 18px',
+                fontSize: '12.5px',
+                color: '#1e40af',
+                lineHeight: 1.6,
+              }}
+            >
+              💡 <strong>无缝升级保障</strong>：本软件为绿色便携设计，下载新版本 <code>.exe</code> 文件后可直接重命名替换运行，无需复杂的安装或卸载过程。您以往创建的所有加密工作区文件（<code>.hengji</code>）与导出的备份数据百分之百向前兼容，升级前后业务数据永久保留。
+            </div>
+          </div>
+        )}
       </div>
     </Modal>
   );
@@ -2914,10 +3656,610 @@ function ManualModal({
 }
 
 // -------------------------------------------------------------
+// 0.9 将核算员已导入数据包转换为可供看板与荣誉殿堂使用的标准派生 State
+// -------------------------------------------------------------
+function buildAuditorDerivedState(packages: ProjectMeritPackage[], baseState: State | null): State {
+  if (!packages || packages.length === 0) {
+    return baseState || demoState();
+  }
+  const baseEmployees = baseState?.employees || [];
+
+  // 1. 调用核心算法汇总归一出全员跨项目数据
+  const summary = summarizeAuditorPackages(packages, baseEmployees);
+
+  // 2. 映射构建全局归一化员工列表，杜绝姓名丢失与重复
+  const empMap = new Map<string, Employee>();
+  summary.employeeSummaries.forEach(emp => {
+    empMap.set(emp.id, {
+      id: emp.id,
+      employeeNo: emp.employeeNo,
+      name: emp.name || emp.employeeNo || emp.id,
+      department: emp.department || '第四研究室',
+      group: (emp.group as any) || '研发组',
+      groupRole: (emp.groupRole as any) || '组员',
+      position: emp.position || '工程师',
+      role: 'member',
+      active: true,
+    });
+  });
+
+  // 补齐 baseState 中未参与分配的员工（如系统管理员或核算员）
+  baseEmployees.forEach(be => {
+    if (!empMap.has(be.id)) {
+      empMap.set(be.id, be);
+    }
+  });
+
+  const employees = Array.from(empMap.values());
+
+  // 建立明细记录到归一化员工 ID 的高精度映射
+  const detailToNormalizedEmpId = new Map<any, string>();
+  summary.employeeSummaries.forEach(emp => {
+    emp.details.forEach(d => {
+      detailToNormalizedEmpId.set(d, emp.id);
+    });
+  });
+
+  // 3. 构建 projects，时间轴动态适配数据包实际月份
+  const projects: Project[] = packages.map(pkg => {
+    const pkgMonths = (pkg.period?.months || []).concat(pkg.details?.map(d => d.month) || []).filter(Boolean).sort();
+    const start = pkg.project.start || (pkgMonths.length > 0 ? pkgMonths[0] : '2026-01');
+    const end = pkg.project.end || (pkgMonths.length > 0 ? pkgMonths[pkgMonths.length - 1] : '2026-12');
+    const contract = pkg.project.contract !== undefined
+      ? Math.round(Number(pkg.project.contract) || 0)
+      : Math.round((Number(pkg.project.contractWan) || 0) * 1_000_000);
+
+    return {
+      id: pkg.project.id,
+      code: pkg.project.code || '',
+      name: pkg.project.name || '未命名项目',
+      client: pkg.project.client || '',
+      contract,
+      owner: pkg.project.ownerId || '',
+      start,
+      end,
+      status: 'active',
+      members: (pkg.memberSummaries || []).map(m => {
+        const match = summary.employeeSummaries.find(e => (m.employeeNo && e.employeeNo === m.employeeNo) || e.id === m.employeeId || e.name === m.name);
+        return match ? match.id : m.employeeId;
+      }),
+    };
+  });
+
+  // 4. 将 details 按 month 组合成 plans，将 employeeId 统一归一化为全员汇总的标准 ID
+  const plans: Plan[] = [];
+  packages.forEach(pkg => {
+    const monthDetailsMap = new Map<string, typeof pkg.details>();
+    (pkg.details || []).forEach(d => {
+      const list = monthDetailsMap.get(d.month) || [];
+      list.push(d);
+      monthDetailsMap.set(d.month, list);
+    });
+
+    monthDetailsMap.forEach((detailsList, month) => {
+      const records: Record[] = detailsList.map((d, idx) => {
+        const empId = detailToNormalizedEmpId.get(d) ||
+          summary.employeeSummaries.find(e => (d.employeeNo && e.employeeNo === d.employeeNo) || e.id === d.employeeId || e.name === d.employeeName)?.id ||
+          d.employeeId;
+        return {
+          id: `rec_${pkg.project.id}_${empId}_${month}_${idx}`,
+          projectId: pkg.project.id,
+          employeeId: empId,
+          points: Math.round(Number(d.points) || 0),
+          createdAt: new Date().toISOString(),
+        };
+      });
+
+      const entries: PlanEntry[] = detailsList.map(d => {
+        const empId = detailToNormalizedEmpId.get(d) ||
+          summary.employeeSummaries.find(e => (d.employeeNo && e.employeeNo === d.employeeNo) || e.id === d.employeeId || e.name === d.employeeName)?.id ||
+          d.employeeId;
+        return {
+          employeeId: empId,
+          rate: Math.round(Number(d.rate) || 0),
+          workContent: d.workContent || '',
+        };
+      });
+
+      plans.push({
+        id: `plan_${pkg.project.id}_${month}`,
+        projectId: pkg.project.id,
+        month,
+        budget: Math.round(detailsList.reduce((acc, curr) => acc + (Number(curr.rate) || 0), 0)),
+        entries,
+        status: 'published',
+        publishedAt: new Date().toISOString(),
+        records,
+      });
+    });
+  });
+
+  return {
+    projects,
+    plans,
+    employees,
+    audit: baseState?.audit || [],
+    settings: baseState?.settings || {
+      contractRanges: [
+        { min: 0, max: 100000000, managerRateRange: [1000, 2000] },
+        { min: 100000000, max: 500000000, managerRateRange: [800, 1500] },
+      ],
+      defaultMembers: [],
+    },
+    auditorPackages: packages,
+  };
+}
+
+// -------------------------------------------------------------
+// 1.0 核算员工作区总览看板（保持图1原生排版与风格）
+// -------------------------------------------------------------
+function AuditorDashboardView({
+  state,
+  onNavigate,
+  onNavigateDataImport,
+  onNavigateRanking,
+}: {
+  state: State;
+  onNavigate: (tab: Tab) => void;
+  onNavigateDataImport: () => void;
+  onNavigateRanking: () => void;
+}) {
+  const published = state.plans.filter(plan => plan.status === 'published');
+  const currentRep = report(state, nowMonth());
+  const totalScore = total(currentRep.map(row => row.points));
+  const starsData = calculateStars(state, { year: nowMonth().slice(0, 4), month: nowMonth() });
+
+  return (
+    <>
+      <section className="hero">
+        <div>
+          <span className="eyebrow">EQUITY & MERIT PERFORMANCE</span>
+          <h1>衡绩绩点考核，<br /><em>科学衡量每一份项目贡献。</em></h1>
+          <p>从项目合同金额出发，支持多周期额度监控、月度/季度/年度之星评选、趋势与柱状图分析、专业组分类及 CSV 数据导入导出。</p>
+          <div className="hero-actions">
+            <button className="primary" onClick={onNavigateDataImport}>
+              <Upload size={16} />数据导入
+            </button>
+            <button className="secondary" onClick={() => onNavigate('stars')}>
+              <Trophy size={16} />查看考核之星
+            </button>
+            <button className="secondary" onClick={() => onNavigate('analytics')}>
+              <TrendingUp size={16} />趋势与柱状图
+            </button>
+          </div>
+        </div>
+        <div className="formula-card">
+          <span>考核核心规则</span>
+          <strong>月度预算 × 成员当月分配率</strong>
+          <div><b>100%</b><small>项目各月额度比例最终合计</small></div>
+          <div><b>100%</b><small>每月项目成员比例严格分配</small></div>
+          <div><b>3 大组</b><small>总体组 · 产品组 · 研发组</small></div>
+        </div>
+      </section>
+
+      <section className="metrics">
+        <article>
+          <span>执行中项目</span>
+          <strong>{state.projects.filter(p => p.status === 'active').length}</strong>
+          <small>项目库共 {state.projects.length} 项</small>
+        </article>
+        <article>
+          <span>合同总额</span>
+          <strong>{wan(total(state.projects.map(p => p.contract)))}<i> 万元</i></strong>
+          <small>全部项目含税总合同额</small>
+        </article>
+        <article>
+          <span>本月已发布绩点</span>
+          <strong>{score(totalScore)}</strong>
+          <small>{published.filter(p => p.month === nowMonth()).length} 个月度计划已生效</small>
+        </article>
+        <article>
+          <span>团队部门成员</span>
+          <strong>{state.employees.filter(e => e.active).length}<i> 人</i></strong>
+          <small>覆盖总体组、产品组与研发组</small>
+        </article>
+      </section>
+
+      <div className="split">
+        <div className="panel">
+          <div className="panel-title">
+            <div>
+              <span>HONOR & STARS</span>
+              <h2>本月之星 🌟 与年度领跑</h2>
+            </div>
+            <button className="text-button" onClick={() => onNavigate('stars')}>进入荣誉殿堂</button>
+          </div>
+          <div style={{ display: 'grid', gap: '12px' }}>
+            <div style={{ background: '#fefce8', border: '1px solid #fef08a', borderRadius: '10px', padding: '14px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ fontSize: '28px' }}>🌟</div>
+              <div>
+                <span style={{ fontSize: '11px', color: '#854d0e', fontWeight: 600 }}>本月之星 ({nowMonth()})</span>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#142822' }}>
+                  {starsData.monthStar.stars.length > 0
+                    ? starsData.monthStar.stars.map(s => s.employee.name).join('、')
+                    : '本月暂无已发布绩点'}
+                </div>
+                {starsData.monthStar.stars.length > 0 && (
+                  <small style={{ color: '#71717a' }}>
+                    获得 {score(starsData.monthStar.topPoints)} 绩点 · <GroupTag group={starsData.monthStar.stars[0].employee.group} />
+                  </small>
+                )}
+              </div>
+            </div>
+
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ fontSize: '28px' }}>👑</div>
+              <div>
+                <span style={{ fontSize: '11px', color: '#334155', fontWeight: 600 }}>年度之星领跑 ({nowMonth().slice(0, 4)}年)</span>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#142822' }}>
+                  {starsData.yearStar.stars.length > 0
+                    ? starsData.yearStar.stars.map(s => s.employee.name).join('、')
+                    : '暂无年度发布记录'}
+                </div>
+                {starsData.yearStar.stars.length > 0 && (
+                  <small style={{ color: '#71717a' }}>
+                    累计 {score(starsData.yearStar.topPoints)} 绩点 · <GroupTag group={starsData.yearStar.stars[0].employee.group} />
+                  </small>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-title">
+            <div>
+              <span>MONTHLY RANKING</span>
+              <h2>{nowMonth()} 个人绩点前五名</h2>
+            </div>
+            <button className="text-button" onClick={onNavigateRanking}>查看完整报表</button>
+          </div>
+          <div className="ranking">
+            {currentRep.filter(row => row.points > 0).slice(0, 5).map((row, index) => (
+              <div key={row.employee.id}>
+                <b>{index + 1}</b>
+                <span>
+                  {row.employee.name} <GroupTag group={row.employee.group} />
+                  <small>{row.employee.department} · {row.details.length} 个项目</small>
+                </span>
+                <strong>{score(row.points)}</strong>
+              </div>
+            ))}
+            {currentRep.every(row => row.points === 0) && <Empty text="本月暂未发布任何绩点" />}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// -------------------------------------------------------------
+// 核算员专属数据导入导出与灾备视图
+// -------------------------------------------------------------
+function AuditorDataIoView({
+  state,
+  auditorPackages,
+  workspaceName = '',
+  onImportPackages,
+  onRemovePackage,
+  onClearAllPackages,
+  onExportFullBundle,
+  triggerDownload,
+  setNotice,
+}: {
+  state?: State | null;
+  auditorPackages: ProjectMeritPackage[];
+  workspaceName?: string;
+  onImportPackages: (files: FileList | null | File[]) => Promise<void>;
+  onRemovePackage: (projectId: string) => void;
+  onClearAllPackages: () => void;
+  onExportFullBundle: () => void;
+  triggerDownload: (content: string, filename: string, mimeType?: string) => Promise<void>;
+  setNotice: (msg: string) => void;
+}) {
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const employees = state?.employees || [];
+  const summary = useMemo(() => {
+    return summarizeAuditorPackages(auditorPackages, employees);
+  }, [auditorPackages, employees]);
+
+  const deptContracts = useMemo(() => {
+    return calculateDepartmentContracts(summary);
+  }, [summary]);
+
+  const handleExportEmployeesCsv = async () => {
+    const csv = exportAuditorEmployeesCsv(summary);
+    await triggerDownload(csv, `衡绩_全员跨项目绩点汇总表_${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
+    setNotice('全员跨项目绩点汇总表 CSV 导出成功');
+  };
+
+  const handleExportProjectsCsv = async () => {
+    const csv = exportAuditorProjectsCsv(summary);
+    await triggerDownload(csv, `衡绩_全部门合同额度对照表_${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
+    setNotice('全部门合同额度对照表 CSV 导出成功');
+  };
+
+  const handleExportMatrixCsv = async () => {
+    const csv = exportAuditorMatrixCsv(summary);
+    await triggerDownload(csv, `衡绩_全项目全员二维透视矩阵_${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
+    setNotice('全项目全员二维透视矩阵 CSV 导出成功');
+  };
+
+  const handleExportDetailsCsv = async () => {
+    const csv = exportAuditorDetailsCsv(summary);
+    await triggerDownload(csv, `衡绩_全量绩点分配流水明细_${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
+    setNotice('全量明细流水 CSV 导出成功');
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: '22px' }}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".json"
+        style={{ display: 'none' }}
+        onChange={e => {
+          onImportPackages(e.target.files);
+          e.target.value = '';
+        }}
+      />
+
+      <PageTitle
+        eyebrow="DATA PACKAGES & BACKUP"
+        title="核算员数据导入导出与系统灾备"
+        description="支持批量导入多位项目负责人提交的分配数据包、多项目合并包及归档总包；支持导出全员跨项目汇总表等四大报表（统一以万元为单位），并提供工作区加密备份与灾备恢复。"
+      />
+
+      {/* 拖拽导入与选择文件专区 */}
+      <div
+        onDragOver={e => {
+          e.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={e => {
+          e.preventDefault();
+          setIsDragging(false);
+          if (e.dataTransfer.files) {
+            onImportPackages(e.dataTransfer.files);
+          }
+        }}
+        style={{
+          background: isDragging ? '#dcfce7' : '#ffffff',
+          border: `2px dashed ${isDragging ? '#10b981' : '#cbd5e1'}`,
+          borderRadius: '16px',
+          padding: '32px 28px',
+          textAlign: 'center',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.02)',
+          transition: 'all 0.2s',
+        }}
+      >
+        <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#f0fdf4', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+          <Upload size={28} />
+        </div>
+        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', margin: '0 0 8px 0' }}>
+          项目分配数据包批量导入与智能识别
+        </h3>
+        <p style={{ color: '#64748b', fontSize: '13.5px', maxWidth: '640px', margin: '0 auto 20px', lineHeight: 1.6 }}>
+          支持拖入或一次性选择多个单项目数据包（.json）、项目负责人多项目合并包或历史归档总包。系统将自动解包、校验合规性、按工号精准去重合并，并自动加密持久化保存。
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="primary"
+            style={{ padding: '10px 22px', fontSize: '14px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload size={16} />
+            选择数据包文件 (支持按住Ctrl多选)
+          </button>
+          {auditorPackages.length > 0 && (
+            <button
+              type="button"
+              className="secondary"
+              style={{ padding: '10px 18px', fontSize: '14px', color: '#ef4444', borderColor: '#fca5a5' }}
+              onClick={() => {
+                if (window.confirm('确定清空当前所有已导入的数据包吗？此操作将重置汇总大盘。')) {
+                  onClearAllPackages();
+                }
+              }}
+            >
+              <RotateCcw size={15} />
+              清空已导入数据包 ({auditorPackages.length})
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 已导入的数据包清单 */}
+      <div
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '16px',
+          padding: '22px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Package size={18} color="#059669" />
+            <strong style={{ fontSize: '16px', color: '#0f172a' }}>已载入的项目数据包清单 ({auditorPackages.length} 个项目)</strong>
+          </div>
+          <span style={{ fontSize: '12px', color: '#64748b' }}>
+            已安全加密保存在工作区文件中，切换页面或重启软件不失效
+          </span>
+        </div>
+
+        {auditorPackages.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '36px 0', color: '#94a3b8', fontSize: '13.5px' }}>
+            暂无已导入的数据包，请点击上方按钮或直接将 .json 文件拖拽进来
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '12px' }}>
+            {auditorPackages.map(pkg => (
+              <div
+                key={pkg.project.id}
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '10px',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '13.5px' }}>
+                    {pkg.project.name}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px' }}>
+                    工作令号: <strong>{pkg.project.code || '无'}</strong> · 负责人: {pkg.project.ownerName}
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#059669', marginTop: '2px' }}>
+                    合同额度: {pkg.project.periodAllocatedWan} 万元 · 成员数: {pkg.memberSummaries.length} 人
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="icon-button"
+                  style={{ width: 28, height: 28, color: '#ef4444' }}
+                  onClick={() => {
+                    if (window.confirm(`确定移除【${pkg.project.name}】的数据包吗？`)) {
+                      onRemovePackage(pkg.project.id);
+                    }
+                  }}
+                  title="移除该数据包"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 报表导出与总包归档 */}
+      <div
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '16px',
+          padding: '22px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Download size={18} color="#0284c7" />
+          <strong style={{ fontSize: '16px', color: '#0f172a' }}>核算成果导出与全量归档（全量以万元为标准单位）</strong>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px' }}>
+            <div>
+              <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '14px' }}>👥 全员跨项目绩点汇总表 (CSV)</div>
+              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                包含工号、姓名、专业组、参与项目数、累计获得总绩点（万元）。
+              </div>
+            </div>
+            <button
+              type="button"
+              className="secondary"
+              style={{ alignSelf: 'flex-start', padding: '6px 14px', fontSize: '12.5px' }}
+              onClick={handleExportEmployeesCsv}
+            >
+              <Download size={14} /> 导出汇总表 CSV
+            </button>
+          </div>
+
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px' }}>
+            <div>
+              <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '14px' }}>💼 全部门合同额度对照表 (CSV)</div>
+              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                各项目工作令号、合同总额(万)、已分配额度(万)、剩余额度(万)、消耗率。
+              </div>
+            </div>
+            <button
+              type="button"
+              className="secondary"
+              style={{ alignSelf: 'flex-start', padding: '6px 14px', fontSize: '12.5px' }}
+              onClick={handleExportProjectsCsv}
+            >
+              <Download size={14} /> 导出额度表 CSV
+            </button>
+          </div>
+
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px' }}>
+            <div>
+              <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '14px' }}>⊞ 全项目全员二维透视矩阵 (CSV)</div>
+              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                横向为项目工作令号与名称，纵向为员工姓名工号，支持行列双向求和验证。
+              </div>
+            </div>
+            <button
+              type="button"
+              className="secondary"
+              style={{ alignSelf: 'flex-start', padding: '6px 14px', fontSize: '12.5px' }}
+              onClick={handleExportMatrixCsv}
+            >
+              <Download size={14} /> 导出透视矩阵 CSV
+            </button>
+          </div>
+
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px' }}>
+            <div>
+              <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '14px' }}>📜 全量绩点分配流水明细 (CSV)</div>
+              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                包含跨项目、跨月份每笔成员分配比例、所得绩点（万元）与工作内容描述。
+              </div>
+            </div>
+            <button
+              type="button"
+              className="secondary"
+              style={{ alignSelf: 'flex-start', padding: '6px 14px', fontSize: '12.5px' }}
+              onClick={handleExportDetailsCsv}
+            >
+              <Download size={14} /> 导出流水明细 CSV
+            </button>
+          </div>
+
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px', gridColumn: '1 / -1' }}>
+            <div>
+              <div style={{ fontWeight: 700, color: '#065f46', fontSize: '14.5px' }}>📦 核算汇总完整总包归档 (JSON)</div>
+              <div style={{ fontSize: '12.5px', color: '#166534', marginTop: '4px' }}>
+                一键打包全部项目的原始数据包集合、跨项目全员求和档案、合同额度大盘与透视矩阵。可直接发给部门分管领导查阅，或在任意电脑上的衡绩核算员工作区中直接重新导入恢复。
+              </div>
+            </div>
+            <button
+              type="button"
+              className="primary"
+              style={{ alignSelf: 'flex-start', padding: '8px 18px', fontSize: '13.5px', background: '#059669', borderColor: '#047857' }}
+              onClick={onExportFullBundle}
+            >
+              <Download size={15} /> 导出核算汇总总包 (JSON)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
 // 1. Dashboard View
 // -------------------------------------------------------------
 function DashboardView({
   state,
+
   onNavigate,
   onResetDemo,
   onOpenGuide,
@@ -3081,8 +4423,6 @@ function BatchProjectTeamModal({
   onClose(): void;
   onConfirm(projectIds: string[], members: string[], defaultRates: Record<string, number>, ownerId?: string): Promise<void>;
 }) {
-  if (!isOpen) return null;
-
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(() => targetProjects.map(p => p.id));
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [members, setMembers] = useState<string[]>(() => {
@@ -3246,6 +4586,8 @@ function BatchProjectTeamModal({
   };
 
   const selectedProjects = allProjects.filter(p => selectedProjectIds.includes(p.id));
+
+  if (!isOpen) return null;
 
   return (
     <Modal
@@ -4537,8 +5879,19 @@ function ProjectQuotaModal({
   onClose(): void;
   onSaveQuotaSchedule(projectId: string, quotaSchedule: ProjectMonthlyQuotaPlan[]): Promise<void>;
 }) {
-  const project = state.projects.find(p => p.id === projectId);
-  if (!project) return null;
+  const foundProject = state.projects.find(p => p.id === projectId);
+  const project = foundProject || {
+    id: projectId,
+    code: '',
+    name: '',
+    client: '',
+    contract: 0,
+    owner: '',
+    start: '2026-01',
+    end: '2026-12',
+    status: 'active' as const,
+    members: [],
+  };
 
   const perspective = useMemo(() => getProjectQuotaPerspective(state, projectId), [state, projectId]);
 
@@ -4892,6 +6245,8 @@ function ProjectQuotaModal({
       setSaving(false);
     }
   };
+
+  if (!foundProject) return null;
 
   return (
     <Modal
@@ -8610,26 +9965,223 @@ function AnalyticsView({ state }: { state: State }) {
 }
 
 // -------------------------------------------------------------
-// 6. Stars View (需求5：月度之星，季度之星，年度之星)
+// 6. Stars View (考核之星殿堂：荣誉展台 + 月度/季度/年度/区间全员排行榜)
 // -------------------------------------------------------------
 function StarsView({ state }: { state: State }) {
-  const [year, setYear] = useState('2026');
-  const [quarter, setQuarter] = useState<number>(1);
-  const [month, setMonth] = useState('2026-01');
+  // 0. 防御性归一化 state，彻底杜绝 null / undefined 导致的解包崩溃
+  const safeState: State = useMemo(() => {
+    return {
+      employees: Array.isArray(state?.employees) ? state.employees.filter(Boolean) : [],
+      projects: Array.isArray(state?.projects) ? state.projects.filter(Boolean) : [],
+      plans: Array.isArray(state?.plans) ? state.plans.filter(Boolean) : [],
+      audit: Array.isArray(state?.audit) ? state.audit : [],
+      settings: state?.settings || ({} as any),
+      auditorPackages: state?.auditorPackages || [],
+    };
+  }, [state]);
 
-  const starsData = useMemo(() => calculateStars(state, { year, quarter, month }), [state, year, quarter, month]);
+  // 1. 动态提取已发布并有实际绩点分配的所有有效月份
+  const activeMonths = useMemo(() => {
+    const set = new Set<string>();
+    safeState.plans.forEach(p => {
+      if (p && p.status === 'published') {
+        const hasPts = (Array.isArray(p.records) && p.records.some(r => (Number(r?.points) || 0) > 0)) ||
+                       (Array.isArray(p.entries) && p.entries.some(e => (Number(e?.rate) || 0) > 0));
+        if (hasPts && p.month) set.add(p.month);
+      }
+    });
+    return Array.from(set).sort();
+  }, [safeState.plans]);
+
+  // 2. 动态提取所有年份
+  const availableYears = useMemo(() => {
+    const set = new Set<string>();
+    activeMonths.forEach(m => {
+      const y = (m || '').slice(0, 4);
+      if (/^\d{4}$/.test(y)) set.add(y);
+    });
+    const curYear = nowMonth().slice(0, 4);
+    set.add(curYear);
+    set.add('2026');
+    return Array.from(set).sort().reverse();
+  }, [activeMonths]);
+
+  // 默认定位到最新有分配数据的月份
+  const latestActiveMonth = activeMonths.length > 0 ? activeMonths[activeMonths.length - 1] : nowMonth();
+  const defaultYear = latestActiveMonth.slice(0, 4) || '2026';
+  const defaultQuarter = Math.ceil(parseInt(latestActiveMonth.slice(5, 7) || '1', 10) / 3) || 1;
+
+  const [year, setYear] = useState<string>(() => defaultYear);
+  const [quarter, setQuarter] = useState<number>(() => defaultQuarter);
+  const [month, setMonth] = useState<string>(() => latestActiveMonth);
+
+  // 全员排名榜四大模式：'month' (月度) | 'quarter' (季度) | 'year' (年度) | 'range' (区间)
+  const [rankingMode, setRankingMode] = useState<'month' | 'quarter' | 'year' | 'range'>('month');
+  const [rangeStart, setRangeStart] = useState<string>(() => (activeMonths.length > 0 ? activeMonths[0] : `${defaultYear}-01`));
+  const [rangeEnd, setRangeEnd] = useState<string>(() => latestActiveMonth);
+  const [search, setSearch] = useState<string>('');
+  const [groupFilter, setGroupFilter] = useState<string>('all');
+  const [inspectRow, setInspectRow] = useState<any>(null);
+
+  // 当工作区数据载入或更新且当前 month 无数据时，智能自动对齐到最新有数据的月份
+  useEffect(() => {
+    if (activeMonths.length > 0 && !activeMonths.includes(month)) {
+      const target = activeMonths[activeMonths.length - 1];
+      setMonth(target);
+      const targetYear = target.slice(0, 4);
+      setYear(targetYear);
+      setQuarter(Math.ceil(parseInt(target.slice(5, 7) || '1', 10) / 3) || 1);
+    }
+  }, [activeMonths]);
+
+  const handleYearChange = (newYear: string) => {
+    setYear(newYear);
+    const monthsInYear = activeMonths.filter(m => m.startsWith(newYear));
+    if (monthsInYear.length > 0) {
+      const latestInYear = monthsInYear[monthsInYear.length - 1];
+      setMonth(latestInYear);
+      setQuarter(Math.ceil(parseInt(latestInYear.slice(5, 7) || '1', 10) / 3) || 1);
+    } else {
+      setMonth(`${newYear}-01`);
+      setQuarter(1);
+    }
+  };
+
+  const handleMonthChange = (newMonth: string) => {
+    setMonth(newMonth);
+    if (/^\d{4}-\d{2}$/.test(newMonth)) {
+      const y = newMonth.slice(0, 4);
+      setYear(y);
+      setQuarter(Math.ceil(parseInt(newMonth.slice(5, 7), 10) / 3) || 1);
+    }
+  };
+
+  const starsData = useMemo(() => {
+    try {
+      return calculateStars(safeState, { year, quarter, month });
+    } catch (err) {
+      console.error('StarsView calculateStars error:', err);
+      return {
+        year,
+        month,
+        quarter,
+        monthStar: { month, stars: [], topPoints: 0, ranking: [] },
+        quarterStar: { year, quarter, months: [], stars: [], topPoints: 0, ranking: [] },
+        yearStar: { year, stars: [], topPoints: 0, ranking: [] },
+      };
+    }
+  }, [safeState, year, quarter, month]);
+
+  // 根据当前选择的排名模式，动态推导要聚合的目标月份列表
+  const rankingTargetMonths = useMemo(() => {
+    if (rankingMode === 'month') {
+      return [month];
+    }
+    if (rankingMode === 'quarter') {
+      const qMap: Record<number, string[]> = {
+        1: [`${year}-01`, `${year}-02`, `${year}-03`],
+        2: [`${year}-04`, `${year}-05`, `${year}-06`],
+        3: [`${year}-07`, `${year}-08`, `${year}-09`],
+        4: [`${year}-10`, `${year}-11`, `${year}-12`],
+      };
+      return qMap[quarter] || qMap[1];
+    }
+    if (rankingMode === 'year') {
+      return Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
+    }
+    // 区间排名
+    if (!rangeStart || !rangeEnd) return [month];
+    return getMonthsBetween(rangeStart <= rangeEnd ? rangeStart : rangeEnd, rangeStart <= rangeEnd ? rangeEnd : rangeStart);
+  }, [rankingMode, month, quarter, year, rangeStart, rangeEnd]);
+
+  // 调用底层精准算法计算全员排名列表
+  const fullRankingData = useMemo(() => {
+    try {
+      return rangeReport(safeState, {
+        months: rankingTargetMonths,
+        group: groupFilter,
+        search,
+        status: 'published',
+      });
+    } catch (err) {
+      console.error('StarsView rangeReport error:', err);
+      return [];
+    }
+  }, [safeState, rankingTargetMonths, groupFilter, search]);
+
+  // 专业组选项集合
+  const groupOptions = useMemo(() => {
+    const set = new Set<string>();
+    safeState.employees.forEach(e => {
+      if (e?.group) set.add(String(e.group));
+    });
+    return Array.from(set).sort();
+  }, [safeState.employees]);
+
+  // 当期/该周期人均基准绩点
+  const periodTotalPoints = useMemo(() => fullRankingData.reduce((acc, curr) => acc + curr.points, 0), [fullRankingData]);
+  const periodAvgPoints = fullRankingData.length > 0 ? Math.round(periodTotalPoints / fullRankingData.length) : 0;
+  const periodTopPoints = fullRankingData[0]?.points || 0;
+
+  // 模式标题与标签
+  const periodTitle = useMemo(() => {
+    if (rankingMode === 'month') return `${month} 月度全员绩效排行榜`;
+    if (rankingMode === 'quarter') return `${year} 第 ${quarter} 季度 (Q${quarter}) 全员绩效排行榜`;
+    if (rankingMode === 'year') return `${year} 全年度全员绩效排行榜`;
+    return `${rangeStart} 至 ${rangeEnd} 自定义区间全员绩效排行榜`;
+  }, [rankingMode, month, year, quarter, rangeStart, rangeEnd]);
+
+  // 导出榜单 CSV
+  const handleExportRankingCsv = async () => {
+    const header = ['名次,工号,姓名,专业组,职务,所属部门,参与项目数,获得总绩点,折合金额(万元),所属梯队,荣誉标识'];
+    fullRankingData.forEach((row, idx) => {
+      const rank = idx + 1;
+      const empNo = row.employee?.employeeNo || '-';
+      const name = row.employee?.name || row.employee?.id || '未命名';
+      const grp = row.employee?.group || '-';
+      const pos = row.employee?.position || '-';
+      const dept = row.employee?.department || '-';
+      const pts = score(row.points);
+      const wan = (row.points / 10000).toFixed(4);
+      const tier = idx < Math.ceil(fullRankingData.length * 0.15) ? 'Top 15% 卓越领航' : idx < Math.ceil(fullRankingData.length * 0.45) ? 'Top 45% 核心骨干' : '稳健中坚';
+      const honor = idx === 0 && row.points > 0
+        ? (rankingMode === 'month' ? '月度之星' : rankingMode === 'quarter' ? '季度之星' : rankingMode === 'year' ? '年度之星' : '区间榜首')
+        : (idx < 3 && row.points > 0 ? '优胜奖' : '合格');
+
+      header.push(`"${rank}","${empNo}","${name}","${grp}","${pos}","${dept}","${row.projectCount}","${pts}","${wan}","${tier}","${honor}"`);
+    });
+    const csv = '\uFEFF' + header.join('\n');
+    await triggerDownload(csv, `卓越绩星荣誉殿堂_${periodTitle.replace(/\s+/g, '_')}.csv`, 'text/csv');
+  };
 
   return (
     <div className="stars-container">
+      {/* 顶部荣誉大 Banner */}
       <div className="star-hero-banner">
         <div>
-          <h2><Crown size={28} />衡绩考核荣誉殿堂 · 績点之星</h2>
-          <p>月度之星、季度之星与年度之星表彰！唯有真实贡献，方得至高荣耀。</p>
+          <h2><Crown size={28} />衡绩考核荣誉殿堂 · 卓越绩星殿堂</h2>
+          <p>月度之星、季度之星、年度之星与多维周期全员绩效排名！唯有真实贡献，方得至高荣耀。</p>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <select value={year} onChange={e => setYear(e.target.value)} style={{ padding: '8px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', fontSize: '13px' }}>
-            <option value="2026" style={{ color: '#000' }}>2026 年</option>
-            <option value="2027" style={{ color: '#000' }}>2027 年</option>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {activeMonths.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.12)', padding: '5px 12px', borderRadius: '8px', fontSize: '12px' }}>
+              <span style={{ color: '#93c5fd' }}>活跃月份 ({activeMonths.length} 个):</span>
+              <select
+                value={activeMonths.includes(month) ? month : ''}
+                onChange={e => { if (e.target.value) handleMonthChange(e.target.value); }}
+                style={{ background: '#1e3a8a', color: '#fff', border: '1px solid #3b82f6', borderRadius: '6px', padding: '3px 8px', fontSize: '12px' }}
+              >
+                {!activeMonths.includes(month) && <option value="">选择已有数据月份...</option>}
+                {activeMonths.map(m => (
+                  <option key={m} value={m}>{m} (有分配)</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <select value={year} onChange={e => handleYearChange(e.target.value)} style={{ padding: '8px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', fontSize: '13px' }}>
+            {availableYears.map(y => (
+              <option key={y} value={y} style={{ color: '#000' }}>{y} 年</option>
+            ))}
           </select>
         </div>
       </div>
@@ -8637,55 +10189,74 @@ function StarsView({ state }: { state: State }) {
       {/* 三大荣誉台 (月度之星 / 季度之星 / 年度之星) */}
       <div className="podium-grid">
         {/* 月度之星 */}
-        <div className="podium-card gold">
+        <div className="podium-card gold" style={{ cursor: 'pointer' }} onClick={() => setRankingMode('month')}>
           <div className="podium-crown">🌟</div>
           <div className="podium-header">
-            <span>MONTHLY STAR</span>
-            <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ fontSize: '12px', border: '1px solid #cbd5cf', borderRadius: '6px', padding: '2px 6px' }} />
+            <span style={{ color: rankingMode === 'month' ? '#b45309' : undefined, fontWeight: 700 }}>
+              MONTHLY STAR {rankingMode === 'month' && '· 查看榜单中'}
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} onClick={e => e.stopPropagation()}>
+              <input type="month" value={month} onChange={e => handleMonthChange(e.target.value)} style={{ fontSize: '12px', border: '1px solid #cbd5cf', borderRadius: '6px', padding: '2px 6px' }} />
+            </div>
           </div>
           <div className="podium-name">
             {starsData.monthStar.stars.length > 0
-              ? starsData.monthStar.stars.map(s => s.employee.name).join('、')
+              ? starsData.monthStar.stars.map(s => s.employee?.name || s.employee?.employeeNo || s.employee?.id || '未命名').join('、')
               : '本月暂无之星'}
           </div>
           {starsData.monthStar.stars.length > 0 ? (
             <div className="podium-meta">
-              <GroupTag group={starsData.monthStar.stars[0].employee.group} />
-              <span>{starsData.monthStar.stars[0].employee.department}</span>
+              <GroupTag group={starsData.monthStar.stars[0]?.employee?.group} />
+              <span>{starsData.monthStar.stars[0]?.employee?.department || '第四研究室'}</span>
             </div>
           ) : (
-            <div className="podium-meta">暂无当月发布记录</div>
+            <div className="podium-meta" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span>暂无当月发布记录</span>
+              {activeMonths.length > 0 && !activeMonths.includes(month) && (
+                <button
+                  type="button"
+                  style={{ border: 'none', background: 'transparent', color: '#0284c7', padding: 0, fontSize: '11px', cursor: 'pointer', textAlign: 'left', textDecoration: 'underline' }}
+                  onClick={e => { e.stopPropagation(); handleMonthChange(activeMonths[activeMonths.length - 1]); }}
+                >
+                  切换至最新有数据月份 ({activeMonths[activeMonths.length - 1]})
+                </button>
+              )}
+            </div>
           )}
           <div className="podium-score">
             <div>
               <small>当月最高绩点</small>
               <strong>{score(starsData.monthStar.topPoints)}</strong>
             </div>
-            <small>月度之星荣誉称号</small>
+            <small>点击聚焦月度排行榜</small>
           </div>
         </div>
 
         {/* 季度之星 */}
-        <div className="podium-card gold">
+        <div className="podium-card gold" style={{ cursor: 'pointer' }} onClick={() => setRankingMode('quarter')}>
           <div className="podium-crown">🏆</div>
           <div className="podium-header">
-            <span>QUARTERLY STAR</span>
-            <select value={quarter} onChange={e => setQuarter(Number(e.target.value))} style={{ fontSize: '12px', border: '1px solid #cbd5cf', borderRadius: '6px', padding: '2px 6px' }}>
-              <option value={1}>第 1 季度 (Q1)</option>
-              <option value={2}>第 2 季度 (Q2)</option>
-              <option value={3}>第 3 季度 (Q3)</option>
-              <option value={4}>第 4 季度 (Q4)</option>
-            </select>
+            <span style={{ color: rankingMode === 'quarter' ? '#1d4ed8' : undefined, fontWeight: 700 }}>
+              QUARTERLY STAR {rankingMode === 'quarter' && '· 查看榜单中'}
+            </span>
+            <div onClick={e => e.stopPropagation()}>
+              <select value={quarter} onChange={e => setQuarter(Number(e.target.value))} style={{ fontSize: '12px', border: '1px solid #cbd5cf', borderRadius: '6px', padding: '2px 6px' }}>
+                <option value={1}>第 1 季度 (Q1)</option>
+                <option value={2}>第 2 季度 (Q2)</option>
+                <option value={3}>第 3 季度 (Q3)</option>
+                <option value={4}>第 4 季度 (Q4)</option>
+              </select>
+            </div>
           </div>
           <div className="podium-name">
             {starsData.quarterStar.stars.length > 0
-              ? starsData.quarterStar.stars.map(s => s.employee.name).join('、')
+              ? starsData.quarterStar.stars.map(s => s.employee?.name || s.employee?.employeeNo || s.employee?.id || '未命名').join('、')
               : '本季度暂无之星'}
           </div>
           {starsData.quarterStar.stars.length > 0 ? (
             <div className="podium-meta">
-              <GroupTag group={starsData.quarterStar.stars[0].employee.group} />
-              <span>{starsData.quarterStar.stars[0].employee.department}</span>
+              <GroupTag group={starsData.quarterStar.stars[0]?.employee?.group} />
+              <span>{starsData.quarterStar.stars[0]?.employee?.department || '第四研究室'}</span>
             </div>
           ) : (
             <div className="podium-meta">暂无当季发布记录</div>
@@ -8695,26 +10266,28 @@ function StarsView({ state }: { state: State }) {
               <small>季度累计绩点</small>
               <strong>{score(starsData.quarterStar.topPoints)}</strong>
             </div>
-            <small>季度之星荣誉称号</small>
+            <small>点击聚焦季度排行榜</small>
           </div>
         </div>
 
         {/* 年度之星 */}
-        <div className="podium-card gold">
+        <div className="podium-card gold" style={{ cursor: 'pointer' }} onClick={() => setRankingMode('year')}>
           <div className="podium-crown">👑</div>
           <div className="podium-header">
-            <span>ANNUAL STAR</span>
+            <span style={{ color: rankingMode === 'year' ? '#78350f' : undefined, fontWeight: 700 }}>
+              ANNUAL STAR {rankingMode === 'year' && '· 查看榜单中'}
+            </span>
             <Badge tone="purple">{year} 全年度</Badge>
           </div>
           <div className="podium-name">
             {starsData.yearStar.stars.length > 0
-              ? starsData.yearStar.stars.map(s => s.employee.name).join('、')
+              ? starsData.yearStar.stars.map(s => s.employee?.name || s.employee?.employeeNo || s.employee?.id || '未命名').join('、')
               : '年度之星虚位以待'}
           </div>
           {starsData.yearStar.stars.length > 0 ? (
             <div className="podium-meta">
-              <GroupTag group={starsData.yearStar.stars[0].employee.group} />
-              <span>{starsData.yearStar.stars[0].employee.department}</span>
+              <GroupTag group={starsData.yearStar.stars[0]?.employee?.group} />
+              <span>{starsData.yearStar.stars[0]?.employee?.department || '第四研究室'}</span>
             </div>
           ) : (
             <div className="podium-meta">全年在评定中</div>
@@ -8724,67 +10297,380 @@ function StarsView({ state }: { state: State }) {
               <small>年度累计总绩点</small>
               <strong>{score(starsData.yearStar.topPoints)}</strong>
             </div>
-            <small>年度之星桂冠</small>
+            <small>点击聚焦年度排行榜</small>
           </div>
         </div>
       </div>
 
-      {/* 当期排行榜 */}
-      <div className="panel full">
-        <div className="panel-title">
+      {/* 核心升级：全员绩点与考核之星一体化排行榜 (支持月度、季度、年度、区间四大模式) */}
+      <div className="panel full" style={{ border: '1px solid #e2e8f0', borderRadius: '16px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
+        {/* 顶部主控条：四大排名模式切换 + 导出按钮 */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '16px', marginBottom: '16px' }}>
           <div>
-            <span>FULL RANKING</span>
-            <h2>{month} 月度考核全员排行榜</h2>
+            <span className="eyebrow" style={{ fontSize: '11px', color: '#64748b', margin: 0 }}>
+              HONOR HALL & FULL RANKING
+            </span>
+            <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: '2px 0 0' }}>
+              {periodTitle}
+            </h2>
           </div>
-          <button className="secondary" onClick={() => triggerDownload(exportPeriodReportCsv(starsData.monthStar.ranking, `${month}月度`), `考核之星榜单-${month}.csv`)}>
-            <Download size={14} />导出榜单
-          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {/* 四大维度切换 */}
+            <div style={{ display: 'flex', gap: '4px', background: '#f1f5f9', padding: '4px', borderRadius: '10px' }}>
+              <button
+                type="button"
+                style={{
+                  border: 'none',
+                  background: rankingMode === 'month' ? '#ffffff' : 'transparent',
+                  color: rankingMode === 'month' ? '#059669' : '#64748b',
+                  fontWeight: rankingMode === 'month' ? 700 : 500,
+                  padding: '6px 14px',
+                  borderRadius: '7px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  boxShadow: rankingMode === 'month' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                }}
+                onClick={() => setRankingMode('month')}
+              >
+                🌟 月度排名
+              </button>
+              <button
+                type="button"
+                style={{
+                  border: 'none',
+                  background: rankingMode === 'quarter' ? '#ffffff' : 'transparent',
+                  color: rankingMode === 'quarter' ? '#2563eb' : '#64748b',
+                  fontWeight: rankingMode === 'quarter' ? 700 : 500,
+                  padding: '6px 14px',
+                  borderRadius: '7px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  boxShadow: rankingMode === 'quarter' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                }}
+                onClick={() => setRankingMode('quarter')}
+              >
+                🏆 季度排名
+              </button>
+              <button
+                type="button"
+                style={{
+                  border: 'none',
+                  background: rankingMode === 'year' ? '#ffffff' : 'transparent',
+                  color: rankingMode === 'year' ? '#d97706' : '#64748b',
+                  fontWeight: rankingMode === 'year' ? 700 : 500,
+                  padding: '6px 14px',
+                  borderRadius: '7px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  boxShadow: rankingMode === 'year' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                }}
+                onClick={() => setRankingMode('year')}
+              >
+                👑 年度排名
+              </button>
+              <button
+                type="button"
+                style={{
+                  border: 'none',
+                  background: rankingMode === 'range' ? '#ffffff' : 'transparent',
+                  color: rankingMode === 'range' ? '#7c3aed' : '#64748b',
+                  fontWeight: rankingMode === 'range' ? 700 : 500,
+                  padding: '6px 14px',
+                  borderRadius: '7px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  boxShadow: rankingMode === 'range' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                }}
+                onClick={() => setRankingMode('range')}
+              >
+                📅 自定义区间排名
+              </button>
+            </div>
+
+            <button
+              className="secondary"
+              style={{ padding: '6px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              onClick={handleExportRankingCsv}
+            >
+              <Download size={14} />导出榜单 CSV
+            </button>
+          </div>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>排名</th>
-              <th>员工</th>
-              <th>专业组</th>
-              <th>所属部门</th>
-              <th>参与项目数</th>
-              <th>当期绩点</th>
-              <th>荣誉标识</th>
-            </tr>
-          </thead>
-          <tbody>
-            {starsData.monthStar.ranking.map((row, index) => {
-              const isStar = starsData.monthStar.topPoints > 0 && row.points === starsData.monthStar.topPoints;
-              return (
-                <tr key={row.employee.id} style={isStar ? { background: '#fefce8' } : undefined}>
-                  <td>
-                    {index === 0 ? <b style={{ color: '#ca8a04', fontSize: '15px' }}>🥇 1</b> :
-                     index === 1 ? <b style={{ color: '#64748b', fontSize: '14px' }}>🥈 2</b> :
-                     index === 2 ? <b style={{ color: '#b45309', fontSize: '14px' }}>🥉 3</b> :
-                     <b className="rank">{index + 1}</b>}
-                  </td>
-                  <td><b>{row.employee.name}</b></td>
-                  <td><GroupTag group={row.employee.group} /></td>
-                  <td>{row.employee.department}</td>
-                  <td>{row.projectCount} 个项目</td>
-                  <td style={{ color: '#166534', fontWeight: 700, fontSize: '14px' }}>
-                    {score(row.points)}
-                  </td>
-                  <td>
-                    {isStar ? (
-                      <Badge tone="amber">🌟 月度之星</Badge>
-                    ) : index < 3 && row.points > 0 ? (
-                      <Badge tone="blue">优胜奖</Badge>
-                    ) : (
-                      <span style={{ color: '#94a3b8', fontSize: '11px' }}>合格</span>
-                    )}
+
+        {/* 筛选与参数配置条 */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', background: '#f8fafc', padding: '12px 16px', borderRadius: '12px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* 模式专属参数选择 */}
+            {rankingMode === 'month' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+                <span style={{ color: '#475569', fontWeight: 600 }}>考核月份:</span>
+                <input
+                  type="month"
+                  value={month}
+                  onChange={e => handleMonthChange(e.target.value)}
+                  style={{ height: 32, fontSize: '13px', borderRadius: 6, border: '1px solid #cbd5e1', padding: '0 8px' }}
+                />
+              </div>
+            )}
+
+            {rankingMode === 'quarter' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+                <span style={{ color: '#475569', fontWeight: 600 }}>考核季度:</span>
+                <select
+                  value={year}
+                  onChange={e => handleYearChange(e.target.value)}
+                  style={{ height: 32, fontSize: '13px', borderRadius: 6, border: '1px solid #cbd5e1', padding: '0 8px' }}
+                >
+                  {availableYears.map(y => <option key={y} value={y}>{y} 年</option>)}
+                </select>
+                <select
+                  value={quarter}
+                  onChange={e => setQuarter(Number(e.target.value))}
+                  style={{ height: 32, fontSize: '13px', borderRadius: 6, border: '1px solid #cbd5e1', padding: '0 8px' }}
+                >
+                  <option value={1}>第 1 季度 (Q1)</option>
+                  <option value={2}>第 2 季度 (Q2)</option>
+                  <option value={3}>第 3 季度 (Q3)</option>
+                  <option value={4}>第 4 季度 (Q4)</option>
+                </select>
+              </div>
+            )}
+
+            {rankingMode === 'year' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+                <span style={{ color: '#475569', fontWeight: 600 }}>考核年度:</span>
+                <select
+                  value={year}
+                  onChange={e => handleYearChange(e.target.value)}
+                  style={{ height: 32, fontSize: '13px', borderRadius: 6, border: '1px solid #cbd5e1', padding: '0 8px' }}
+                >
+                  {availableYears.map(y => <option key={y} value={y}>{y} 全年度</option>)}
+                </select>
+              </div>
+            )}
+
+            {rankingMode === 'range' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+                <span style={{ color: '#475569', fontWeight: 600 }}>区间范围:</span>
+                <input
+                  type="month"
+                  value={rangeStart}
+                  onChange={e => setRangeStart(e.target.value)}
+                  style={{ height: 32, fontSize: '13px', borderRadius: 6, border: '1px solid #cbd5e1', padding: '0 6px' }}
+                />
+                <span style={{ color: '#94a3b8' }}>至</span>
+                <input
+                  type="month"
+                  value={rangeEnd}
+                  onChange={e => setRangeEnd(e.target.value)}
+                  style={{ height: 32, fontSize: '13px', borderRadius: 6, border: '1px solid #cbd5e1', padding: '0 6px' }}
+                />
+              </div>
+            )}
+
+            {/* 专业组筛选 */}
+            {groupOptions.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+                <Filter size={14} color="#64748b" />
+                <select
+                  value={groupFilter}
+                  onChange={e => setGroupFilter(e.target.value)}
+                  style={{ height: 32, fontSize: '13px', borderRadius: 6, border: '1px solid #cbd5e1', padding: '0 8px' }}
+                >
+                  <option value="all">全部专业组 ({safeState.employees.length}人)</option>
+                  {groupOptions.map(g => (
+                    <option key={g} value={g}>{g} ({safeState.employees.filter(e => e?.group === g).length}人)</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* 搜索框 */}
+            <div style={{ position: 'relative', width: 220 }}>
+              <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input
+                type="text"
+                placeholder="搜索员工姓名/工号/职务…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ width: '100%', paddingLeft: 28, fontSize: '12.5px', height: 32, borderRadius: 6, border: '1px solid #cbd5e1' }}
+              />
+              {search && (
+                <button
+                  style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  onClick={() => setSearch('')}
+                >
+                  <X size={13} color="#94a3b8" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 宏观指标卡 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12px', color: '#64748b' }}>
+            <div>参评全员: <strong style={{ color: '#0f172a', fontSize: '13px' }}>{fullRankingData.length}</strong> 人</div>
+            <div>榜首最高: <strong style={{ color: '#059669', fontSize: '13px' }}>{score(periodTopPoints)}</strong> 绩点</div>
+            <div>人均基准: <strong style={{ color: '#0284c7', fontSize: '13px' }}>{score(periodAvgPoints)}</strong> 绩点</div>
+          </div>
+        </div>
+
+        {/* 详细全员排行榜表格 */}
+        <div style={{ overflowX: 'auto' }}>
+          <table className="table" style={{ width: '100%', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ background: '#f8fafc' }}>
+                <th style={{ width: '65px', textAlign: 'center' }}>名次</th>
+                <th style={{ width: '85px' }}>工号</th>
+                <th>员工姓名</th>
+                <th>专业组</th>
+                <th>职务</th>
+                <th>所属部门</th>
+                <th style={{ textAlign: 'center' }}>参与项目数</th>
+                <th style={{ textAlign: 'right' }}>总获得绩点</th>
+                <th style={{ textAlign: 'right' }}>折合金额</th>
+                <th>与人均对比</th>
+                <th style={{ textAlign: 'center' }}>所属梯队</th>
+                <th style={{ textAlign: 'center' }}>荣誉称号</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fullRankingData.length === 0 ? (
+                <tr>
+                  <td colSpan={12} style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
+                    该周期暂无已发布的绩效分配记录。
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ) : (
+                fullRankingData.map((row, index) => {
+                  const empName = row.employee?.name || row.employee?.employeeNo || row.employee?.id || '未命名员工';
+                  const empNo = row.employee?.employeeNo || '-';
+                  const diff = row.points - periodAvgPoints;
+                  const tier = index < Math.ceil(fullRankingData.length * 0.15) ? 'Top 15% 卓越领航' : index < Math.ceil(fullRankingData.length * 0.45) ? 'Top 45% 核心骨干' : '稳健中坚';
+                  const tierColor = index < Math.ceil(fullRankingData.length * 0.15) ? '#e11d48' : index < Math.ceil(fullRankingData.length * 0.45) ? '#0284c7' : '#64748b';
+                  const isTopStar = index === 0 && row.points > 0;
+                  const wan = (row.points / 10000).toFixed(4);
+
+                  return (
+                    <tr
+                      key={row.employee?.id || `rank_row_${index}`}
+                      style={{
+                        background: isTopStar ? '#fefce8' : undefined,
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => setInspectRow(row)}
+                      title="点击查看该员工在本周期的详细项目分配流水"
+                    >
+                      <td style={{ textAlign: 'center', fontWeight: index < 3 ? 800 : 500, fontSize: index < 3 ? '15px' : '13px' }}>
+                        {index === 0 ? '🥇 1' : index === 1 ? '🥈 2' : index === 2 ? '🥉 3' : index + 1}
+                      </td>
+                      <td style={{ fontFamily: 'monospace', color: '#0369a1', fontSize: '12px' }}>
+                        {empNo}
+                      </td>
+                      <td style={{ fontWeight: 700, color: '#0f172a' }}>
+                        {empName}
+                      </td>
+                      <td><GroupTag group={row.employee?.group} /></td>
+                      <td>{row.employee?.position || '-'}</td>
+                      <td>{row.employee?.department || '第四研究室'}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 600 }}>
+                        {row.projectCount} 项
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 800, color: row.points > 0 ? '#166534' : '#94a3b8', fontSize: '14px' }}>
+                        {score(row.points)}
+                      </td>
+                      <td style={{ textAlign: 'right', color: '#475569' }}>
+                        {wan} 万元
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '90px', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div
+                              style={{
+                                width: `${Math.min(100, Math.max(5, (row.points / (periodTopPoints || 1)) * 100))}%`,
+                                height: '100%',
+                                background: index < 3 ? '#f59e0b' : '#059669',
+                              }}
+                            />
+                          </div>
+                          <span style={{ fontSize: '11px', color: diff >= 0 ? '#059669' : '#94a3b8' }}>
+                            {diff >= 0 ? `+${score(diff)}` : score(diff)}
+                          </span>
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span style={{ fontSize: '11.5px', color: tierColor, fontWeight: 600, background: '#f8fafc', padding: '2px 8px', borderRadius: '4px' }}>
+                          {tier}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {isTopStar ? (
+                          <Badge tone="amber">
+                            {rankingMode === 'month' ? '🌟 月度之星' : rankingMode === 'quarter' ? '🏆 季度之星' : rankingMode === 'year' ? '👑 年度之星' : '🏅 区间榜首'}
+                          </Badge>
+                        ) : index < 3 && row.points > 0 ? (
+                          <Badge tone="blue">优胜奖</Badge>
+                        ) : (
+                          <span style={{ color: '#94a3b8', fontSize: '11px' }}>合格</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      {/* 成员明细穿透弹窗 */}
+      {inspectRow && (
+        <Modal
+          title={`【${inspectRow.employee?.name || inspectRow.employee?.employeeNo || inspectRow.employee?.id || '员工'}】在 ${periodTitle} 的绩效明细`}
+          onClose={() => setInspectRow(null)}
+          wide={true}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', gap: '18px', background: '#f8fafc', padding: '12px 16px', borderRadius: '10px', fontSize: '13px' }}>
+              <div>工号: <strong style={{ color: '#0369a1' }}>{inspectRow.employee?.employeeNo || '-'}</strong></div>
+              <div>专业组: <strong>{inspectRow.employee?.group || '-'}</strong></div>
+              <div>部门: <strong>{inspectRow.employee?.department || '-'}</strong></div>
+              <div>周期斩获总绩点: <strong style={{ color: '#059669', fontSize: '15px' }}>{score(inspectRow.points)}</strong></div>
+            </div>
+
+            <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+              <table className="table" style={{ width: '100%', fontSize: '12.5px' }}>
+                <thead>
+                  <tr style={{ background: '#f1f5f9' }}>
+                    <th>项目名称</th>
+                    <th>工作令号</th>
+                    <th>归属月份</th>
+                    <th style={{ textAlign: 'right' }}>分配绩点</th>
+                    <th style={{ textAlign: 'right' }}>分配比例</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(inspectRow.details || []).map((d: any, idx: number) => (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: 600 }}>{d.project}</td>
+                      <td style={{ fontFamily: 'monospace', color: '#0369a1' }}>{d.code || '-'}</td>
+                      <td>{d.month}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>{score(d.points)}</td>
+                      <td style={{ textAlign: 'right' }}>{(d.rate / 100).toFixed(2)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+              <button className="secondary" onClick={() => setInspectRow(null)}>
+                关闭窗口
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -9536,34 +11422,6 @@ function DataIoView({
               </button>
             </div>
           </div>
-
-          {/* 绩效核算员协同看板指引 */}
-          <div className="backup-card" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-              <h4 style={{ margin: 0, fontSize: '15px', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Calculator size={16} color="#15803d" />
-                绩效核算员全盘汇总通道
-              </h4>
-              <Badge tone="green">核算员专享</Badge>
-            </div>
-            <p style={{ fontSize: '12.5px', color: '#475569', margin: '0 0 14px', lineHeight: 1.5 }}>
-              绩效核算员在收到各项目负责人提交的数据包后，可在【绩效核算中心】一键批量导入，系统将自动汇总全项目全员绩点、生成全部门合同额度大盘、计算全员位次排名以及评选月/季/年度之星。
-            </p>
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', background: '#ffffff', padding: '10px 14px', borderRadius: '8px', marginBottom: '14px', fontSize: '12px', border: '1px solid #dcfce7' }}>
-              <span>汇总看板: <b>全员下钻档案</b></span>
-              <span>合同分析: <b>全部门大盘监控</b></span>
-              <span>荣誉殿堂: <b>月/季/年度之星</b></span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <button
-                className="secondary"
-                style={{ color: '#166534', borderColor: '#86efac', background: '#fff', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                onClick={() => onNavigateAuditor && onNavigateAuditor()}
-              >
-                <Calculator size={14} />前往绩效核算中心
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -9914,7 +11772,6 @@ function SaveGroupQuickModal({
   onClose(): void;
   onSave(group: ProjectGroup): void;
 }) {
-  if (!isOpen) return null;
   const [name, setName] = useState(initialName || '');
   const [type, setType] = useState<string>(initialType || '项目组');
   const [leaderId, setLeaderId] = useState(initialLeader || memberIds[0] || '');
@@ -9941,6 +11798,8 @@ function SaveGroupQuickModal({
     onSave(newGroup);
     onClose();
   };
+
+  if (!isOpen) return null;
 
   return (
     <Modal title="💾 存为常用项目组 / 分配模版" subtitle={`将当前包含的 ${memberIds.length} 名成员及配置存入项目组库，方便后续随时一键复用`} onClose={onClose}>

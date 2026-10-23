@@ -73,7 +73,13 @@ export type Plan = {
 };
 
 export type Audit = { id: string; at: string; actor: string; action: string; target: string };
-export type State = { employees: Employee[]; projects: Project[]; plans: Plan[]; audit: Audit[] };
+export type State = {
+  employees: Employee[];
+  projects: Project[];
+  plans: Plan[];
+  audit: Audit[];
+  auditorPackages?: ProjectMeritPackage[];
+};
 export type Command = { type: string; data: any };
 
 export const emptyState = (): State => ({ employees: [], projects: [], plans: [], audit: [] });
@@ -88,7 +94,11 @@ export function integer(value: unknown, label: string, min = 0, max = SCALE): nu
 }
 export const total = (values: number[]) => values.reduce((sum, value) => sum + value, 0);
 export const range = (contract: number): [number, number] => contract < 50_000_000 ? [6000, 9000] : contract < 500_000_000 ? [3000, 6000] : [1000, 3000];
-export const points = (amount: number, rate: number) => Number((BigInt(amount) * BigInt(rate) + 5000n) / 10000n);
+export const points = (amount: number, rate: number) => {
+  const safeAmount = BigInt(Math.round(Number(amount) || 0));
+  const safeRate = BigInt(Math.round(Number(rate) || 0));
+  return Number((safeAmount * safeRate + 5000n) / 10000n);
+};
 export const pct = (rate: number) => `${(rate / 100).toFixed(2).replace(/\.00$/, '')}%`;
 export const wan = (fen: number) => (fen / 1_000_000).toLocaleString('zh-CN', { maximumFractionDigits: 6 });
 export const score = (fen: number) => (fen / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -172,9 +182,11 @@ export function toRate(value: unknown): number {
 
 // Largest-remainder allocation keeps every monthly amount exact to the cent.
 export function allocate(amount: number, entries: PlanEntry[]) {
-  if (total(entries.map(entry => entry.rate)) !== SCALE) fail('当月项目组成员分配比例之和必须等于 100%');
+  if (!entries || entries.length === 0) return [];
+  const safeAmount = Math.round(Number(amount) || 0);
+  const totalRate = total(entries.map(entry => Math.round(Number(entry.rate) || 0)));
   const rows = entries.map((entry, index) => {
-    const raw = BigInt(amount) * BigInt(entry.rate);
+    const raw = BigInt(safeAmount) * BigInt(Math.round(Number(entry.rate) || 0));
     return {
       employeeId: entry.employeeId,
       points: Number(raw / 10000n),
@@ -184,24 +196,52 @@ export function allocate(amount: number, entries: PlanEntry[]) {
       workContent: entry.workContent || ''
     };
   });
-  const missing = amount - total(rows.map(row => row.points));
-  const order = [...rows].sort((a, b) => b.remainder - a.remainder || a.index - b.index);
-  for (let index = 0; index < missing; index += 1) order[index % order.length].points += 1;
+  if (totalRate === SCALE) {
+    const missing = safeAmount - total(rows.map(row => row.points));
+    const order = [...rows].sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+    if (order.length > 0) {
+      for (let index = 0; index < missing; index += 1) order[index % order.length].points += 1;
+    }
+  }
   return rows.map(({ employeeId, points, rate, workContent }) => ({ employeeId, points, rate, workContent }));
 }
 
 export function planAllocations(project: Project, plan: Plan) {
-  return allocate(monthAmount(project, plan), plan.entries);
+  if (!project || !plan) return [];
+  if (Array.isArray(plan.records) && plan.records.length > 0) {
+    return plan.records.map(r => ({
+      employeeId: r.employeeId,
+      points: Math.round(Number(r.points) || 0),
+      rate: plan.entries?.find(e => e.employeeId === r.employeeId)?.rate || 0,
+      workContent: plan.entries?.find(e => e.employeeId === r.employeeId)?.workContent || '',
+    }));
+  }
+  try {
+    return allocate(monthAmount(project, plan), plan.entries || []);
+  } catch {
+    const safeAmt = monthAmount(project, plan);
+    return (plan.entries || []).map(entry => ({
+      employeeId: entry.employeeId,
+      points: points(safeAmt, entry.rate || 0),
+      rate: entry.rate || 0,
+      workContent: entry.workContent || '',
+    }));
+  }
 }
 
 export function projectBudgetRate(state: State, projectId: string) {
-  return total(state.plans.filter(plan => plan.projectId === projectId).map(plan => plan.budget));
+  const safePlans = Array.isArray(state?.plans) ? state.plans : [];
+  return total(safePlans.filter(plan => plan.projectId === projectId).map(plan => plan.budget || 0));
 }
 
 export function ownerSummary(state: State, project: Project) {
-  const allocated = total(state.plans.filter(plan => plan.projectId === project.id).map(plan => planAllocations(project, plan).find(row => row.employeeId === project.owner)?.points ?? 0));
-  const rate = project.contract ? Number((BigInt(allocated) * 10000n + BigInt(Math.floor(project.contract / 2))) / BigInt(project.contract)) : 0;
-  const [low, high] = range(project.contract);
+  if (!project) return { allocated: 0, rate: 0, low: 0, high: 0, valid: true };
+  const safePlans = Array.isArray(state?.plans) ? state.plans : [];
+  const allocated = total(safePlans.filter(plan => plan.projectId === project.id).map(plan => planAllocations(project, plan).find(row => row.employeeId === project.owner)?.points ?? 0));
+  const safeContract = BigInt(Math.round(Number(project.contract) || 0));
+  const safeAllocated = BigInt(Math.round(Number(allocated) || 0));
+  const rate = safeContract > 0n ? Number((safeAllocated * 10000n + safeContract / 2n) / safeContract) : 0;
+  const [low, high] = range(Number(safeContract));
   return { allocated, rate, low, high, valid: rate >= low && rate <= high };
 }
 
@@ -1516,7 +1556,11 @@ export function rangeReport(state: State, options: {
   search?: string;
   status?: 'published' | 'all';
 }) {
-  const { startMonth, endMonth, months, group, search, status = 'published' } = options;
+  const { startMonth, endMonth, months, group, search, status = 'published' } = options || {};
+
+  const safePlans = Array.isArray(state?.plans) ? state.plans : [];
+  const safeEmployees = Array.isArray(state?.employees) ? state.employees.filter(Boolean) : [];
+  const safeProjects = Array.isArray(state?.projects) ? state.projects : [];
 
   let targetMonths: string[] = [];
   if (months && months.length > 0) {
@@ -1526,31 +1570,41 @@ export function rangeReport(state: State, options: {
   } else if (startMonth) {
     targetMonths = [startMonth];
   } else {
-    targetMonths = Array.from(new Set(state.plans.map(p => p.month))).sort();
+    targetMonths = Array.from(new Set(safePlans.map(p => p.month).filter(Boolean))).sort();
   }
 
-  const filteredEmployees = state.employees.filter(emp => {
+  const filteredEmployees = safeEmployees.filter(emp => {
+    if (!emp) return false;
     if (group && group !== 'all' && emp.group !== group) return false;
-    if (search && !(emp.name + emp.department + (emp.group || '')).toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      const txt = ((emp.name || '') + (emp.department || '') + (emp.group || '') + (emp.employeeNo || '') + (emp.position || '')).toLowerCase();
+      if (!txt.includes(q)) return false;
+    }
     return true;
   });
 
   return filteredEmployees.map(employee => {
-    const details = state.plans
-      .filter(plan => targetMonths.includes(plan.month) && (status === 'all' || plan.status === 'published'))
+    const details = safePlans
+      .filter(plan => plan && targetMonths.includes(plan.month) && (status === 'all' || plan.status === 'published'))
       .flatMap(plan => {
-        const project = state.projects.find(item => item.id === plan.projectId);
+        const project = safeProjects.find(item => item && item.id === plan.projectId);
         if (!project) return [];
-        const allocated = planAllocations(project, plan).find(row => row.employeeId === employee.id)?.points ?? 0;
-        const entry = plan.entries.find(row => row.employeeId === employee.id);
-        return allocated > 0 && entry ? [{
+        let allocated = 0;
+        try {
+          allocated = planAllocations(project, plan).find(row => row.employeeId === employee.id)?.points ?? 0;
+        } catch {
+          allocated = 0;
+        }
+        const entry = Array.isArray(plan.entries) ? plan.entries.find(row => row.employeeId === employee.id) : undefined;
+        return allocated > 0 ? [{
           projectId: project.id,
-          project: project.name,
-          code: project.code,
+          project: project.name || '未命名项目',
+          code: project.code || '',
           month: plan.month,
           status: plan.status,
-          budget: plan.budget,
-          rate: entry.rate,
+          budget: plan.budget || 0,
+          rate: entry?.rate || 0,
           points: allocated,
         }] : [];
       });
@@ -1572,12 +1626,18 @@ export function rangeReport(state: State, options: {
 
 // 需求5：评出月度之星，季度之星，年度之星
 export function calculateStars(state: State, options: { year: string; quarter?: number; month?: string }) {
-  const year = options.year || '2026';
-  const month = options.month || `${year}-01`;
-  const quarter = options.quarter || 1;
+  const safeState: State = {
+    employees: Array.isArray(state?.employees) ? state.employees : [],
+    projects: Array.isArray(state?.projects) ? state.projects : [],
+    plans: Array.isArray(state?.plans) ? state.plans : [],
+    audit: Array.isArray(state?.audit) ? state.audit : [],
+  };
+  const year = options?.year || '2026';
+  const month = options?.month || `${year}-01`;
+  const quarter = options?.quarter || 1;
 
   // 1. 月度之星：该月绩点最高
-  const monthReport = rangeReport(state, { months: [month], status: 'published' });
+  const monthReport = rangeReport(safeState, { months: [month], status: 'published' });
   const topMonthPoints = monthReport[0]?.points || 0;
   const monthStars = topMonthPoints > 0 ? monthReport.filter(r => r.points === topMonthPoints) : [];
 
@@ -1589,13 +1649,13 @@ export function calculateStars(state: State, options: { year: string; quarter?: 
     4: [`${year}-10`, `${year}-11`, `${year}-12`],
   };
   const qMonths = qMonthsMap[quarter] || qMonthsMap[1];
-  const quarterReport = rangeReport(state, { months: qMonths, status: 'published' });
+  const quarterReport = rangeReport(safeState, { months: qMonths, status: 'published' });
   const topQuarterPoints = quarterReport[0]?.points || 0;
   const quarterStars = topQuarterPoints > 0 ? quarterReport.filter(r => r.points === topQuarterPoints) : [];
 
   // 3. 年度之星：整年度12个月累计最高
   const yearMonths = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
-  const yearReport = rangeReport(state, { months: yearMonths, status: 'published' });
+  const yearReport = rangeReport(safeState, { months: yearMonths, status: 'published' });
   const topYearPoints = yearReport[0]?.points || 0;
   const yearStars = topYearPoints > 0 ? yearReport.filter(r => r.points === topYearPoints) : [];
 
@@ -2466,10 +2526,115 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.6.3';
-export const APP_BUILD = '20261021';
+export const APP_VERSION = '0.7.2';
+export const APP_BUILD = '20261023';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
+
+// 官方代码与发布仓库
+export const GITHUB_REPO = 'zoufudun/hengji';
+export const GITHUB_REPO_URL = 'https://github.com/zoufudun/hengji';
+export const GITHUB_RELEASES_URL = 'https://github.com/zoufudun/hengji/releases';
+
+export interface UpdateCheckResult {
+  hasUpdate: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  releaseName: string;
+  releaseNotes: string;
+  publishedAt: string;
+  downloadUrl: string;
+  htmlUrl: string;
+  checkedAt: string;
+  error?: string;
+}
+
+export function compareSemver(v1: string, v2: string): number {
+  const p1 = (v1 || '').trim().replace(/^[vV]/, '').split('.').map(n => parseInt(n, 10) || 0);
+  const p2 = (v2 || '').trim().replace(/^[vV]/, '').split('.').map(n => parseInt(n, 10) || 0);
+  const len = Math.max(p1.length, p2.length, 3);
+  for (let i = 0; i < len; i++) {
+    const a = p1[i] || 0;
+    const b = p2[i] || 0;
+    if (a > b) return 1;
+    if (a < b) return -1;
+  }
+  return 0;
+}
+
+export async function checkAppUpdate(currentVersion = APP_VERSION): Promise<UpdateCheckResult> {
+  const checkedAt = new Date().toLocaleString();
+  const defaultResult: UpdateCheckResult = {
+    hasUpdate: false,
+    currentVersion,
+    latestVersion: currentVersion,
+    releaseName: '',
+    releaseNotes: '',
+    publishedAt: '',
+    downloadUrl: GITHUB_RELEASES_URL,
+    htmlUrl: GITHUB_RELEASES_URL,
+    checkedAt,
+  };
+
+  try {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeout = controller ? setTimeout(() => controller.abort(), 9000) : null;
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+      signal: controller ? controller.signal : undefined,
+      headers: {
+        'Accept': 'application/vnd.github.v3+json',
+      },
+      cache: 'no-cache',
+    });
+    if (timeout) clearTimeout(timeout);
+
+    if (res.status === 404) {
+      return {
+        ...defaultResult,
+        error: '暂无可用的线上发行版本（官方正在准备首发 Release）',
+      };
+    }
+
+    if (!res.ok) {
+      throw new Error(`GitHub 响应异常 (HTTP ${res.status})`);
+    }
+
+    const data = await res.json();
+    const tagName = String(data.tag_name || '').trim();
+    const cleanTag = tagName.replace(/^[vV]/, '');
+    const releaseName = String(data.name || tagName);
+    const releaseNotes = String(data.body || '该版本暂无详细说明。');
+    const publishedAt = data.published_at ? new Date(data.published_at).toLocaleDateString() : '';
+    const htmlUrl = data.html_url || `${GITHUB_REPO_URL}/releases/tag/${tagName}`;
+
+    let downloadUrl = htmlUrl;
+    if (Array.isArray(data.assets) && data.assets.length > 0) {
+      const exeAsset = data.assets.find((a: any) => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.exe'));
+      if (exeAsset && exeAsset.browser_download_url) {
+        downloadUrl = exeAsset.browser_download_url;
+      }
+    }
+
+    const hasUpdate = compareSemver(cleanTag, currentVersion) > 0;
+
+    return {
+      hasUpdate,
+      currentVersion,
+      latestVersion: cleanTag || currentVersion,
+      releaseName,
+      releaseNotes,
+      publishedAt,
+      downloadUrl,
+      htmlUrl,
+      checkedAt,
+    };
+  } catch (err: any) {
+    return {
+      ...defaultResult,
+      error: `检查更新失败: ${err.message || '网络连接超时，请检查是否能正常访问 GitHub'}`,
+    };
+  }
+}
 
 export type VersionUpdate = {
   version: string;
@@ -2480,6 +2645,43 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.7.2',
+    date: '2026-10-23',
+    tag: '重大更新',
+    title: '卓越绩星荣誉殿堂重磅升级、全景工作区严格物理隔离与在线版本更新支持',
+    items: [
+      '【系统在线更新与检测】新增在线检测版本更新机制与升级下载通道，直连 GitHub Releases 官方仓库，一键检测最新发行版本并提供在线下载与更新日志查阅。',
+      '【考核之星殿堂优美升华 · 卓越绩星荣誉殿堂】殿堂全面升级命名为“卓越绩星荣誉殿堂”，修复组件图标依赖异常，上半区展示月度/季度/年度三大荣誉勋章金卡展台，下半区无缝承接月度、季度、年度与自定义区间四大统计维度的全景排行榜。',
+      '【综合管理工作区与核算员工作区彻底隔离】严格划分职责边界，综合管理工作区剥离核算员专区内容与跨部门数据归集通道，纯粹聚焦项目全周期管理、月度分配、团队编制与全景分析；核算员工作区独立呈现专属数据包导入与全盘多维透视矩阵。',
+      '【全景合同矩阵与高端专业导航体系】“部门合同额度大盘”全面升级命名为“全景合同矩阵”，侧边栏及所有标签页全面升级为更具美感的殿堂级专业命名，美化侧边栏分类微胶囊与微光细线。',
+      '【防解包崩溃与错误边界全域加固】对荣誉殿堂计算实施多层级可选链安全访问与 try/catch 隔离保护，增强多数据包合并中跨项目组员姓名的严格映射，彻底杜绝渲染与计算异常。'
+    ]
+  },
+  {
+    version: 'v0.7.1',
+    date: '2026-10-22',
+    tag: '重大更新',
+    title: '核算员总览看板风格对齐、数据导入独立页面与考核之星殿堂尊贵重构',
+    items: [
+      '【核算员总览看板保持图1经典排版】严格按照系统总览大盘风格，提供柔和浅绿 Hero 大横幅、核心考核规则卡片、4项核心指标大卡、左列“本月之星与年度领跑”以及右列“个人绩点前五名”优雅布局。',
+      '【数据导入独立成页与清单管理】将原置于汇总顶部的操作栏、智能拖拽识别区、已导入项目数据包清单与4大指标卡单独放置为一个全新独立导航与页面【数据导入】，支持高效批量导入、清单查看与移除清空。',
+      '【导航细目页面全面纯净化】“部门全员汇总”、“部门合同额度大盘”、“全员绩点排名”、“考核之星殿堂”、“全项目二维透视”、“全量流水明细”等导航项全面去除导入操作条与统计卡，直接呈现纯粹干净的报表内容。',
+      '【考核之星殿堂尊贵升级为图5样式】更名为【考核之星殿堂】，全面重构为深绿尊贵荣誉横幅、月度之星金卡+月份选择器、季度之星金卡+季度选择器、年度之星金卡及全员考核榜单，与图5完全一致。'
+    ]
+  },
+  {
+    version: 'v0.7.0',
+    date: '2026-10-22',
+    tag: '重大更新',
+    title: '核算员工作区全面重构、多数据包拖拽识别与全生命周期持久化升级',
+    items: [
+      '【多数据包批量导入与智能拖拽识别】支持在核算员工作区及数据中心一次性批量选择或拖拽识别多个项目分配数据包（.json）、多项目合包与总包，自动解析合并，实时展示导入项目清单与额度统计。',
+      '【核算员导入数据全生命周期持久化】彻底修复核算员导入数据包后切换页面再返回导致数据丢失的问题；数据包完整纳入工作区加密持久化与本地存储，页面切换、锁定或重新打开数据不失效。',
+      '【核算员工作区全新重构】纯粹聚焦汇总与统计，彻底剥离项目创建、月度分配、项目组管理等非核算员职能；左侧导航栏深度整合“总览看板、部门全员汇总、部门合同额度大盘、全员绩点排名、考核执行殿堂、全项目二维透视、全量流水明细、趋势与柱状图、分配规则准则、数据导入导出与灾备”，避免重复显示，布局一目了然。',
+      '【核心聚焦四大统计维度】紧扣核算员工作重心，重点透视与监控全员绩点排名、全员绩点细目、考核之星殿堂（月/季/年度之星）、合同总额及额度消耗进度，赋能高效核算。'
+    ]
+  },
   {
     version: 'v0.6.3',
     date: '2026-10-21',
@@ -3425,6 +3627,7 @@ export type AuditorSummaryResult = {
   // 3. 二维透视矩阵
   matrix: {
     projectHeaders: { id: string; name: string; code: string; label: string }[];
+    projects?: { id: string; name: string; code: string; label: string }[];
     rows: {
       index: number;
       employeeId: string;
@@ -3732,6 +3935,7 @@ export function summarizeAuditorPackages(
       projectSummaries: [],
       matrix: {
         projectHeaders: [],
+        projects: [],
         rows: [],
         projectTotals: [],
         grandTotalPoints: 0,
@@ -4020,6 +4224,7 @@ export function summarizeAuditorPackages(
     projectSummaries,
     matrix: {
       projectHeaders,
+      projects: projectHeaders,
       rows: matrixRows,
       projectTotals,
       grandTotalPoints,
@@ -4167,11 +4372,12 @@ export function exportAuditorDetailsCsv(summary: AuditorSummaryResult): string {
 /**
  * 导出核算汇总完整数据包 JSON 格式（用于归档与审计）
  */
-export function exportAuditorFullBundleJson(summary: AuditorSummaryResult): string {
+export function exportAuditorFullBundleJson(summary: AuditorSummaryResult, originalPackages: ProjectMeritPackage[] = []): string {
   return JSON.stringify({
     version: '1.0',
     bundleType: 'auditor_summary_bundle',
     exportedAt: new Date().toISOString(),
+    packages: originalPackages,
     summary,
   }, null, 2);
 }
@@ -4310,12 +4516,15 @@ export function parseMeritPackageOrBundle(jsonStr: string): ProjectMeritPackage[
     fail('数据包内容为空或格式不正确');
   }
 
-  // 1. 如果是项目负责人多包合包
-  if (parsed.format === 'hengji-pm-merit-bundle' || (Array.isArray(parsed.packages) && parsed.managerId)) {
-    if (!Array.isArray(parsed.packages) || parsed.packages.length === 0) {
-      fail('项目负责人数据包中未包含任何项目数据');
+  // 1. 如果是项目负责人多包合包或核算员归档总包
+  if (
+    parsed.format === 'hengji-pm-merit-bundle' ||
+    parsed.bundleType === 'auditor_summary_bundle' ||
+    (Array.isArray(parsed.packages) && (parsed.managerId || parsed.bundleType === 'auditor_summary_bundle' || parsed.format === 'hengji-auditor-full-bundle'))
+  ) {
+    if (Array.isArray(parsed.packages) && parsed.packages.length > 0) {
+      return parsed.packages.map((pkg: any) => parseProjectMeritPackage(JSON.stringify(pkg)));
     }
-    return parsed.packages.map((pkg: any) => parseProjectMeritPackage(JSON.stringify(pkg)));
   }
 
   // 2. 如果是单个项目数据包
@@ -4441,10 +4650,12 @@ export interface HonorStarsResult {
  * 自动评选月度之星、季度之星与年度之星
  */
 export function calculateHonorStars(summary: AuditorSummaryResult): HonorStarsResult {
-  const details = summary.allDetails;
+  const details = summary?.allDetails || [];
   const empMap = new Map<string, { name: string; dept: string; group?: string; pos?: string }>();
-  summary.employeeSummaries.forEach(e => {
-    empMap.set(e.id, { name: e.name, dept: e.department, group: e.group, pos: e.position });
+  (summary?.employeeSummaries || []).forEach(e => {
+    if (e && e.id) {
+      empMap.set(e.id, { name: e.name || e.employeeNo || e.id, dept: e.department || '第四研究室', group: e.group, pos: e.position });
+    }
   });
 
   // 1. 按月份聚合：month -> employeeId -> { points, projects: Set<string> }

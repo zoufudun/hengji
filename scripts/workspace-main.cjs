@@ -230,6 +230,14 @@ app.whenReady().then(() => {
     return true;
   });
 
+  ipcMain.handle('workspace:open-url', (_event, url) => {
+    if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
+      shell.openExternal(url);
+      return true;
+    }
+    return false;
+  });
+
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });

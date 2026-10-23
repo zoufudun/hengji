@@ -1,6 +1,6 @@
 {
   "name": "site-creator-vinext-starter",
-  "version": "0.6.3",
+  "version": "0.7.2",
   "description": "TOPFIRE 衡绩员工绩点考核系统 - 桌面离线版",
   "author": "邹富敦 (Phudon Zou) / TOPFIRE 研发团队",
   "private": true,
@@ -13,12 +13,14 @@
     "dev": "node scripts/run-framework.mjs dev",
     "build": "node scripts/run-framework.mjs build",
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "lint": "node scripts/check-hooks.mjs && eslint . --ignore-pattern dist --ignore-pattern .next",
+    "check:hooks": "node scripts/check-hooks.mjs",
+    "test": "node scripts/check-hooks.mjs && node tests/core.test.mjs && node tests/auditor.test.mjs",
     "db:generate": "drizzle-kit generate",
-    "desktop:build": "vite build --config vite.desktop.config.ts",
-    "desktop:start": "vite build --config vite.desktop.config.ts && electron .",
-    "desktop:pack": "vite build --config vite.desktop.config.ts && electron-builder --win portable",
-    "desktop:pack:signed": "vite build --config vite.desktop.config.ts && electron-builder --win portable --config.forceCodeSigning=true"
+    "desktop:build": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts",
+    "desktop:start": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts && electron .",
+    "desktop:pack": "node scripts/check-hooks.mjs && node tests/core.test.mjs && node tests/auditor.test.mjs && vite build --config vite.desktop.config.ts && electron-builder --win portable",
+    "desktop:pack:signed": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts && electron-builder --win portable --config.forceCodeSigning=true"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

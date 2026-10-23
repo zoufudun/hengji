@@ -24,5 +24,6 @@ declare global { interface Window { meritDesktop: {
   exportCsv(payload: { content: string; defaultPath: string }): Promise<boolean>;
   showData(): Promise<void>;
   refocusWindow?(): Promise<boolean>;
+  openUrl?(url: string): Promise<boolean>;
 } } }
 export {};

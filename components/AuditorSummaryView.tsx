@@ -77,26 +77,56 @@ interface AuditorSummaryViewProps {
   currentActor: Employee;
   isAdmin: boolean;
   isAuditor: boolean;
+  packages?: ProjectMeritPackage[];
+  onUpdatePackages?: (packages: ProjectMeritPackage[], message?: string) => void;
+  activeSubTab?: AuditorTab;
+  onSubTabChange?: (tab: AuditorTab) => void;
+  hideTabBar?: boolean;
   onSwitchToAuditor?: () => void;
   triggerDownload: (content: string, filename: string, mimeType?: string) => Promise<void>;
   setNotice: (msg: string) => void;
 }
 
-type AuditorTab = 'employees' | 'contracts' | 'ranking' | 'stars' | 'matrix' | 'details';
+export type AuditorTab = 'import' | 'employees' | 'contracts' | 'ranking' | 'stars' | 'matrix' | 'details';
 
 export function AuditorSummaryView({
   state,
   currentActor,
   isAdmin,
   isAuditor,
+  packages: externalPackages,
+  onUpdatePackages,
+  activeSubTab: externalActiveTab,
+  onSubTabChange,
+  hideTabBar = false,
   onSwitchToAuditor,
   triggerDownload,
   setNotice,
 }: AuditorSummaryViewProps) {
-  // 已导入的数据包列表
-  const [packages, setPackages] = useState<ProjectMeritPackage[]>([]);
-  // 当前查看的主视图 Tab
-  const [activeTab, setActiveTab] = useState<AuditorTab>('employees');
+  // 内部数据包状态（支持受控或非受控）
+  const [internalPackages, setInternalPackages] = useState<ProjectMeritPackage[]>(() => {
+    if (externalPackages !== undefined) return externalPackages;
+    if (state.auditorPackages && Array.isArray(state.auditorPackages)) return state.auditorPackages;
+    return [];
+  });
+
+  const packages = externalPackages !== undefined ? externalPackages : internalPackages;
+
+  const updatePackages = (newPkgs: ProjectMeritPackage[], msg?: string) => {
+    setInternalPackages(newPkgs);
+    if (onUpdatePackages) {
+      onUpdatePackages(newPkgs, msg);
+    }
+  };
+
+  // 当前查看的主视图 Tab（受控或非受控）
+  const [internalActiveTab, setInternalActiveTab] = useState<AuditorTab>('employees');
+  const activeTab = externalActiveTab || internalActiveTab;
+  const setActiveTab = (tab: AuditorTab) => {
+    setInternalActiveTab(tab);
+    if (onSubTabChange) onSubTabChange(tab);
+  };
+
   // 筛选与搜索
   const [search, setSearch] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
@@ -111,13 +141,13 @@ export function AuditorSummaryView({
   // 文件选择器引用
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 初始化：如果还没有导入外部数据包，默认自动载入当前系统中的全项目分配（便于立即体验与查看）
+  // 初始化：仅在既没有外部包也没有持久化包且系统有已发布项目时，提供初次默认体验
   useEffect(() => {
-    if (packages.length === 0 && state && state.projects.length > 0 && state.plans.length > 0) {
+    const hasExisting = (externalPackages && externalPackages.length > 0) || (state.auditorPackages && state.auditorPackages.length > 0);
+    if (!hasExisting && packages.length === 0 && state && state.projects.length > 0 && state.plans.length > 0) {
       try {
         const initialSummary = summarizeCurrentStateForAuditor(state);
         if (initialSummary.projectSummaries.length > 0) {
-          // 尝试构建各项目的初始包
           const initialPkgs: ProjectMeritPackage[] = [];
           for (const prj of state.projects) {
             const hasPublished = state.plans.some(p => p.projectId === prj.id && p.status === 'published');
@@ -134,10 +164,10 @@ export function AuditorSummaryView({
                     client: prj.client,
                     contract: prj.contract,
                     ownerId: prj.owner,
-                    ownerName: state.employees.find(e => e.id === prj.owner)?.name || prj.owner,
+                    ownerName: (state?.employees || []).find(e => e.id === prj.owner)?.name || prj.owner,
                     contractWan: prj.contract / 1000000,
                   },
-                  details: state.plans
+                  details: (state?.plans || [])
                     .filter(p => p.projectId === prj.id && p.status === 'published')
                     .flatMap(plan => plan.entries.map(e => ({
                       projectId: prj.id,
@@ -145,7 +175,7 @@ export function AuditorSummaryView({
                       projectName: prj.name,
                       month: plan.month,
                       employeeId: e.employeeId,
-                      employeeName: state.employees.find(emp => emp.id === e.employeeId)?.name || e.employeeId,
+                      employeeName: (state?.employees || []).find(emp => emp.id === e.employeeId)?.name || e.employeeId,
                       rate: e.rate,
                       points: Math.round((prj.contract * plan.budget * e.rate) / 100000000),
                       wan: Number((((prj.contract * plan.budget * e.rate) / 100000000) / 1000000).toFixed(6)),
@@ -156,7 +186,9 @@ export function AuditorSummaryView({
               } catch {}
             }
           }
-          if (initialPkgs.length > 0) setPackages(initialPkgs);
+          if (initialPkgs.length > 0) {
+            updatePackages(initialPkgs);
+          }
         }
       } catch {}
     }
@@ -165,14 +197,20 @@ export function AuditorSummaryView({
   // 当点击“一键载入当前系统全项目分配”
   const handleLoadSystemProjects = () => {
     try {
+      if (!state) {
+        setNotice('当前系统工作区尚未就绪。');
+        return;
+      }
       const summary = summarizeCurrentStateForAuditor(state);
       if (summary.projectSummaries.length === 0) {
         setNotice('当前系统中暂无已发布月度分配方案的项目。');
         return;
       }
+      const employees = state?.employees || [];
+      const plans = state?.plans || [];
       const initialPkgs: ProjectMeritPackage[] = [];
-      for (const prj of state.projects) {
-        const hasPublished = state.plans.some(p => p.projectId === prj.id && p.status === 'published');
+      for (const prj of state.projects || []) {
+        const hasPublished = plans.some(p => p.projectId === prj.id && p.status === 'published');
         if (hasPublished) {
           const pkg = parseProjectMeritPackage(JSON.stringify({
             version: '1.0',
@@ -185,10 +223,10 @@ export function AuditorSummaryView({
               client: prj.client,
               contract: prj.contract,
               ownerId: prj.owner,
-              ownerName: state.employees.find(e => e.id === prj.owner)?.name || prj.owner,
+              ownerName: employees.find(e => e.id === prj.owner)?.name || prj.owner,
               contractWan: prj.contract / 1000000,
             },
-            details: state.plans
+            details: plans
               .filter(p => p.projectId === prj.id && p.status === 'published')
               .flatMap(plan => plan.entries.map(e => ({
                 projectId: prj.id,
@@ -196,7 +234,7 @@ export function AuditorSummaryView({
                 projectName: prj.name,
                 month: plan.month,
                 employeeId: e.employeeId,
-                employeeName: state.employees.find(emp => emp.id === e.employeeId)?.name || e.employeeId,
+                employeeName: employees.find(emp => emp.id === e.employeeId)?.name || e.employeeId,
                 rate: e.rate,
                 points: Math.round((prj.contract * plan.budget * e.rate) / 100000000),
                 wan: Number((((prj.contract * plan.budget * e.rate) / 100000000) / 1000000).toFixed(6)),
@@ -206,7 +244,7 @@ export function AuditorSummaryView({
           if (pkg.details.length > 0) initialPkgs.push(pkg);
         }
       }
-      setPackages(initialPkgs);
+      updatePackages(initialPkgs, `已成功读取并载入系统内的 ${initialPkgs.length} 个项目分配数据包！`);
       setNotice(`已成功读取并载入系统内的 ${initialPkgs.length} 个项目分配数据包！`);
     } catch (err: any) {
       setNotice(`载入系统项目失败: ${err.message || '未知错误'}`);
@@ -214,7 +252,7 @@ export function AuditorSummaryView({
   };
 
   // 支持单个数据包与项目负责人多项目合并包智能导入
-  const handleImportFiles = async (files: FileList | null) => {
+  const handleImportFiles = async (files: FileList | null | File[]) => {
     if (!files || files.length === 0) return;
     const newPkgs: ProjectMeritPackage[] = [];
     let errorCount = 0;
@@ -238,37 +276,40 @@ export function AuditorSummaryView({
     }
 
     if (newPkgs.length > 0) {
-      setPackages(prev => {
-        const map = new Map<string, ProjectMeritPackage>();
-        prev.forEach(p => map.set(p.project.id, p));
-        newPkgs.forEach(p => map.set(p.project.id, p));
-        return Array.from(map.values());
-      });
-      const bundleHint = bundleCount > 0 ? `（含 ${bundleCount} 个项目负责人多项目合并包）` : '';
-      setNotice(`成功导入 ${newPkgs.length} 个项目分配数据包${bundleHint}！已为您自动合并汇总。`);
+      const map = new Map<string, ProjectMeritPackage>();
+      packages.forEach(p => map.set(p.project.id, p));
+      newPkgs.forEach(p => map.set(p.project.id, p));
+      const merged = Array.from(map.values());
+      const bundleHint = bundleCount > 0 ? `（含 ${bundleCount} 个多项目合并包）` : '';
+      const msg = `✅ 成功导入 ${newPkgs.length} 个项目数据包${bundleHint}！已自动汇总并持久化保存。`;
+      updatePackages(merged, msg);
+      setNotice(msg);
     }
 
     if (errorCount > 0) {
-      setNotice(`有 ${errorCount} 个文件格式不合规或损坏，未成功导入。`);
+      setNotice(`⚠️ 有 ${errorCount} 个文件格式不合规或损坏，未成功导入。`);
     }
   };
 
   // 移除指定项目数据包
   const handleRemovePackage = (projectId: string) => {
-    setPackages(prev => prev.filter(p => p.project.id !== projectId));
+    const next = packages.filter(p => p.project.id !== projectId);
+    updatePackages(next, '已移除该项目数据包');
     setNotice('已移除该项目数据包');
   };
 
   // 清空所有导入的数据包
   const handleClearAll = () => {
-    setPackages([]);
+    updatePackages([], '已清空所有已导入的数据包');
     setNotice('已清空所有已导入的数据包');
   };
 
+  const employees = state?.employees || [];
+
   // 核心汇总计算：全员跨项目绩点总和、额度对照、全景透视矩阵
   const summary: AuditorSummaryResult = useMemo(() => {
-    return summarizeAuditorPackages(packages, state.employees);
-  }, [packages, state.employees]);
+    return summarizeAuditorPackages(packages, employees);
+  }, [packages, employees]);
 
   // 全部门合同额度大盘统计
   const deptContracts: DepartmentContractSummary = useMemo(() => {
@@ -374,7 +415,7 @@ export function AuditorSummaryView({
   };
 
   const handleExportFullBundleJson = async () => {
-    const json = exportAuditorFullBundleJson(summary);
+    const json = exportAuditorFullBundleJson(summary, packages);
     await triggerDownload(json, `衡绩_核算员全项目全员总包_${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
     setNotice('核算汇总完整总包 JSON 导出成功');
   };
@@ -455,60 +496,24 @@ export function AuditorSummaryView({
         }}
       />
 
-      {/* 顶部标题与数据包导入栏 */}
-      <div
-        style={{
-          background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
-          border: '1px solid #bbf7d0',
-          borderRadius: '16px',
-          padding: '24px 28px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
-          boxShadow: '0 4px 16px rgba(5, 150, 105, 0.05)',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  background: '#059669',
-                  color: '#ffffff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Calculator size={22} />
-              </div>
-              <h1 style={{ fontSize: '22px', fontWeight: 700, color: '#064e3b', margin: 0 }}>
-                绩效核算员 · 部门全员绩点与合同额度汇总中心
-              </h1>
-              <span
-                style={{
-                  background: '#dcfce7',
-                  color: '#15803d',
-                  fontSize: '12px',
-                  padding: '3px 10px',
-                  borderRadius: '12px',
-                  fontWeight: 600,
-                  border: '1px solid #86efac',
-                }}
-              >
-                核算员专享工作区
-              </span>
-            </div>
-            <p style={{ margin: 0, fontSize: '13.5px', color: '#334155', maxWidth: '820px', lineHeight: 1.5 }}>
-              团队模式下，每位项目负责人负责各自项目并导出数据包；核算员在此批量导入项目数据包（或合包），自动汇总<strong>部门全员绩点</strong>、<strong>全部门合同额度执行大盘</strong>、<strong>全员绩点排名榜</strong>与<strong>月度/季度/年度之星评选</strong>。
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <button
+      {/* 图2与图3单独作为【数据导入】页面展示 */}
+      {activeTab === 'import' && (
+        <>
+          {/* 数据包导入与操作栏 */}
+          <div
+            style={{
+              background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
+              border: '1px solid #bbf7d0',
+              borderRadius: '16px',
+              padding: '16px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+              boxShadow: '0 4px 16px rgba(5, 150, 105, 0.05)',
+            }}
+          >
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <button
               className="primary"
               style={{
                 background: '#059669',
@@ -584,7 +589,6 @@ export function AuditorSummaryView({
               导出汇总总包(JSON)
             </button>
           </div>
-        </div>
 
         {/* 拖拽上传支持提示区 */}
         <div
@@ -753,7 +757,76 @@ export function AuditorSummaryView({
         </div>
       </div>
 
-      {/* 核心工作区：Tab 导航与过滤栏 */}
+      {/* 导入完成后的快捷导航引导卡片 */}
+      <div
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '16px',
+          padding: '24px 28px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.02)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '14px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Sparkles size={18} color="#059669" />
+          <strong style={{ fontSize: '15px', color: '#0f172a' }}>数据已成功载入！请在左侧导航栏查看各维度统计：</strong>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+          <button
+            type="button"
+            className="secondary"
+            style={{ justifyContent: 'flex-start', padding: '12px 14px', borderRadius: '10px', gap: '8px', fontSize: '13px' }}
+            onClick={() => setActiveTab('employees')}
+          >
+            <Users size={16} color="#059669" />
+            <span>全员跨项目绩效总表 ({summary.employeeSummaries.length}人)</span>
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            style={{ justifyContent: 'flex-start', padding: '12px 14px', borderRadius: '10px', gap: '8px', fontSize: '13px' }}
+            onClick={() => setActiveTab('contracts')}
+          >
+            <BriefcaseBusiness size={16} color="#0284c7" />
+            <span>全景合同矩阵 ({deptContracts.totalProjects}个)</span>
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            style={{ justifyContent: 'flex-start', padding: '12px 14px', borderRadius: '10px', gap: '8px', fontSize: '13px' }}
+            onClick={() => setActiveTab('stars')}
+          >
+            <Crown size={16} color="#e11d48" />
+            <span>卓越绩星荣誉殿堂 (月/季/年/区间排名)</span>
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            style={{ justifyContent: 'flex-start', padding: '12px 14px', borderRadius: '10px', gap: '8px', fontSize: '13px' }}
+            onClick={() => setActiveTab('matrix')}
+          >
+            <Table2 size={16} color="#7c3aed" />
+            <span>全项目多维透视矩阵</span>
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            style={{ justifyContent: 'flex-start', padding: '12px 14px', borderRadius: '10px', gap: '8px', fontSize: '13px' }}
+            onClick={() => setActiveTab('details')}
+          >
+            <FileSpreadsheet size={16} color="#ea580c" />
+            <span>全量明细审计流水 ({summary.allDetails.length}条)</span>
+          </button>
+        </div>
+      </div>
+    </>
+  )}
+
+      {/* 核心工作区：当处于图4各项时（activeTab !== 'import'），不渲染图2和图3，直接呈现纯净报表 */}
+      {activeTab !== 'import' && (
       <div
         style={{
           background: '#ffffff',
@@ -767,134 +840,156 @@ export function AuditorSummaryView({
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '16px' }}>
-          {/* 六大核心视图切换 */}
-          <div style={{ display: 'flex', gap: '6px', background: '#f1f5f9', padding: '4px', borderRadius: '10px', flexWrap: 'wrap' }}>
-            <button
-              style={{
-                border: 'none',
-                background: activeTab === 'employees' ? '#ffffff' : 'transparent',
-                color: activeTab === 'employees' ? '#0f172a' : '#64748b',
-                fontWeight: activeTab === 'employees' ? 600 : 400,
-                padding: '7px 14px',
-                borderRadius: '8px',
-                fontSize: '13px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: activeTab === 'employees' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-              }}
-              onClick={() => setActiveTab('employees')}
-            >
-              <Users size={15} color={activeTab === 'employees' ? '#059669' : '#94a3b8'} />
-              部门全员汇总 ({summary.employeeSummaries.length})
-            </button>
+          {hideTabBar ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  background:
+                    activeTab === 'employees' ? '#ecfdf5' :
+                    activeTab === 'contracts' ? '#f0f9ff' :
+                    activeTab === 'ranking' ? '#fffbeb' :
+                    activeTab === 'stars' ? '#fff1f2' :
+                    activeTab === 'matrix' ? '#f5f3ff' : '#fff7ed',
+                  color:
+                    activeTab === 'employees' ? '#059669' :
+                    activeTab === 'contracts' ? '#0284c7' :
+                    activeTab === 'ranking' ? '#d97706' :
+                    activeTab === 'stars' ? '#e11d48' :
+                    activeTab === 'matrix' ? '#7c3aed' : '#ea580c',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {activeTab === 'employees' && <Users size={17} />}
+                {activeTab === 'contracts' && <BriefcaseBusiness size={17} />}
+                {activeTab === 'ranking' && <Medal size={17} />}
+                {activeTab === 'stars' && <Crown size={17} />}
+                {activeTab === 'matrix' && <Table2 size={17} />}
+                {activeTab === 'details' && <FileSpreadsheet size={17} />}
+              </div>
+              <div>
+                <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
+                  {activeTab === 'employees' && `全员跨项目绩效总表 (${summary.employeeSummaries.length} 人)`}
+                  {activeTab === 'contracts' && `全景合同矩阵与执行对照 (${deptContracts.totalProjects} 个项目)`}
+                  {(activeTab === 'ranking' || activeTab === 'stars') && '卓越绩星荣誉殿堂 · 月/季/年/区间全员排名与荣誉榜'}
+                  {activeTab === 'matrix' && `全项目多维透视矩阵 (${summary.matrix.projectHeaders.length} 项目 × ${summary.matrix.rows.length} 成员)`}
+                  {activeTab === 'details' && `全量明细审计流水 (${summary.allDetails.length} 条记录)`}
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* 核心视图切换 */
+            <div style={{ display: 'flex', gap: '6px', background: '#f1f5f9', padding: '4px', borderRadius: '10px', flexWrap: 'wrap' }}>
+              <button
+                style={{
+                  border: 'none',
+                  background: activeTab === 'employees' ? '#ffffff' : 'transparent',
+                  color: activeTab === 'employees' ? '#0f172a' : '#64748b',
+                  fontWeight: activeTab === 'employees' ? 600 : 400,
+                  padding: '7px 14px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: activeTab === 'employees' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                }}
+                onClick={() => setActiveTab('employees')}
+              >
+                <Users size={15} color={activeTab === 'employees' ? '#059669' : '#94a3b8'} />
+                全员跨项目绩效总表 ({summary.employeeSummaries.length})
+              </button>
 
-            <button
-              style={{
-                border: 'none',
-                background: activeTab === 'contracts' ? '#ffffff' : 'transparent',
-                color: activeTab === 'contracts' ? '#0f172a' : '#64748b',
-                fontWeight: activeTab === 'contracts' ? 600 : 400,
-                padding: '7px 14px',
-                borderRadius: '8px',
-                fontSize: '13px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: activeTab === 'contracts' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-              }}
-              onClick={() => setActiveTab('contracts')}
-            >
-              <BriefcaseBusiness size={15} color={activeTab === 'contracts' ? '#0284c7' : '#94a3b8'} />
-              部门合同额度大盘 ({deptContracts.totalProjects})
-            </button>
+              <button
+                style={{
+                  border: 'none',
+                  background: activeTab === 'contracts' ? '#ffffff' : 'transparent',
+                  color: activeTab === 'contracts' ? '#0f172a' : '#64748b',
+                  fontWeight: activeTab === 'contracts' ? 600 : 400,
+                  padding: '7px 14px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: activeTab === 'contracts' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                }}
+                onClick={() => setActiveTab('contracts')}
+              >
+                <BriefcaseBusiness size={15} color={activeTab === 'contracts' ? '#0284c7' : '#94a3b8'} />
+                全景合同矩阵 ({deptContracts.totalProjects})
+              </button>
 
-            <button
-              style={{
-                border: 'none',
-                background: activeTab === 'ranking' ? '#ffffff' : 'transparent',
-                color: activeTab === 'ranking' ? '#0f172a' : '#64748b',
-                fontWeight: activeTab === 'ranking' ? 600 : 400,
-                padding: '7px 14px',
-                borderRadius: '8px',
-                fontSize: '13px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: activeTab === 'ranking' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-              }}
-              onClick={() => setActiveTab('ranking')}
-            >
-              <Medal size={15} color={activeTab === 'ranking' ? '#d97706' : '#94a3b8'} />
-              全员绩点排名
-            </button>
+              <button
+                style={{
+                  border: 'none',
+                  background: activeTab === 'stars' || activeTab === 'ranking' ? '#ffffff' : 'transparent',
+                  color: activeTab === 'stars' || activeTab === 'ranking' ? '#0f172a' : '#64748b',
+                  fontWeight: activeTab === 'stars' || activeTab === 'ranking' ? 600 : 400,
+                  padding: '7px 14px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: activeTab === 'stars' || activeTab === 'ranking' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                }}
+                onClick={() => setActiveTab('stars')}
+              >
+                <Crown size={15} color={activeTab === 'stars' || activeTab === 'ranking' ? '#e11d48' : '#94a3b8'} />
+                卓越绩星荣誉殿堂 (含全员多维排名)
+              </button>
 
-            <button
-              style={{
-                border: 'none',
-                background: activeTab === 'stars' ? '#ffffff' : 'transparent',
-                color: activeTab === 'stars' ? '#0f172a' : '#64748b',
-                fontWeight: activeTab === 'stars' ? 600 : 400,
-                padding: '7px 14px',
-                borderRadius: '8px',
-                fontSize: '13px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: activeTab === 'stars' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-              }}
-              onClick={() => setActiveTab('stars')}
-            >
-              <Crown size={15} color={activeTab === 'stars' ? '#e11d48' : '#94a3b8'} />
-              荣誉之星殿堂
-            </button>
+              <button
+                style={{
+                  border: 'none',
+                  background: activeTab === 'matrix' ? '#ffffff' : 'transparent',
+                  color: activeTab === 'matrix' ? '#0f172a' : '#64748b',
+                  fontWeight: activeTab === 'matrix' ? 600 : 400,
+                  padding: '7px 14px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: activeTab === 'matrix' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                }}
+                onClick={() => setActiveTab('matrix')}
+              >
+                <Table2 size={15} color={activeTab === 'matrix' ? '#7c3aed' : '#94a3b8'} />
+                全项目多维透视矩阵
+              </button>
 
-            <button
-              style={{
-                border: 'none',
-                background: activeTab === 'matrix' ? '#ffffff' : 'transparent',
-                color: activeTab === 'matrix' ? '#0f172a' : '#64748b',
-                fontWeight: activeTab === 'matrix' ? 600 : 400,
-                padding: '7px 14px',
-                borderRadius: '8px',
-                fontSize: '13px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: activeTab === 'matrix' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-              }}
-              onClick={() => setActiveTab('matrix')}
-            >
-              <Table2 size={15} color={activeTab === 'matrix' ? '#7c3aed' : '#94a3b8'} />
-              全项目二维透视
-            </button>
-
-            <button
-              style={{
-                border: 'none',
-                background: activeTab === 'details' ? '#ffffff' : 'transparent',
-                color: activeTab === 'details' ? '#0f172a' : '#64748b',
-                fontWeight: activeTab === 'details' ? 600 : 400,
-                padding: '7px 14px',
-                borderRadius: '8px',
-                fontSize: '13px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: activeTab === 'details' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-              }}
-              onClick={() => setActiveTab('details')}
-            >
-              <FileSpreadsheet size={15} color={activeTab === 'details' ? '#ea580c' : '#94a3b8'} />
-              全量流水明细 ({summary.allDetails.length})
-            </button>
-          </div>
+              <button
+                style={{
+                  border: 'none',
+                  background: activeTab === 'details' ? '#ffffff' : 'transparent',
+                  color: activeTab === 'details' ? '#0f172a' : '#64748b',
+                  fontWeight: activeTab === 'details' ? 600 : 400,
+                  padding: '7px 14px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: activeTab === 'details' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                }}
+                onClick={() => setActiveTab('details')}
+              >
+                <FileSpreadsheet size={15} color={activeTab === 'details' ? '#ea580c' : '#94a3b8'} />
+                全量明细审计流水 ({summary.allDetails.length})
+              </button>
+            </div>
+          )}
 
           {/* 快捷导出当前视图 CSV 按钮 */}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -915,7 +1010,7 @@ export function AuditorSummaryView({
                 onClick={handleExportProjectsCsv}
               >
                 <Download size={14} />
-                导出合同额度大盘 CSV
+                导出全景合同矩阵 CSV
               </button>
             )}
             {activeTab === 'matrix' && (
@@ -925,7 +1020,7 @@ export function AuditorSummaryView({
                 onClick={handleExportMatrixCsv}
               >
                 <Download size={14} />
-                导出二维透视矩阵 CSV
+                导出多维透视矩阵 CSV
               </button>
             )}
             {activeTab === 'details' && (
@@ -935,7 +1030,7 @@ export function AuditorSummaryView({
                 onClick={handleExportDetailsCsv}
               >
                 <Download size={14} />
-                导出全量明细流水 CSV
+                导出全量明细审计流水 CSV
               </button>
             )}
           </div>
@@ -1806,6 +1901,7 @@ export function AuditorSummaryView({
           </div>
         )}
       </div>
+      )}
 
       {/* 弹窗 1：员工跨项目分配全景下钻档案 */}
       {inspectEmployee && (
