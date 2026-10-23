@@ -25,7 +25,7 @@ declare global { interface Window { meritDesktop: {
   showData(): Promise<void>;
   refocusWindow?(): Promise<boolean>;
   openUrl?(url: string): Promise<boolean>;
-  downloadUpdate?(payload: { version: string }): Promise<{ success: boolean; filePath: string; folder: string; fileName: string }>;
+  downloadUpdate?(payload: { version: string; downloadUrl?: string }): Promise<{ success: boolean; filePath: string; folder: string; fileName: string }>;
   showItemInFolder?(filePath: string): Promise<boolean>;
   openPath?(filePath: string): Promise<boolean>;
 } } }

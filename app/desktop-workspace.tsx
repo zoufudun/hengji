@@ -2376,7 +2376,10 @@ function UpdateModal({
     try {
       if (typeof window !== 'undefined' && window.meritDesktop?.downloadUpdate) {
         setUpdateStepText('正在下载更新包至 D盘...');
-        const res = await window.meritDesktop.downloadUpdate({ version: targetVer });
+        const res = await window.meritDesktop.downloadUpdate({
+          version: targetVer,
+          downloadUrl: result?.downloadUrl
+        });
         if (res && res.success) {
           setDownloadedPath(res.filePath);
           setUpdateSuccess(true);
@@ -2387,7 +2390,9 @@ function UpdateModal({
       } else {
         // 浏览器环境网页模式下载
         setUpdateStepText('正在发起浏览器下载...');
-        const downloadUrl = `https://github.com/zoufudun/hengji/releases/download/v${targetVer}/%E8%A1%A1%E7%BB%A9%E5%91%98%E5%B7%A5%E7%BB%A9%E7%82%B9%E8%80%83%E6%A0%B8%E7%B3%BB%E7%BB%9F-${targetVer}.exe`;
+        const downloadUrl = (result?.downloadUrl && result.downloadUrl.endsWith('.exe'))
+          ? result.downloadUrl
+          : `https://github.com/zoufudun/hengji/releases/download/v${targetVer}/%E8%A1%A1%E7%BB%A9%E5%91%98%E5%B7%A5%E7%BB%A9%E7%82%B9%E8%80%83%E6%A0%B8%E7%B3%BB%E7%BB%9F-${targetVer}.exe`;
         const a = document.createElement('a');
         a.href = downloadUrl;
         a.download = `衡绩员工绩点考核系统-${targetVer}.exe`;

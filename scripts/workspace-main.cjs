@@ -285,8 +285,30 @@ app.whenReady().then(() => {
 
     if (!copiedFromLocal) {
       // 若本地未找到打包产物，从 GitHub Releases 官方下载
-      const releaseUrl = `https://github.com/zoufudun/hengji/releases/download/v${ver}/${encodeURIComponent(filename)}`;
-      const response = await fetch(releaseUrl, { redirect: 'follow' });
+      let fetchUrl = (payload && payload.downloadUrl && String(payload.downloadUrl).startsWith('http')) ? payload.downloadUrl : null;
+      if (!fetchUrl) {
+        try {
+          const apiRes = await fetch(`https://api.github.com/repos/zoufudun/hengji/releases/tags/v${ver}`, {
+            headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'Hengji-Desktop-App' }
+          });
+          if (apiRes.ok) {
+            const relData = await apiRes.json();
+            const exeAsset = Array.isArray(relData.assets) && relData.assets.find(a => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.exe'));
+            if (exeAsset && exeAsset.browser_download_url) {
+              fetchUrl = exeAsset.browser_download_url;
+            }
+          }
+        } catch (err) {
+          console.warn('Query release assets failed:', err);
+        }
+      }
+      if (!fetchUrl) {
+        fetchUrl = `https://github.com/zoufudun/hengji/releases/download/v${ver}/${encodeURIComponent(filename)}`;
+      }
+      let response = await fetch(fetchUrl, { redirect: 'follow' });
+      if (!response.ok && fetchUrl !== `https://github.com/zoufudun/hengji/releases/download/v${ver}/${encodeURIComponent(filename)}`) {
+        response = await fetch(`https://github.com/zoufudun/hengji/releases/download/v${ver}/${encodeURIComponent(filename)}`, { redirect: 'follow' });
+      }
       if (!response.ok) {
         throw new Error(`下载失败 (HTTP ${response.status})：未能从官方渠道获取 ${filename}`);
       }
