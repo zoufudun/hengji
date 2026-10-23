@@ -2588,11 +2588,34 @@ export async function checkAppUpdate(currentVersion = APP_VERSION): Promise<Upda
     });
     if (timeout) clearTimeout(timeout);
 
-    if (res.status === 404) {
-      return {
-        ...defaultResult,
-        error: '暂无可用的线上发行版本（官方正在准备首发 Release）',
-      };
+    if (res.status === 404 || res.status === 403 || res.status === 429) {
+      // API 受限或暂无 Release 时，自动回退到 raw.githubusercontent.com 查询 package.json 保证可用性
+      try {
+        const rawRes = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/package.json`, { cache: 'no-cache' });
+        if (rawRes.ok) {
+          const rawPkg = await rawRes.json();
+          const rawVersion = String(rawPkg.version || '').trim();
+          const hasUpdate = compareSemver(rawVersion, currentVersion) > 0;
+          return {
+            hasUpdate,
+            currentVersion,
+            latestVersion: rawVersion || currentVersion,
+            releaseName: hasUpdate ? `v${rawVersion} 全新版本` : `v${currentVersion} 最新稳定版`,
+            releaseNotes: hasUpdate ? '发现全新发布版本，请点击下方按钮直接下载更新。' : '当前系统已处于官方最新稳定状态。',
+            publishedAt: new Date().toLocaleDateString(),
+            downloadUrl: `${GITHUB_RELEASES_URL}/download/v${rawVersion}/衡绩员工绩点考核系统-${rawVersion}.exe`,
+            htmlUrl: `${GITHUB_RELEASES_URL}/tag/v${rawVersion}`,
+            checkedAt,
+          };
+        }
+      } catch {}
+
+      if (res.status === 404) {
+        return {
+          ...defaultResult,
+          error: '暂无可用的线上发行版本（官方正在准备首发 Release）',
+        };
+      }
     }
 
     if (!res.ok) {
@@ -2629,6 +2652,26 @@ export async function checkAppUpdate(currentVersion = APP_VERSION): Promise<Upda
       checkedAt,
     };
   } catch (err: any) {
+    try {
+      const rawRes = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/package.json`, { cache: 'no-cache' });
+      if (rawRes.ok) {
+        const rawPkg = await rawRes.json();
+        const rawVersion = String(rawPkg.version || '').trim();
+        const hasUpdate = compareSemver(rawVersion, currentVersion) > 0;
+        return {
+          hasUpdate,
+          currentVersion,
+          latestVersion: rawVersion || currentVersion,
+          releaseName: hasUpdate ? `v${rawVersion} 全新版本` : `v${currentVersion} 最新稳定版`,
+          releaseNotes: hasUpdate ? '发现全新发布版本，请点击下方按钮直接下载更新。' : '当前系统已处于官方最新稳定状态。',
+          publishedAt: new Date().toLocaleDateString(),
+          downloadUrl: `${GITHUB_RELEASES_URL}/download/v${rawVersion}/衡绩员工绩点考核系统-${rawVersion}.exe`,
+          htmlUrl: `${GITHUB_RELEASES_URL}/tag/v${rawVersion}`,
+          checkedAt,
+        };
+      }
+    } catch {}
+
     return {
       ...defaultResult,
       error: `检查更新失败: ${err.message || '网络连接超时，请检查是否能正常访问 GitHub'}`,
