@@ -344,7 +344,7 @@ function BurstLogo({ size = 32 }: { size?: number }) {
 // -------------------------------------------------------------
 function DualBrandLogo({ size = 32 }: { size?: number }) {
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', flexShrink: 0 }}>
       <img
         src={brandHengSeal}
         alt="衡"
@@ -353,12 +353,12 @@ function DualBrandLogo({ size = 32 }: { size?: number }) {
         style={{
           width: size,
           height: size,
-          objectFit: 'contain',
-          borderRadius: Math.max(5, Math.round(size * 0.18)),
+          objectFit: 'cover',
+          borderRadius: Math.max(6, Math.round(size * 0.22)),
           display: 'inline-block',
           verticalAlign: 'middle',
           flexShrink: 0,
-          boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
         }}
       />
       <img
@@ -1381,11 +1381,11 @@ export default function DesktopWorkspace() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 8px 22px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '18px' }}>
-          <DualBrandLogo size={34} />
+        <div className="brand" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 8px 20px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '18px' }}>
+          <DualBrandLogo size={32} />
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <strong style={{ fontSize: '21px', fontWeight: 800, letterSpacing: '2.5px', color: '#ffffff', lineHeight: 1 }}>
-              衡绩
+            <strong style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '1.2px', color: '#ffffff', lineHeight: 1, whiteSpace: 'nowrap' }}>
+              衡绩考核
             </strong>
           </div>
         </div>
@@ -2363,35 +2363,46 @@ function UpdateModal({
   const [updating, setUpdating] = useState(false);
   const [updateStepText, setUpdateStepText] = useState('正在更新中...');
   const [updateSuccess, setUpdateSuccess] = useState(false);
+  const [downloadedPath, setDownloadedPath] = useState<string>('');
+  const [downloadError, setDownloadError] = useState<string>('');
 
-  const handleStartUpdate = () => {
-    if (updating || updateSuccess) return;
+  const handleStartUpdate = async () => {
+    if (updating) return;
     setUpdating(true);
-    setUpdateStepText('正在更新中...');
+    setDownloadError('');
+    setUpdateStepText('正在准备下载到 D盘...');
 
-    // 阶段式推进真实视觉动效体验，不打开任何网页
-    setTimeout(() => {
-      setUpdateStepText('正在更新中 (正在同步资源)...');
-    }, 1000);
-
-    setTimeout(() => {
-      setUpdateStepText('正在更新中 (正在装载配置)...');
-    }, 2000);
-
-    setTimeout(() => {
+    const targetVer = result?.latestVersion || APP_VERSION;
+    try {
+      if (typeof window !== 'undefined' && window.meritDesktop?.downloadUpdate) {
+        setUpdateStepText('正在下载更新包至 D盘...');
+        const res = await window.meritDesktop.downloadUpdate({ version: targetVer });
+        if (res && res.success) {
+          setDownloadedPath(res.filePath);
+          setUpdateSuccess(true);
+          setUpdateStepText(`已成功下载至 ${res.filePath}`);
+        } else {
+          throw new Error('未能保存更新包到本地');
+        }
+      } else {
+        // 浏览器环境网页模式下载
+        setUpdateStepText('正在发起浏览器下载...');
+        const downloadUrl = `https://github.com/zoufudun/hengji/releases/download/v${targetVer}/%E8%A1%A1%E7%BB%A9%E5%91%98%E5%B7%A5%E7%BB%A9%E7%82%B9%E8%80%83%E6%A0%B8%E7%B3%BB%E7%BB%9F-${targetVer}.exe`;
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `衡绩员工绩点考核系统-${targetVer}.exe`;
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setDownloadedPath(`浏览器默认下载目录 / 衡绩员工绩点考核系统-${targetVer}.exe (可转存至D盘)`);
+        setUpdateSuccess(true);
+      }
+    } catch (err: any) {
+      setDownloadError(err?.message || '下载更新包失败');
+    } finally {
       setUpdating(false);
-      setUpdateSuccess(true);
-      setResult((prev) =>
-        prev
-          ? {
-              ...prev,
-              hasUpdate: false,
-              latestVersion: prev.latestVersion || APP_VERSION,
-              releaseNotes: prev.releaseNotes || '系统已成功热更新至最新配置与功能模块。',
-            }
-          : null
-      );
-    }, 3000);
+    }
   };
 
   const doCheck = async () => {
@@ -2481,7 +2492,7 @@ function UpdateModal({
                   letterSpacing: '0.2px',
                 }}
               >
-                衡绩 (HengJi)
+                衡绩考核 (HengJi)
               </h3>
               <div style={{ fontSize: '13px', color: '#64748b', marginTop: '2px' }}>
                 版本 v{APP_VERSION}
@@ -2530,7 +2541,7 @@ function UpdateModal({
                   cursor: 'wait',
                   opacity: 0.95,
                 }}
-                title="正在为您进行热更新，请稍候..."
+                title="正在为您下载更新包至本地，请稍候..."
               >
                 <Loader2 size={16} className="spin-icon" />
                 {updateStepText}
@@ -2549,11 +2560,17 @@ function UpdateModal({
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  cursor: 'default',
+                  cursor: 'pointer',
                 }}
+                onClick={() => {
+                  if (downloadedPath && window.meritDesktop?.showItemInFolder) {
+                    window.meritDesktop.showItemInFolder(downloadedPath);
+                  }
+                }}
+                title={downloadedPath ? `已保存至：${downloadedPath} (点击打开)` : '已成功下载'}
               >
                 <CheckCircle2 size={15} color="#16a34a" />
-                更新成功 (已是最新版)
+                已下载至本地 (点击查看)
               </button>
             ) : result?.hasUpdate ? (
               <button
@@ -2582,7 +2599,7 @@ function UpdateModal({
                   e.currentTarget.style.boxShadow = '0 4px 12px rgba(234, 88, 12, 0.35)';
                 }}
                 onClick={handleStartUpdate}
-                title="点击就地更新到新版本"
+                title="点击将更新包下载到本地 D盘"
               >
                 <CloudDownload size={16} />
                 更新到 v{result.latestVersion}
@@ -2654,11 +2671,11 @@ function UpdateModal({
             {checking
               ? '正在连接官方仓库检测最新版本...'
               : updating
-              ? '正在就地下载并应用新版本组件，请稍候...'
+              ? '正在下载更新包至本地 D盘，请稍候...'
               : updateSuccess
-              ? `🎉 恭喜！已成功就地更新至最新版 (v${result?.latestVersion || APP_VERSION})`
+              ? `🎉 更新包已成功保存至本地！(v${result?.latestVersion || APP_VERSION})`
               : result?.hasUpdate
-              ? `检测到新版本: ${result.latestVersion}`
+              ? `检测到新版本: ${result.latestVersion} (点击上方按钮即可下载更新包到本地)`
               : result?.error
               ? `检测提示: ${result.error}`
               : `检测到新版本: 无 (当前已是官方最新版本 ${APP_VERSION})`}
@@ -2685,6 +2702,103 @@ function UpdateModal({
             </button>
           )}
         </div>
+
+        {/* 下载结果与文件路径展示卡片 */}
+        {downloadedPath && (
+          <div
+            style={{
+              margin: '16px 28px 0',
+              padding: '14px 18px',
+              background: '#f0fdf4',
+              border: '1px solid #86efac',
+              borderRadius: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              boxShadow: '0 2px 8px rgba(22, 163, 74, 0.08)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <CheckCircle2 size={22} color="#16a34a" style={{ flexShrink: 0 }} />
+              <div>
+                <div style={{ fontWeight: 700, color: '#15803d', fontSize: '13.5px' }}>
+                  更新安装包已就绪并成功下载至本地！
+                </div>
+                <div style={{ fontSize: '12px', color: '#166534', marginTop: '2px', wordBreak: 'break-all' }}>
+                  文件路径：<b>{downloadedPath}</b>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+              {typeof window !== 'undefined' && window.meritDesktop?.showItemInFolder && (
+                <button
+                  type="button"
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #86efac',
+                    color: '#15803d',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                  }}
+                  onClick={() => window.meritDesktop?.showItemInFolder?.(downloadedPath)}
+                >
+                  <FolderOpen size={13} />
+                  打开所在文件夹
+                </button>
+              )}
+              {typeof window !== 'undefined' && window.meritDesktop?.openPath && (
+                <button
+                  type="button"
+                  style={{
+                    background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
+                    border: 'none',
+                    color: '#ffffff',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    boxShadow: '0 2px 6px rgba(21, 128, 61, 0.25)',
+                  }}
+                  onClick={() => window.meritDesktop?.openPath?.(downloadedPath)}
+                >
+                  <Sparkles size={13} />
+                  立即运行更新包
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {downloadError && (
+          <div
+            style={{
+              margin: '16px 28px 0',
+              padding: '12px 16px',
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: '8px',
+              color: '#b91c1c',
+              fontSize: '12.5px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <AlertTriangle size={16} />
+            <span>{downloadError}</span>
+          </div>
+        )}
 
         {/* 快捷操作标签栏：官方网站、更新日志、近期更新 */}
         <div

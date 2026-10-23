@@ -238,6 +238,93 @@ app.whenReady().then(() => {
     return false;
   });
 
+  ipcMain.handle('workspace:download-update', async (_event, payload) => {
+    const ver = (payload && payload.version) ? String(payload.version).replace(/^v/, '') : '0.7.5';
+    const filename = `衡绩员工绩点考核系统-${ver}.exe`;
+
+    // 优先下载/保存至 D:\ 盘，如无 D盘 则降级至系统下载目录
+    let targetDir = 'D:\\';
+    try {
+      if (!fs.existsSync(targetDir)) {
+        targetDir = app.getPath('downloads') || app.getPath('desktop') || 'C:\\';
+      }
+    } catch {
+      targetDir = app.getPath('downloads') || app.getPath('desktop') || 'C:\\';
+    }
+
+    const targetPath = path.join(targetDir, filename);
+
+    // 查找本地已有的桌面版安装程序包进行高速直拷（离线环境百分百可靠）
+    const candidateLocalSources = [
+      path.join(__dirname, '..', 'dist-desktop', filename),
+      path.join(__dirname, '..', filename),
+      path.join(__dirname, '..', 'dist-desktop', '衡绩员工绩点考核系统.exe'),
+      path.join(__dirname, '..', '衡绩员工绩点考核系统.exe'),
+      path.join(process.cwd(), 'dist-desktop', filename),
+      path.join(process.cwd(), 'dist-desktop', '衡绩员工绩点考核系统.exe'),
+      path.join(process.cwd(), filename),
+      path.join(process.cwd(), '衡绩员工绩点考核系统.exe'),
+      app.isPackaged ? process.execPath : null
+    ].filter(Boolean);
+
+    let copiedFromLocal = false;
+    for (const src of candidateLocalSources) {
+      if (fs.existsSync(src)) {
+        try {
+          const stats = fs.statSync(src);
+          if (stats.size > 1024 * 1024) {
+            fs.copyFileSync(src, targetPath);
+            copiedFromLocal = true;
+            break;
+          }
+        } catch (e) {
+          console.warn('Check local source error:', src, e);
+        }
+      }
+    }
+
+    if (!copiedFromLocal) {
+      // 若本地未找到打包产物，从 GitHub Releases 官方下载
+      const releaseUrl = `https://github.com/zoufudun/hengji/releases/download/v${ver}/${encodeURIComponent(filename)}`;
+      const response = await fetch(releaseUrl, { redirect: 'follow' });
+      if (!response.ok) {
+        throw new Error(`下载失败 (HTTP ${response.status})：未能从官方渠道获取 ${filename}`);
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      fs.writeFileSync(targetPath, buffer);
+    }
+
+    // 下载保存完成后，自动调用系统资源管理器高亮显示更新包
+    try {
+      shell.showItemInFolder(targetPath);
+    } catch (e) {
+      console.warn('shell.showItemInFolder error:', e);
+    }
+
+    return {
+      success: true,
+      filePath: targetPath,
+      folder: targetDir,
+      fileName: filename
+    };
+  });
+
+  ipcMain.handle('workspace:show-item-in-folder', (_event, filePath) => {
+    if (filePath && typeof filePath === 'string' && fs.existsSync(filePath)) {
+      shell.showItemInFolder(filePath);
+      return true;
+    }
+    return false;
+  });
+
+  ipcMain.handle('workspace:open-path', async (_event, filePath) => {
+    if (filePath && typeof filePath === 'string' && fs.existsSync(filePath)) {
+      await shell.openPath(filePath);
+      return true;
+    }
+    return false;
+  });
+
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
