@@ -17,7 +17,7 @@
     "check:hooks": "node scripts/check-hooks.mjs",
     "test": "node scripts/check-hooks.mjs && node tests/core.test.mjs && node tests/auditor.test.mjs",
     "db:generate": "drizzle-kit generate",
-    "desktop:build": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts",
+    "desktop:build": "node scripts/check-hooks.mjs && node -e \"const fs=require('fs'); fs.mkdirSync('build',{recursive:true}); fs.copyFileSync('app/favicon.ico','build/icon.ico'); fs.copyFileSync('app/icon.png','build/icon.png');\" && vite build --config vite.desktop.config.ts",
     "desktop:start": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts && electron .",
     "desktop:pack": "node scripts/check-hooks.mjs && node tests/core.test.mjs && node tests/auditor.test.mjs && vite build --config vite.desktop.config.ts && electron-builder --win nsis msi portable",
     "desktop:pack:portable": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts && electron-builder --win portable",
@@ -86,7 +86,7 @@
     "files": ["build/desktop/**/*", "build/icon.ico", "build/icon.png", "scripts/workspace-main.cjs", "scripts/workspace-preload.cjs", "scripts/workspace-crypto.cjs", "package.json", "!node_modules/**/*"],
     "win": {
       "target": ["nsis", "msi", "portable"],
-      "icon": "build/icon.ico"
+      "icon": "app/favicon.ico"
     },
     "nsis": {
       "oneClick": false,
