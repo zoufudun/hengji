@@ -188,6 +188,8 @@ import {
   type ProjectMeritPackage,
 } from '../lib/core';
 import { AuditorSummaryView, type AuditorTab } from '../components/AuditorSummaryView';
+import brandHengSeal from './brand-heng-seal.png';
+import brandBurstFlower from './brand-burst-flower.png';
 
 type Tab = 'dashboard' | 'projects' | 'plans' | 'groups' | 'employees' | 'analytics' | 'stars' | 'reports' | 'rules' | 'data_io' | 'auditor';
 
@@ -338,13 +340,42 @@ function BurstLogo({ size = 32 }: { size?: number }) {
 }
 
 // -------------------------------------------------------------
-// 双图标形式品牌标识 (Dual-Icon Brand Logo)
+// 双图标形式品牌标识 (Dual-Icon Brand Logo: 图1 衡印章 + 图2 彩色花瓣)
 // -------------------------------------------------------------
 function DualBrandLogo({ size = 32 }: { size?: number }) {
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-      <OracleHengIcon size={size} />
-      <BurstLogo size={size} />
+      <img
+        src={brandHengSeal}
+        alt="衡"
+        width={size}
+        height={size}
+        style={{
+          width: size,
+          height: size,
+          objectFit: 'contain',
+          borderRadius: Math.max(5, Math.round(size * 0.18)),
+          display: 'inline-block',
+          verticalAlign: 'middle',
+          flexShrink: 0,
+          boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+        }}
+      />
+      <img
+        src={brandBurstFlower}
+        alt="Logo"
+        width={size}
+        height={size}
+        style={{
+          width: size,
+          height: size,
+          objectFit: 'contain',
+          display: 'inline-block',
+          verticalAlign: 'middle',
+          flexShrink: 0,
+          filter: 'drop-shadow(0 2px 5px rgba(0,0,0,0.12))',
+        }}
+      />
     </div>
   );
 }
@@ -1350,11 +1381,12 @@ export default function DesktopWorkspace() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand">
-          <DualBrandLogo size={32} />
-          <div>
-            <strong>衡绩考核</strong>
-            <span>员工绩点考核系统</span>
+        <div className="brand" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 8px 22px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '18px' }}>
+          <DualBrandLogo size={34} />
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <strong style={{ fontSize: '21px', fontWeight: 800, letterSpacing: '2.5px', color: '#ffffff', lineHeight: 1 }}>
+              衡绩
+            </strong>
           </div>
         </div>
 

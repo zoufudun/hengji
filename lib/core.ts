@@ -2531,7 +2531,7 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.7.4';
+export const APP_VERSION = '0.7.5';
 export const APP_BUILD = '20261023';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
@@ -2694,6 +2694,17 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.7.5',
+    date: '2026-10-23',
+    tag: '常规迭代',
+    title: '品牌双徽标全面升级为朱印衡章与八彩花瓣、侧栏品牌布局优化仅保留“衡绩”',
+    items: [
+      '【品牌双图标全面焕新】系统品牌标识左侧升级为经典雅致的朱印白底篆体“衡”字印章徽标（内置灵动薪火），右侧辉映高质感八彩同心绽放花瓣，兼具深厚文化底蕴与生动时代科技感。',
+      '【侧栏品牌视觉与布局极简优化】品牌标识区文字精简为纯粹利落的“衡绩”两字，横向严谨对齐双徽标，字距与呼吸留白全面优化，呈现开阔清爽的现代界面格局。',
+      '【保持动态光圈启动检测与就地升级机制】延续备受好评的矩形框旋转动态光圈（Border Beam & Neon Aura）开机提醒，以及无需跳转外网的原位平滑更新能力。'
+    ]
+  },
   {
     version: 'v0.7.4',
     date: '2026-10-23',
