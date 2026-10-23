@@ -1,6 +1,6 @@
 {
   "name": "site-creator-vinext-starter",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "description": "TOPFIRE 衡绩员工绩点考核系统 - 桌面离线版",
   "author": "邹富敦 (Phudon Zou) / TOPFIRE 研发团队",
   "private": true,
@@ -19,7 +19,9 @@
     "db:generate": "drizzle-kit generate",
     "desktop:build": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts",
     "desktop:start": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts && electron .",
-    "desktop:pack": "node scripts/check-hooks.mjs && node tests/core.test.mjs && node tests/auditor.test.mjs && vite build --config vite.desktop.config.ts && electron-builder --win portable",
+    "desktop:pack": "node scripts/check-hooks.mjs && node tests/core.test.mjs && node tests/auditor.test.mjs && vite build --config vite.desktop.config.ts && electron-builder --win nsis msi portable",
+    "desktop:pack:portable": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts && electron-builder --win portable",
+    "desktop:pack:installer": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts && electron-builder --win nsis msi",
     "desktop:pack:signed": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts && electron-builder --win portable --config.forceCodeSigning=true",
     "pages:build": "node scripts/check-hooks.mjs && vite build --config vite.desktop.config.ts && node -e \"const fs=require('fs'); fs.copyFileSync('build/desktop/desktop.html', 'build/desktop/index.html');\""
   },
@@ -79,12 +81,31 @@
     "productName": "衡绩员工绩点考核系统",
     "compression": "normal",
     "extraMetadata": { "dependencies": {} },
-    "artifactName": "衡绩员工绩点考核系统-${version}.${ext}",
     "directories": { "output": "dist-desktop" },
     "npmRebuild": false,
     "files": ["build/desktop/**/*", "build/icon.ico", "build/icon.png", "scripts/workspace-main.cjs", "scripts/workspace-preload.cjs", "scripts/workspace-crypto.cjs", "package.json", "!node_modules/**/*"],
-    "win": { "target": "portable", "icon": "build/icon.ico" },
-    "portable": { "artifactName": "衡绩员工绩点考核系统-${version}.exe" }
+    "win": {
+      "target": ["nsis", "msi", "portable"],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "衡绩员工绩点考核系统",
+      "artifactName": "衡绩员工绩点考核系统-Setup-${version}.exe"
+    },
+    "msi": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "衡绩员工绩点考核系统-${version}.msi"
+    },
+    "portable": {
+      "artifactName": "衡绩员工绩点考核系统-${version}.exe"
+    }
   },
   "overrides": {
     "miniflare": {

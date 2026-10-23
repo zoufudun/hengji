@@ -31,17 +31,23 @@ jobs:
       - name: Build client assets
         run: npm run desktop:build
 
-      - name: Package Windows portable executable
-        run: npx electron-builder --win portable
+      - name: Package Windows installers and portable executables
+        run: npx electron-builder --win nsis msi portable
 
       - name: Prepare release artifacts
         shell: pwsh
         run: |
           $ver = "${{ github.ref_name }}".TrimStart('v')
-          Get-ChildItem -Path dist-desktop -Filter "*.exe" | ForEach-Object {
+          Get-ChildItem -Path dist-desktop -Include "*.exe","*.msi" -Recurse | ForEach-Object {
             Write-Host "Found artifact: $($_.FullName)"
-            Copy-Item -Path $_.FullName -Destination "dist-desktop/hengji-portable.exe" -Force
-            Copy-Item -Path $_.FullName -Destination "dist-desktop/hengji-$ver.exe" -Force
+            if ($_.Name -like "*Setup*") {
+              Copy-Item -Path $_.FullName -Destination "dist-desktop/hengji-Setup-$ver.exe" -Force
+            } elseif ($_.Name -like "*.msi") {
+              Copy-Item -Path $_.FullName -Destination "dist-desktop/hengji-$ver.msi" -Force
+            } elseif ($_.Name -like "*$ver.exe*" -or $_.Name -like "*portable*") {
+              Copy-Item -Path $_.FullName -Destination "dist-desktop/hengji-$ver.exe" -Force
+              Copy-Item -Path $_.FullName -Destination "dist-desktop/hengji-portable.exe" -Force
+            }
           }
 
       - name: Create GitHub Release
@@ -50,6 +56,7 @@ jobs:
         with:
           files: |
             dist-desktop/*.exe
+            dist-desktop/*.msi
           generate_release_notes: true
           draft: false
           prerelease: false

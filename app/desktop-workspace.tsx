@@ -340,11 +340,11 @@ function BurstLogo({ size = 32 }: { size?: number }) {
 }
 
 // -------------------------------------------------------------
-// 双图标形式品牌标识 (Dual-Icon Brand Logo: 图1 衡印章 + 图2 彩色花瓣)
+// 品牌徽标标识 (Brand Logo: 金黄圆角衡章，内嵌火焰薪火与衡字)
 // -------------------------------------------------------------
-function DualBrandLogo({ size = 32 }: { size?: number }) {
+function BrandLogo({ size = 42 }: { size?: number }) {
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', flexShrink: 0 }}>
+    <div style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
       <img
         src={brandHengSeal}
         alt="衡"
@@ -354,31 +354,17 @@ function DualBrandLogo({ size = 32 }: { size?: number }) {
           width: size,
           height: size,
           objectFit: 'cover',
-          borderRadius: Math.max(6, Math.round(size * 0.22)),
+          borderRadius: Math.max(7, Math.round(size * 0.22)),
           display: 'inline-block',
           verticalAlign: 'middle',
           flexShrink: 0,
-          boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
-        }}
-      />
-      <img
-        src={brandBurstFlower}
-        alt="Logo"
-        width={size}
-        height={size}
-        style={{
-          width: size,
-          height: size,
-          objectFit: 'contain',
-          display: 'inline-block',
-          verticalAlign: 'middle',
-          flexShrink: 0,
-          filter: 'drop-shadow(0 2px 5px rgba(0,0,0,0.12))',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.22)',
         }}
       />
     </div>
   );
 }
+const DualBrandLogo = BrandLogo;
 
 class SafeStarsBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
   constructor(props: any) {
@@ -1381,10 +1367,10 @@ export default function DesktopWorkspace() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 8px 20px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '18px' }}>
-          <DualBrandLogo size={32} />
+        <div className="brand" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 6px 18px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '18px' }}>
+          <DualBrandLogo size={42} />
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <strong style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '1.2px', color: '#ffffff', lineHeight: 1, whiteSpace: 'nowrap' }}>
+            <strong style={{ fontSize: '19px', fontWeight: 800, letterSpacing: '1.5px', color: '#ffffff', lineHeight: 1, whiteSpace: 'nowrap' }}>
               衡绩考核
             </strong>
           </div>
@@ -2361,46 +2347,82 @@ function UpdateModal({
   const [showRecent, setShowRecent] = useState(false);
   const [showStarBanner, setShowStarBanner] = useState(true);
   const [updating, setUpdating] = useState(false);
-  const [updateStepText, setUpdateStepText] = useState('正在更新中...');
+  const [installing, setInstalling] = useState(false);
+  const [updateStepText, setUpdateStepText] = useState('正在处理中...');
+  const [installStepText, setInstallStepText] = useState('');
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [downloadedPath, setDownloadedPath] = useState<string>('');
   const [downloadError, setDownloadError] = useState<string>('');
 
-  const handleStartUpdate = async () => {
-    if (updating) return;
-    setUpdating(true);
+  const handleAutoInstall = async (format: 'setup' | 'msi' | 'portable' = 'setup') => {
+    if (updating || installing) return;
+    setInstalling(true);
     setDownloadError('');
-    setUpdateStepText('正在准备下载到 D盘...');
+    setInstallStepText('正在下载最新安装程序...');
 
     const targetVer = result?.latestVersion || APP_VERSION;
     try {
+      if (typeof window !== 'undefined' && window.meritDesktop?.installUpdate) {
+        setInstallStepText(`正在下载并准备静默覆盖安装 (v${targetVer})...`);
+        const res = await window.meritDesktop.installUpdate({
+          version: targetVer,
+          format,
+          downloadUrl: result?.downloadUrl
+        });
+        if (res && res.success) {
+          setInstallStepText('安装就绪，正在关闭旧进程并启动新版本...');
+        } else {
+          throw new Error(res?.message || '自动安装失败');
+        }
+      } else {
+        handleDownloadOrInstall(format);
+      }
+    } catch (err: any) {
+      setDownloadError(err?.message || '自动安装更新失败');
+      setInstalling(false);
+    }
+  };
+
+  const handleDownloadOrInstall = async (format: 'setup' | 'msi' | 'portable') => {
+    if (updating || installing) return;
+    setUpdating(true);
+    setDownloadError('');
+    const targetVer = result?.latestVersion || APP_VERSION;
+    const formatLabel = format === 'msi' ? 'MSI 安装包' : format === 'setup' ? 'EXE 安装向导版' : '便携单文件版';
+    setUpdateStepText(`正在准备下载 ${formatLabel} 到 D盘...`);
+
+    try {
       if (typeof window !== 'undefined' && window.meritDesktop?.downloadUpdate) {
-        setUpdateStepText('正在下载更新包至 D盘...');
+        setUpdateStepText(`正在下载 ${formatLabel} 至本地 D盘...`);
         const res = await window.meritDesktop.downloadUpdate({
           version: targetVer,
+          format,
           downloadUrl: result?.downloadUrl
         });
         if (res && res.success) {
           setDownloadedPath(res.filePath);
           setUpdateSuccess(true);
-          setUpdateStepText(`已成功下载至 ${res.filePath}`);
+          setUpdateStepText(`已成功保存至 ${res.filePath}`);
         } else {
           throw new Error('未能保存更新包到本地');
         }
       } else {
         // 浏览器环境网页模式下载
-        setUpdateStepText('正在发起浏览器下载...');
-        const downloadUrl = (result?.downloadUrl && result.downloadUrl.endsWith('.exe'))
-          ? result.downloadUrl
-          : `https://github.com/zoufudun/hengji/releases/download/v${targetVer}/%E8%A1%A1%E7%BB%A9%E5%91%98%E5%B7%A5%E7%BB%A9%E7%82%B9%E8%80%83%E6%A0%B8%E7%B3%BB%E7%BB%9F-${targetVer}.exe`;
+        setUpdateStepText(`正在发起浏览器下载 ${formatLabel}...`);
+        const filename = format === 'msi'
+          ? `衡绩员工绩点考核系统-${targetVer}.msi`
+          : format === 'setup'
+          ? `衡绩员工绩点考核系统-Setup-${targetVer}.exe`
+          : `衡绩员工绩点考核系统-${targetVer}.exe`;
+        const downloadUrl = `https://github.com/zoufudun/hengji/releases/download/v${targetVer}/${encodeURIComponent(filename)}`;
         const a = document.createElement('a');
         a.href = downloadUrl;
-        a.download = `衡绩员工绩点考核系统-${targetVer}.exe`;
+        a.download = filename;
         a.target = '_blank';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        setDownloadedPath(`浏览器默认下载目录 / 衡绩员工绩点考核系统-${targetVer}.exe (可转存至D盘)`);
+        setDownloadedPath(`浏览器默认下载目录 / ${filename}`);
         setUpdateSuccess(true);
       }
     } catch (err: any) {
@@ -2462,7 +2484,7 @@ function UpdateModal({
     >
       <div
         style={{
-          width: '680px',
+          width: '720px',
           maxWidth: '94%',
           background: '#ffffff',
           borderRadius: '16px',
@@ -2500,7 +2522,7 @@ function UpdateModal({
                 衡绩考核 (HengJi)
               </h3>
               <div style={{ fontSize: '13px', color: '#64748b', marginTop: '2px' }}>
-                版本 v{APP_VERSION}
+                当前运行版本: v{APP_VERSION}
               </div>
             </div>
           </div>
@@ -2527,12 +2549,12 @@ function UpdateModal({
                 <RefreshCw size={15} className="spin-icon" />
                 检测中...
               </button>
-            ) : updating ? (
+            ) : installing ? (
               <button
                 type="button"
                 disabled
                 style={{
-                  background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '8px',
@@ -2542,7 +2564,30 @@ function UpdateModal({
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
-                  boxShadow: '0 4px 14px rgba(234, 88, 12, 0.45)',
+                  boxShadow: '0 4px 14px rgba(37, 99, 235, 0.45)',
+                  cursor: 'wait',
+                  opacity: 0.95,
+                }}
+              >
+                <Loader2 size={16} className="spin-icon" />
+                {installStepText || '正在覆盖安装并重启...'}
+              </button>
+            ) : updating ? (
+              <button
+                type="button"
+                disabled
+                style={{
+                  background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '9px 20px',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.45)',
                   cursor: 'wait',
                   opacity: 0.95,
                 }}
@@ -2581,7 +2626,7 @@ function UpdateModal({
               <button
                 type="button"
                 style={{
-                  background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '8px',
@@ -2591,23 +2636,23 @@ function UpdateModal({
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
-                  boxShadow: '0 4px 12px rgba(234, 88, 12, 0.35)',
+                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)',
                   cursor: 'pointer',
                   transition: 'transform 0.15s, box-shadow 0.15s',
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(234, 88, 12, 0.45)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.45)';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(234, 88, 12, 0.35)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.35)';
                 }}
-                onClick={handleStartUpdate}
-                title="点击将更新包下载到本地 D盘"
+                onClick={() => handleAutoInstall('setup')}
+                title="一键自动下载并覆盖安装到当前程序目录，完成后自动启动新版本"
               >
-                <CloudDownload size={16} />
-                更新到 v{result.latestVersion}
+                <Sparkles size={16} />
+                自动覆盖升级并重启 (v{result.latestVersion})
               </button>
             ) : (
               <button
@@ -2663,7 +2708,7 @@ function UpdateModal({
             borderTop: '1px solid #f1f5f9',
             borderBottom: '1px solid #f1f5f9',
             padding: '16px 28px',
-            fontSize: '14px',
+            fontSize: '13.5px',
             fontWeight: 600,
             color: '#1e293b',
             display: 'flex',
@@ -2675,15 +2720,17 @@ function UpdateModal({
           <div>
             {checking
               ? '正在连接官方仓库检测最新版本...'
+              : installing
+              ? (installStepText || '正在覆盖安装并启动新版本，请稍候...')
               : updating
-              ? '正在下载更新包至本地 D盘，请稍候...'
+              ? (updateStepText || '正在下载更新包至本地 D盘，请稍候...')
               : updateSuccess
               ? `🎉 更新包已成功保存至本地！(v${result?.latestVersion || APP_VERSION})`
               : result?.hasUpdate
-              ? `检测到新版本: ${result.latestVersion} (点击上方按钮即可下载更新包到本地)`
+              ? `🚀 检测到新版本: v${result.latestVersion} (支持一键静默覆盖安装或下载独立安装包)`
               : result?.error
               ? `检测提示: ${result.error}`
-              : `检测到新版本: 无 (当前已是官方最新版本 ${APP_VERSION})`}
+              : `检测到新版本: 无 (当前已是官方最新版本 v${APP_VERSION})`}
           </div>
           {!checking && (
             <button
@@ -2706,6 +2753,256 @@ function UpdateModal({
               重新检查
             </button>
           )}
+        </div>
+
+        {/* 安装版本发布格式矩阵卡片：EXE安装版、MSI安装包、便携单文件版 */}
+        <div
+          style={{
+            margin: '16px 28px 0',
+            padding: '16px 20px',
+            background: result?.hasUpdate ? '#f0f7ff' : '#f8fafc',
+            border: `1px solid ${result?.hasUpdate ? '#bfdbfe' : '#e2e8f0'}`,
+            borderRadius: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>📦 安装版本发布与分发矩阵</span>
+                <span style={{ fontSize: '11.5px', background: result?.hasUpdate ? '#dbeafe' : '#e2e8f0', color: result?.hasUpdate ? '#1d4ed8' : '#475569', padding: '1px 7px', borderRadius: '4px', fontWeight: 600 }}>
+                  目标版本: v{result?.latestVersion || APP_VERSION}
+                </span>
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px' }}>
+                更新时将自动静默安装并覆盖到当前程序目录，完成后自动无缝启动新版本。
+              </div>
+            </div>
+
+            {result?.hasUpdate && (
+              <button
+                type="button"
+                disabled={installing || updating}
+                onClick={() => handleAutoInstall('setup')}
+                style={{
+                  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '7px 15px',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
+                  cursor: (installing || updating) ? 'wait' : 'pointer',
+                }}
+              >
+                {installing ? <Loader2 size={14} className="spin-icon" /> : <Sparkles size={14} />}
+                一键自动覆盖安装并重启
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+            {/* EXE 安装向导版 */}
+            <div
+              style={{
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Sparkles size={14} color="#2563eb" />
+                    <span>EXE 安装版</span>
+                  </div>
+                  <span style={{ fontSize: '10.5px', background: '#dbeafe', color: '#1e40af', padding: '1px 5px', borderRadius: '4px', fontWeight: 600 }}>
+                    Setup.exe
+                  </span>
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#64748b', lineHeight: 1.5 }}>
+                  NSIS 标准向导，支持一键静默覆盖安装与快捷方式维护。
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  disabled={installing || updating}
+                  onClick={() => handleAutoInstall('setup')}
+                  style={{
+                    flex: 1,
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '6px 8px',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    cursor: (installing || updating) ? 'wait' : 'pointer',
+                  }}
+                  title="自动下载并在后台静默覆盖安装到当前目录，然后启动新版本"
+                >
+                  ⚡ 覆盖安装
+                </button>
+                <button
+                  type="button"
+                  disabled={installing || updating}
+                  onClick={() => handleDownloadOrInstall('setup')}
+                  style={{
+                    background: '#f8fafc',
+                    color: '#334155',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '6px',
+                    padding: '6px 10px',
+                    fontSize: '11.5px',
+                    cursor: (installing || updating) ? 'wait' : 'pointer',
+                  }}
+                  title="保存 Setup 安装程序到 D盘"
+                >
+                  <CloudDownload size={13} />
+                </button>
+              </div>
+            </div>
+
+            {/* MSI 安装包 */}
+            <div
+              style={{
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Package size={14} color="#0891b2" />
+                    <span>MSI 安装包</span>
+                  </div>
+                  <span style={{ fontSize: '10.5px', background: '#cffafe', color: '#155e75', padding: '1px 5px', borderRadius: '4px', fontWeight: 600 }}>
+                    .msi 格式
+                  </span>
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#64748b', lineHeight: 1.5 }}>
+                  Windows Installer 标准包，支持企业组策略分发与静默覆盖部署。
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  disabled={installing || updating}
+                  onClick={() => handleAutoInstall('msi')}
+                  style={{
+                    flex: 1,
+                    background: '#0891b2',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '6px 8px',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    cursor: (installing || updating) ? 'wait' : 'pointer',
+                  }}
+                  title="自动下载并通过 msiexec 静默覆盖安装到当前目录，然后启动新版本"
+                >
+                  ⚡ MSI 安装
+                </button>
+                <button
+                  type="button"
+                  disabled={installing || updating}
+                  onClick={() => handleDownloadOrInstall('msi')}
+                  style={{
+                    background: '#f8fafc',
+                    color: '#334155',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '6px',
+                    padding: '6px 10px',
+                    fontSize: '11.5px',
+                    cursor: (installing || updating) ? 'wait' : 'pointer',
+                  }}
+                  title="保存 MSI 安装包到 D盘"
+                >
+                  <CloudDownload size={13} />
+                </button>
+              </div>
+            </div>
+
+            {/* 便携单文件版 */}
+            <div
+              style={{
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <FolderKanban size={14} color="#16a34a" />
+                    <span>便携单文件</span>
+                  </div>
+                  <span style={{ fontSize: '10.5px', background: '#dcfce7', color: '#166534', padding: '1px 5px', borderRadius: '4px', fontWeight: 600 }}>
+                    免安装
+                  </span>
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#64748b', lineHeight: 1.5 }}>
+                  绿色便携单可执行文件，无需安装写入注册表，双击即用。
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  disabled={installing || updating}
+                  onClick={() => handleAutoInstall('portable')}
+                  style={{
+                    flex: 1,
+                    background: '#16a34a',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '6px 8px',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    cursor: (installing || updating) ? 'wait' : 'pointer',
+                  }}
+                  title="自动下载便携版覆盖当前主程序并重启"
+                >
+                  ⚡ 单文件覆盖
+                </button>
+                <button
+                  type="button"
+                  disabled={installing || updating}
+                  onClick={() => handleDownloadOrInstall('portable')}
+                  style={{
+                    background: '#f8fafc',
+                    color: '#334155',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '6px',
+                    padding: '6px 10px',
+                    fontSize: '11.5px',
+                    cursor: (installing || updating) ? 'wait' : 'pointer',
+                  }}
+                  title="保存便携单文件到 D盘"
+                >
+                  <CloudDownload size={13} />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* 下载结果与文件路径展示卡片 */}
@@ -5765,7 +6062,7 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
                         <tr>
                           <th>项目名称</th>
                           <th>客户主体</th>
-                          <th>合同金额</th>
+                          <th>合同金额(万元)</th>
                           <th>项目负责人</th>
                           <th>项目周期</th>
                           <th>额度规划进度</th>
@@ -5904,11 +6201,11 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
                 <th>工作令号</th>
                 <th>项目名称</th>
                 <th>客户主体</th>
-                <th>合同金额</th>
+                <th>合同金额(万元)</th>
                 <th>项目负责人</th>
                 <th>项目周期</th>
-                <th>已规划额度</th>
-                <th>剩余额度</th>
+                <th>已规划额度(万元)</th>
+                <th>剩余额度(万元)</th>
                 <th>状态</th>
                 <th style={{ textAlign: 'right' }}>操作</th>
               </tr>
@@ -6239,8 +6536,8 @@ function ProjectDetailModal({ state, projectId, onClose, onOpenQuotaSchedule, on
               <th>所属专业组</th>
               <th>部门</th>
               <th>项目角色</th>
-              <th>累计获得额度</th>
-              <th>累计绩点</th>
+              <th>累计获得额度(万元)</th>
+              <th>累计绩点(万)</th>
               <th>占项目合同比例</th>
             </tr>
           </thead>
@@ -6303,9 +6600,9 @@ function ProjectDetailModal({ state, projectId, onClose, onOpenQuotaSchedule, on
                   <th>规划月份</th>
                   <th>阶段里程碑 / 交付目标</th>
                   <th>规划比例</th>
-                  <th>规划额度</th>
+                  <th>规划额度(万元)</th>
                   <th>实际分配比例</th>
-                  <th>实际分配额度</th>
+                  <th>实际分配额度(万元)</th>
                   <th>分配状态</th>
                   <th>执行偏差</th>
                   <th>规划交付物说明</th>
@@ -6349,7 +6646,7 @@ function ProjectDetailModal({ state, projectId, onClose, onOpenQuotaSchedule, on
             <tr>
               <th>分配月份</th>
               <th>月度预算比例</th>
-              <th>月度额度</th>
+              <th>月度额度(万元)</th>
               <th>状态</th>
               <th>说明</th>
               <th>成员分配分润明细</th>
@@ -7023,8 +7320,8 @@ function ProjectQuotaModal({
                 <th style={{ width: '130px' }}>规划月份与阶段</th>
                 <th style={{ width: '180px' }}>阶段里程碑 / 交付目标</th>
                 <th style={{ width: '190px' }}>规划分配比例 (%)</th>
-                <th style={{ width: '110px' }}>规划额度</th>
-                <th style={{ width: '130px' }}>实际分配额度</th>
+                <th style={{ width: '110px' }}>规划额度(万元)</th>
+                <th style={{ width: '130px' }}>实际分配额度(万元)</th>
                 <th style={{ width: '90px' }}>执行偏差</th>
                 <th>交付成果 / 规划说明</th>
                 <th style={{ width: '60px', textAlign: 'center' }}>操作</th>
@@ -8487,7 +8784,7 @@ function PlansView({
                   </th>
                   <th style={{ width: '22%' }}>项目令号与名称</th>
                   <th style={{ width: '18%' }}>全周期规划参考 ({selectedMonth})</th>
-                  <th style={{ width: '24%' }}>当月分配额度 (可直接行内调整)</th>
+                  <th style={{ width: '24%' }}>当月分配额度(万元) (可直接行内调整)</th>
                   <th style={{ width: '18%' }}>项目成员分配预览</th>
                   <th style={{ width: '10%', textAlign: 'center' }}>当前状态</th>
                   <th style={{ width: '8%', textAlign: 'center' }}>操作</th>
@@ -10367,18 +10664,18 @@ function AnalyticsView({ state }: { state: State }) {
             </div>
             <div className="chart-kpi-item">
               <span>年度累计绩点</span>
-              <strong style={{ color: '#15803d' }}>{score(empYearTotalPoints)}</strong>
+              <strong style={{ color: '#15803d' }}>{score(empYearTotalPoints)} 万</strong>
               <small>已发布生效绩点</small>
             </div>
             <div className="chart-kpi-item">
               <span>折合总额度</span>
               <strong style={{ color: '#059669' }}>{empYearTotalWan} 万元</strong>
-              <small>按 100绩点 = 1万元折算</small>
+              <small>1万绩点 = 1万元合同额</small>
             </div>
             <div className="chart-kpi-item">
               <span>有收益月份数</span>
               <strong>{empYearActiveMonths} / 12 个月</strong>
-              <small>{empYearActiveMonths > 0 ? `月均 ${score(Math.round(empYearTotalPoints / empYearActiveMonths))} 绩点` : '暂无收益'}</small>
+              <small>{empYearActiveMonths > 0 ? `月均 ${score(Math.round(empYearTotalPoints / empYearActiveMonths))} 万绩点` : '暂无收益'}</small>
             </div>
           </div>
         )}
@@ -11056,8 +11353,8 @@ function StarsView({ state }: { state: State }) {
           {/* 宏观指标卡 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12px', color: '#64748b' }}>
             <div>参评全员: <strong style={{ color: '#0f172a', fontSize: '13px' }}>{fullRankingData.length}</strong> 人</div>
-            <div>榜首最高: <strong style={{ color: '#059669', fontSize: '13px' }}>{score(periodTopPoints)}</strong> 绩点</div>
-            <div>人均基准: <strong style={{ color: '#0284c7', fontSize: '13px' }}>{score(periodAvgPoints)}</strong> 绩点</div>
+            <div>榜首最高: <strong style={{ color: '#059669', fontSize: '13px' }}>{score(periodTopPoints)}</strong> 万绩点</div>
+            <div>人均基准: <strong style={{ color: '#0284c7', fontSize: '13px' }}>{score(periodAvgPoints)}</strong> 万绩点</div>
           </div>
         </div>
 
@@ -11073,8 +11370,8 @@ function StarsView({ state }: { state: State }) {
                 <th>职务</th>
                 <th>所属部门</th>
                 <th style={{ textAlign: 'center' }}>参与项目数</th>
-                <th style={{ textAlign: 'right' }}>总获得绩点</th>
-                <th style={{ textAlign: 'right' }}>折合金额</th>
+                <th style={{ textAlign: 'right' }}>总获得绩点(万)</th>
+                <th style={{ textAlign: 'right' }}>折合金额(万元)</th>
                 <th>与人均对比</th>
                 <th style={{ textAlign: 'center' }}>所属梯队</th>
                 <th style={{ textAlign: 'center' }}>荣誉称号</th>
@@ -11191,7 +11488,7 @@ function StarsView({ state }: { state: State }) {
                     <th>项目名称</th>
                     <th>工作令号</th>
                     <th>归属月份</th>
-                    <th style={{ textAlign: 'right' }}>分配绩点</th>
+                    <th style={{ textAlign: 'right' }}>分配绩点(万)</th>
                     <th style={{ textAlign: 'right' }}>分配比例</th>
                   </tr>
                 </thead>
@@ -11592,8 +11889,8 @@ function ReportsView({ state }: { state: State }) {
               <th>所属部门</th>
               <th>贡献项目数</th>
               <th>活跃月份</th>
-              <th>获得总绩点</th>
-              <th>折合总额度</th>
+              <th>获得总绩点(万)</th>
+              <th>折合总额度(万元)</th>
               <th className="actions">操作</th>
             </tr>
           </thead>
@@ -11643,7 +11940,7 @@ function ReportsView({ state }: { state: State }) {
               </article>
               <article>
                 <span>获得总绩点</span>
-                <strong style={{ color: '#166534' }}>{score(detailRow.points)}</strong>
+                <strong style={{ color: '#166534' }}>{score(detailRow.points)} 万</strong>
                 <small>折合 {(detailRow.points / 1_000_000).toFixed(4)} 万元</small>
               </article>
               <article>
@@ -11661,8 +11958,8 @@ function ReportsView({ state }: { state: State }) {
                   <th>项目名称</th>
                   <th>月度总预算比例</th>
                   <th>个人当月比例</th>
-                  <th>获得绩点</th>
-                  <th>折合额度</th>
+                  <th>获得绩点(万)</th>
+                  <th>折合额度(万元)</th>
                 </tr>
               </thead>
               <tbody>
@@ -12102,7 +12399,7 @@ function DataIoView({
                 <div style={{ maxHeight: 180, overflowY: 'auto' }}>
                   <table>
                     <thead>
-                      <tr><th>工作令号</th><th>项目名称</th><th>合同金额</th><th>项目周期</th></tr>
+                      <tr><th>工作令号</th><th>项目名称</th><th>合同金额(万元)</th><th>项目周期</th></tr>
                     </thead>
                     <tbody>
                       {prjPreview.slice(0, 10).map((p, idx) => (
@@ -12804,7 +13101,7 @@ function ProjectFormModal({ state, value, initialGroupId, projectGroups, onSaveG
                 <tr>
                   <th>工作令号</th>
                   <th>项目名称</th>
-                  <th>合同金额</th>
+                  <th>合同金额(万元)</th>
                   <th>起止日期</th>
                   <th>操作</th>
                 </tr>

@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('meritDesktop', {
   refocusWindow: () => ipcRenderer.invoke('workspace:refocus-window'),
   openUrl: (url) => ipcRenderer.invoke('workspace:open-url', url),
   downloadUpdate: (payload) => ipcRenderer.invoke('workspace:download-update', payload),
+  installUpdate: (payload) => ipcRenderer.invoke('workspace:install-update', payload),
   showItemInFolder: (filePath) => ipcRenderer.invoke('workspace:show-item-in-folder', filePath),
   openPath: (filePath) => ipcRenderer.invoke('workspace:open-path', filePath)
 });

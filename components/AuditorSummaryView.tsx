@@ -1104,8 +1104,8 @@ export function AuditorSummaryView({
                     <th>所属专业组</th>
                     <th>职务</th>
                     <th>参与项目数</th>
-                    <th style={{ textAlign: 'right' }}>累计获得绩点</th>
-                    <th style={{ textAlign: 'right' }}>折合金额</th>
+                    <th style={{ textAlign: 'right' }}>累计获得绩点(万)</th>
+                    <th style={{ textAlign: 'right' }}>折合金额(万元)</th>
                     <th>参与项目明细</th>
                     <th style={{ textAlign: 'center', width: '90px' }}>全景下钻</th>
                   </tr>
@@ -1237,10 +1237,10 @@ export function AuditorSummaryView({
                     <th>项目名称</th>
                     <th>项目负责人</th>
                     <th>客户单位</th>
-                    <th style={{ textAlign: 'right' }}>合同总额</th>
-                    <th style={{ textAlign: 'right' }}>已分配额度</th>
+                    <th style={{ textAlign: 'right' }}>合同总额(万)</th>
+                    <th style={{ textAlign: 'right' }}>已分配额度(万)</th>
                     <th style={{ textAlign: 'right' }}>已分配比例</th>
-                    <th style={{ textAlign: 'right' }}>剩余额度</th>
+                    <th style={{ textAlign: 'right' }}>剩余额度(万)</th>
                     <th style={{ textAlign: 'center' }}>参与人数</th>
                     <th style={{ textAlign: 'center' }}>额度健康状态</th>
                   </tr>
@@ -1397,8 +1397,8 @@ export function AuditorSummaryView({
                     <th>员工姓名</th>
                     <th>专业组</th>
                     <th>职务</th>
-                    <th style={{ textAlign: 'right' }}>总获得绩点</th>
-                    <th style={{ textAlign: 'right' }}>折合金额</th>
+                    <th style={{ textAlign: 'right' }}>总获得绩点(万)</th>
+                    <th style={{ textAlign: 'right' }}>折合金额(万元)</th>
                     <th>与部门人均对比</th>
                     <th style={{ textAlign: 'center' }}>参与项目数</th>
                     <th style={{ textAlign: 'center' }}>所属梯队</th>
@@ -1862,8 +1862,8 @@ export function AuditorSummaryView({
                     <th>专业组</th>
                     <th>职务</th>
                     <th style={{ textAlign: 'right' }}>分润比例</th>
-                    <th style={{ textAlign: 'right' }}>获得绩点</th>
-                    <th style={{ textAlign: 'right' }}>折合金额</th>
+                    <th style={{ textAlign: 'right' }}>获得绩点(万)</th>
+                    <th style={{ textAlign: 'right' }}>折合金额(万元)</th>
                     <th>工作履职内容</th>
                   </tr>
                 </thead>
@@ -1954,8 +1954,8 @@ export function AuditorSummaryView({
                     <th>工作令号</th>
                     <th>项目名称</th>
                     <th>项目负责人</th>
-                    <th style={{ textAlign: 'right' }}>在该项目获得绩点</th>
-                    <th style={{ textAlign: 'right' }}>折合金额</th>
+                    <th style={{ textAlign: 'right' }}>在该项目获得绩点(万)</th>
+                    <th style={{ textAlign: 'right' }}>折合金额(万元)</th>
                     <th style={{ textAlign: 'right' }}>在该项目占比</th>
                   </tr>
                 </thead>
@@ -2048,8 +2048,8 @@ export function AuditorSummaryView({
                     <th>成员姓名</th>
                     <th>专业组</th>
                     <th>职务</th>
-                    <th style={{ textAlign: 'right' }}>获得绩点</th>
-                    <th style={{ textAlign: 'right' }}>折合金额</th>
+                    <th style={{ textAlign: 'right' }}>获得绩点(万)</th>
+                    <th style={{ textAlign: 'right' }}>折合金额(万元)</th>
                     <th style={{ textAlign: 'right' }}>在该项目占比</th>
                   </tr>
                 </thead>

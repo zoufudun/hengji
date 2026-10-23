@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const { encryptWorkspace, decryptWorkspace } = require('./workspace-crypto.cjs');
 let session = null;
 
@@ -238,9 +239,38 @@ app.whenReady().then(() => {
     return false;
   });
 
+  async function resolveReleaseAssetUrl(ver, format = 'exe') {
+    try {
+      const apiRes = await fetch(`https://api.github.com/repos/zoufudun/hengji/releases/tags/v${ver}`, {
+        headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'Hengji-Desktop-App' }
+      });
+      if (apiRes.ok) {
+        const relData = await apiRes.json();
+        const assets = Array.isArray(relData.assets) ? relData.assets : [];
+        if (format === 'msi') {
+          const msi = assets.find(a => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.msi'));
+          if (msi && msi.browser_download_url) return msi.browser_download_url;
+        } else if (format === 'setup' || format === 'installer') {
+          const setup = assets.find(a => typeof a.name === 'string' && (a.name.toLowerCase().includes('setup') || a.name.toLowerCase().endsWith('.msi')));
+          if (setup && setup.browser_download_url) return setup.browser_download_url;
+        }
+        const exe = assets.find(a => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.exe'));
+        if (exe && exe.browser_download_url) return exe.browser_download_url;
+      }
+    } catch (err) {
+      console.warn('resolveReleaseAssetUrl error:', err);
+    }
+    return null;
+  }
+
   ipcMain.handle('workspace:download-update', async (_event, payload) => {
-    const ver = (payload && payload.version) ? String(payload.version).replace(/^v/, '') : '0.7.5';
-    const filename = `衡绩员工绩点考核系统-${ver}.exe`;
+    const ver = (payload && payload.version) ? String(payload.version).replace(/^v/, '') : '0.7.6';
+    const format = payload && payload.format ? String(payload.format).toLowerCase() : 'exe';
+    let filename = format === 'msi'
+      ? `衡绩员工绩点考核系统-${ver}.msi`
+      : format === 'setup'
+      ? `衡绩员工绩点考核系统-Setup-${ver}.exe`
+      : `衡绩员工绩点考核系统-${ver}.exe`;
 
     // 优先下载/保存至 D:\ 盘，如无 D盘 则降级至系统下载目录
     let targetDir = 'D:\\';
@@ -257,13 +287,14 @@ app.whenReady().then(() => {
     // 查找本地已有的桌面版安装程序包进行高速直拷（离线环境百分百可靠）
     const candidateLocalSources = [
       path.join(__dirname, '..', 'dist-desktop', filename),
+      path.join(__dirname, '..', 'dist-desktop', `衡绩员工绩点考核系统-Setup-${ver}.exe`),
+      path.join(__dirname, '..', 'dist-desktop', `衡绩员工绩点考核系统-${ver}.msi`),
+      path.join(__dirname, '..', 'dist-desktop', `衡绩员工绩点考核系统-${ver}.exe`),
       path.join(__dirname, '..', filename),
-      path.join(__dirname, '..', 'dist-desktop', '衡绩员工绩点考核系统.exe'),
-      path.join(__dirname, '..', '衡绩员工绩点考核系统.exe'),
       path.join(process.cwd(), 'dist-desktop', filename),
-      path.join(process.cwd(), 'dist-desktop', '衡绩员工绩点考核系统.exe'),
-      path.join(process.cwd(), filename),
-      path.join(process.cwd(), '衡绩员工绩点考核系统.exe'),
+      path.join(process.cwd(), 'dist-desktop', `衡绩员工绩点考核系统-Setup-${ver}.exe`),
+      path.join(process.cwd(), 'dist-desktop', `衡绩员工绩点考核系统-${ver}.msi`),
+      path.join(process.cwd(), 'dist-desktop', `衡绩员工绩点考核系统-${ver}.exe`),
       app.isPackaged ? process.execPath : null
     ].filter(Boolean);
 
@@ -284,31 +315,14 @@ app.whenReady().then(() => {
     }
 
     if (!copiedFromLocal) {
-      // 若本地未找到打包产物，从 GitHub Releases 官方下载
       let fetchUrl = (payload && payload.downloadUrl && String(payload.downloadUrl).startsWith('http')) ? payload.downloadUrl : null;
       if (!fetchUrl) {
-        try {
-          const apiRes = await fetch(`https://api.github.com/repos/zoufudun/hengji/releases/tags/v${ver}`, {
-            headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'Hengji-Desktop-App' }
-          });
-          if (apiRes.ok) {
-            const relData = await apiRes.json();
-            const exeAsset = Array.isArray(relData.assets) && relData.assets.find(a => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.exe'));
-            if (exeAsset && exeAsset.browser_download_url) {
-              fetchUrl = exeAsset.browser_download_url;
-            }
-          }
-        } catch (err) {
-          console.warn('Query release assets failed:', err);
-        }
+        fetchUrl = await resolveReleaseAssetUrl(ver, format);
       }
       if (!fetchUrl) {
         fetchUrl = `https://github.com/zoufudun/hengji/releases/download/v${ver}/${encodeURIComponent(filename)}`;
       }
       let response = await fetch(fetchUrl, { redirect: 'follow' });
-      if (!response.ok && fetchUrl !== `https://github.com/zoufudun/hengji/releases/download/v${ver}/${encodeURIComponent(filename)}`) {
-        response = await fetch(`https://github.com/zoufudun/hengji/releases/download/v${ver}/${encodeURIComponent(filename)}`, { redirect: 'follow' });
-      }
       if (!response.ok) {
         throw new Error(`下载失败 (HTTP ${response.status})：未能从官方渠道获取 ${filename}`);
       }
@@ -316,7 +330,6 @@ app.whenReady().then(() => {
       fs.writeFileSync(targetPath, buffer);
     }
 
-    // 下载保存完成后，自动调用系统资源管理器高亮显示更新包
     try {
       shell.showItemInFolder(targetPath);
     } catch (e) {
@@ -329,6 +342,134 @@ app.whenReady().then(() => {
       folder: targetDir,
       fileName: filename
     };
+  });
+
+  ipcMain.handle('workspace:install-update', async (_event, payload) => {
+    const ver = (payload && payload.version) ? String(payload.version).replace(/^v/, '') : '0.7.6';
+    const currentExe = process.execPath;
+    const currentDir = path.dirname(currentExe);
+    const currentPid = process.pid;
+
+    // 1. 优先获取安装包（Setup.exe 或 .msi 或 portable.exe）
+    let installerPath = null;
+    const localCandidateInstallers = [
+      path.join(__dirname, '..', 'dist-desktop', `衡绩员工绩点考核系统-Setup-${ver}.exe`),
+      path.join(process.cwd(), 'dist-desktop', `衡绩员工绩点考核系统-Setup-${ver}.exe`),
+      path.join(__dirname, '..', 'dist-desktop', `衡绩员工绩点考核系统-${ver}.msi`),
+      path.join(process.cwd(), 'dist-desktop', `衡绩员工绩点考核系统-${ver}.msi`),
+      path.join(__dirname, '..', 'dist-desktop', `衡绩员工绩点考核系统-${ver}.exe`),
+      path.join(process.cwd(), 'dist-desktop', `衡绩员工绩点考核系统-${ver}.exe`),
+      path.join('D:\\', `衡绩员工绩点考核系统-${ver}.exe`),
+      path.join('D:\\', `衡绩员工绩点考核系统-Setup-${ver}.exe`),
+      path.join('D:\\', `衡绩员工绩点考核系统-${ver}.msi`)
+    ];
+
+    for (const src of localCandidateInstallers) {
+      if (fs.existsSync(src)) {
+        try {
+          if (fs.statSync(src).size > 1024 * 1024) {
+            installerPath = src;
+            break;
+          }
+        } catch {}
+      }
+    }
+
+    // 若本地未找到打包产物，从远端高速下载到系统临时目录
+    if (!installerPath) {
+      const ext = (payload && payload.format === 'msi') ? '.msi' : '.exe';
+      const tempFilename = `hengji-installer-${ver}-${Date.now()}${ext}`;
+      const tempPath = path.join(os.tmpdir(), tempFilename);
+
+      let fetchUrl = (payload && payload.downloadUrl && String(payload.downloadUrl).startsWith('http')) ? payload.downloadUrl : null;
+      if (!fetchUrl) {
+        fetchUrl = await resolveReleaseAssetUrl(ver, payload?.format || 'setup');
+      }
+      if (!fetchUrl) {
+        fetchUrl = `https://github.com/zoufudun/hengji/releases/download/v${ver}/%E8%A1%A1%E7%BB%A9%E5%91%98%E5%B7%A5%E7%BB%A9%E7%82%B9%E8%80%83%E6%A0%B8%E7%B3%BB%E7%BB%9F-Setup-${ver}.exe`;
+      }
+      let response = await fetch(fetchUrl, { redirect: 'follow' });
+      if (!response.ok) {
+        // Fallback to release exe
+        const fallbackUrl = `https://github.com/zoufudun/hengji/releases/download/v${ver}/%E8%A1%A1%E7%BB%A9%E5%91%98%E5%B7%A5%E7%BB%A9%E7%82%B9%E8%80%83%E6%A0%B8%E7%B3%BB%E7%BB%9F-${ver}.exe`;
+        response = await fetch(fallbackUrl, { redirect: 'follow' });
+      }
+      if (!response.ok) {
+        throw new Error(`下载安装包失败 (HTTP ${response.status})`);
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      fs.writeFileSync(tempPath, buffer);
+      installerPath = tempPath;
+    }
+
+    // 2. 生成自动化安装覆盖并启动新版本的 PowerShell 脚本
+    const scriptPath = path.join(os.tmpdir(), `hengji-apply-update-${Date.now()}.ps1`);
+    const isSetupExe = installerPath.toLowerCase().endsWith('.exe') && (installerPath.toLowerCase().includes('setup') || installerPath.toLowerCase().includes('install'));
+    const isMsi = installerPath.toLowerCase().endsWith('.msi');
+
+    const scriptContent = `
+$ErrorActionPreference = "SilentlyContinue"
+$pidToWait = ${currentPid}
+$targetDir = "${currentDir.replace(/\\/g, '\\\\')}"
+$currentExe = "${currentExe.replace(/\\/g, '\\\\')}"
+$installer = "${installerPath.replace(/\\/g, '\\\\')}"
+
+# 等待旧主程序进程完全退出以释放文件占用
+Wait-Process -Id $pidToWait -Timeout 25
+Start-Sleep -Seconds 1
+
+# 安装版本覆盖到当前目录
+if ("${isSetupExe}" -eq "True") {
+    Start-Process -FilePath $installer -ArgumentList "/S", "/D=$targetDir" -Wait
+    Start-Sleep -Seconds 2
+} elseif ("${isMsi}" -eq "True") {
+    Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "\`"$installer\`"", "/qn", "TARGETDIR=\`"$targetDir\`"" -Wait
+    Start-Sleep -Seconds 2
+} else {
+    # 便携单文件直接覆盖
+    Copy-Item -Path $installer -Destination $currentExe -Force
+    Start-Sleep -Seconds 1
+}
+
+# 启动覆盖安装后的新版本
+$cand1 = Join-Path $targetDir "衡绩员工绩点考核系统.exe"
+$cand2 = Join-Path $targetDir "衡绩员工绩点考核系统-${ver}.exe"
+$cand3 = Join-Path $targetDir (Split-Path $currentExe -Leaf)
+if (Test-Path $cand1) {
+    Start-Process -FilePath $cand1
+} elseif (Test-Path $cand2) {
+    Start-Process -FilePath $cand2
+} elseif (Test-Path $cand3) {
+    Start-Process -FilePath $cand3
+} elseif (Test-Path $currentExe) {
+    Start-Process -FilePath $currentExe
+}
+
+Start-Sleep -Seconds 2
+Remove-Item -Path $MyInvocation.MyCommand.Path -Force
+`;
+
+    fs.writeFileSync(scriptPath, scriptContent, 'utf8');
+
+    // 3. 以后台独立分离进程方式执行更新安装器
+    const { spawn } = require('child_process');
+    const child = spawn('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy', 'Bypass',
+      '-WindowStyle', 'Hidden',
+      '-File', scriptPath
+    ], {
+      detached: true,
+      stdio: 'ignore'
+    });
+    child.unref();
+
+    // 4. 退出当前软件以释放文件锁
+    setTimeout(() => {
+      app.quit();
+    }, 400);
+
+    return { success: true, message: '正在自动安装覆盖并重启新版本...' };
   });
 
   ipcMain.handle('workspace:show-item-in-folder', (_event, filePath) => {
