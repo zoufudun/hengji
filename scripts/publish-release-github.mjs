@@ -18,6 +18,7 @@ async function getGitHubToken() {
 
 async function main() {
   const token = await getGitHubToken();
+  const repo = 'zoufudun/hengji';
   const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
   const ver = pkg.version || '0.7.8';
   const tag = `v${ver}`;
@@ -99,23 +100,40 @@ async function main() {
       : item.name.endsWith('.zip')
       ? 'application/zip'
       : 'application/vnd.microsoft.portable-executable';
-    const uploadRes = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `token ${token}`,
-        'User-Agent': 'HengJi-Release-Publisher',
-        'Content-Type': contentType,
-        'Content-Length': String(fileBuffer.length)
-      },
-      body: fileBuffer
-    });
 
-    if (!uploadRes.ok) {
-      const err = await uploadRes.text();
-      console.error(`Failed to upload ${item.name}: ${uploadRes.status} ${err}`);
-    } else {
-      const uploaded = await uploadRes.json();
-      console.log(`✔ Successfully uploaded ${item.name} (${uploaded.browser_download_url})`);
+    let success = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const uploadRes = await fetch(uploadUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `token ${token}`,
+            'User-Agent': 'HengJi-Release-Publisher',
+            'Content-Type': contentType,
+            'Content-Length': String(fileBuffer.length)
+          },
+          body: fileBuffer
+        });
+
+        if (!uploadRes.ok) {
+          const err = await uploadRes.text();
+          console.error(`Attempt ${attempt} failed for ${item.name}: ${uploadRes.status} ${err}`);
+        } else {
+          const uploaded = await uploadRes.json();
+          console.log(`✔ Successfully uploaded ${item.name} (${uploaded.browser_download_url})`);
+          success = true;
+          break;
+        }
+      } catch (e) {
+        console.warn(`Attempt ${attempt} network error for ${item.name}:`, e.message);
+      }
+      if (attempt < 3) {
+        console.log(`Retrying in 3 seconds...`);
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    }
+    if (!success) {
+      throw new Error(`Failed to upload ${item.name} after 3 attempts`);
     }
   }
 
