@@ -14,7 +14,9 @@ async function getGitHubToken() {
 async function main() {
   const token = await getGitHubToken();
   const repo = 'zoufudun/hengji';
-  const tag = 'v0.7.7';
+  const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
+  const ver = pkg.version || '0.7.8';
+  const tag = `v${ver}`;
   const headers = {
     'Authorization': `token ${token}`,
     'User-Agent': 'HengJi-Release-Publisher',
@@ -30,7 +32,7 @@ async function main() {
 
   // 1. 清理有截断前缀 '-' 的旧资产
   for (const a of existingAssets) {
-    if (a.name.startsWith('-') || (a.name === 'hengji-Setup-0.7.7.exe' && a.size > 100 * 1024 * 1024)) {
+    if (a.name.startsWith('-') || (a.name === `hengji-Setup-${ver}.exe` && a.size > 100 * 1024 * 1024)) {
       console.log(`Deleting invalid/obsolete asset: ${a.name} (id ${a.id}, size ${(a.size/1024/1024).toFixed(2)} MB)...`);
       await fetch(`https://api.github.com/repos/${repo}/releases/assets/${a.id}`, { method: 'DELETE', headers });
     }
@@ -38,11 +40,10 @@ async function main() {
 
   // 2. 待同步的官方标准发布文件
   const files = [
-    { src: 'dist-desktop/hengji-Setup-0.7.7.exe', name: 'hengji-Setup-0.7.7.exe' },
-    { src: 'dist-desktop/hengji-0.7.7.msi', name: 'hengji-0.7.7.msi' },
-    { src: 'dist-desktop/hengji-0.7.7.zip', name: 'hengji-0.7.7.zip' },
-    { src: 'dist-desktop/hengji-0.7.7.exe', name: 'hengji-0.7.7.exe' },
-    { src: 'dist-desktop/hengji-0.7.7.exe', name: 'hengji-portable.exe' }
+    { src: `dist-desktop/hengji-${ver}.msi`, name: `hengji-${ver}.msi` },
+    { src: `dist-desktop/hengji-${ver}.exe`, name: `hengji-${ver}.exe` },
+    { src: `dist-desktop/hengji-${ver}.zip`, name: `hengji-${ver}.zip` },
+    { src: `dist-desktop/hengji-portable-${ver}.exe`, name: `hengji-portable-${ver}.exe` }
   ];
 
   // 重新获取最新资产列表
@@ -95,7 +96,7 @@ async function main() {
     }
   }
 
-  console.log('\n🎉 All v0.7.7 release assets verified and synced perfectly!');
+  console.log(`\n🎉 All v${ver} release assets verified and synced perfectly!`);
   console.log(`Release URL: ${release.html_url}`);
 }
 

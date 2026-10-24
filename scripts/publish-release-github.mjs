@@ -18,8 +18,9 @@ async function getGitHubToken() {
 
 async function main() {
   const token = await getGitHubToken();
-  const repo = 'zoufudun/hengji';
-  const tag = 'v0.7.7';
+  const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
+  const ver = pkg.version || '0.7.8';
+  const tag = `v${ver}`;
   const headers = {
     'Authorization': `token ${token}`,
     'User-Agent': 'HengJi-Release-Publisher',
@@ -37,8 +38,8 @@ async function main() {
     const createBody = {
       tag_name: tag,
       target_commitish: 'main',
-      name: `v0.7.7: MSI安装修复、顶部栏精简、弹窗现代彩瓣徽标、新增ZIP绿色解压版发布`,
-      body: `## 衡绩员工绩点考核系统 v0.7.7\n\n### 💡 核心体验升级与更新说明：\n1. **MSI 安装包交互向导修复**：修正 Windows Installer 交互向导与参数配置（关闭静默 oneClick，开启图形安装向导），解决用户双击 MSI 文件后无反应的系统问题，支持标准交互安装与桌面快捷方式创建；\n2. **顶部导航栏极简净化**：移除顶部冗余的【关于】与【操作手册】按钮，工作台视图更为整洁聚焦；\n3. **弹窗徽标品牌升级**：版本更新与关于弹窗顶部标识升级为现代八彩花瓣艺术图标（高分辨率品牌原图），主界面侧栏继续保留大号金黄“衡”字印章；\n4. **新增 ZIP 绿色解压版**：正式引入 \`衡绩员工绩点考核系统-0.7.7.zip\`，用户下载后直接解压即可运行，零依赖、免安装、双击即用；\n5. **四重分发矩阵与一键覆盖安装**：\n   - **EXE 安装版**：\`衡绩员工绩点考核系统-Setup-0.7.7.exe\`（NSIS 安装向导）；\n   - **MSI 安装包**：\`衡绩员工绩点考核系统-0.7.7.msi\`（Windows Installer 标准向导）；\n   - **ZIP 绿色版**：\`衡绩员工绩点考核系统-0.7.7.zip\`（下载解压即用）；\n   - **便携单文件**：\`衡绩员工绩点考核系统-0.7.7.exe\`（单文件免安装）；\n   - 客户端内支持一键静默自动覆盖安装并无缝重启。`,
+      name: `v${ver}: 侧栏徽标尊贵加大、二维透视矩阵全量规范万单位、前五名榜单直观重构、多格式覆盖安装修复`,
+      body: `## 衡绩员工绩点考核系统 v${ver}\n\n### 💡 核心体验升级与更新说明：\n1. **侧边栏品牌徽标尊贵加大**：侧边栏“衡”字主徽标尺寸升级加大至 52px，搭配 21px 醒目品牌字体，视觉中心更为稳重大气；\n2. **二维透视矩阵绩点全量规范以“万”为单位**：修正透视矩阵计算，各项目分润与右侧【个人累加】、底行【项目累加】全量以“万元”为标准单位严格对齐，表头清晰标示“个人累加 (万)”与“绩点单位：万元”；\n3. **当月个人绩点前五名直观排行榜重构**：全新设计前五名排行榜体验，金银铜牌勋章、员工专属头像与团队标签、高辨识度进度柱状对比条、万元清晰大字号数值，直观震撼一目了然；\n4. **覆盖安装与多格式安装进程全面修复**：彻底修复覆盖安装、MSI安装、单文件覆盖、解压覆盖退出后无安装进程的问题，独立弹出高可靠向导控制台，安装进程全程清晰可见无缝接管；\n5. **四重分发矩阵与统一命名规范**：\n   - **EXE 安装版**：\`hengji-${ver}.exe\`（NSIS 交互安装向导）；\n   - **MSI 安装包**：\`hengji-${ver}.msi\`（Windows Installer 标准向导）；\n   - **ZIP 绿色版**：\`hengji-${ver}.zip\`（解压即用）；\n   - **便携单文件**：\`hengji-portable-${ver}.exe\`（免安装单文件版）。`,
       draft: false,
       prerelease: false
     };
@@ -57,17 +58,12 @@ async function main() {
     throw new Error(`Failed to check release: ${checkRes.status} ${await checkRes.text()}`);
   }
 
-  // 待上传资产映射列表（中文原名 + ASCII 别名）
+  // 待上传官方统一资产列表
   const filesToUpload = [
-    { src: 'dist-desktop/衡绩员工绩点考核系统-Setup-0.7.7.exe', name: '衡绩员工绩点考核系统-Setup-0.7.7.exe' },
-    { src: 'dist-desktop/衡绩员工绩点考核系统-Setup-0.7.7.exe', name: 'hengji-Setup-0.7.7.exe' },
-    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.msi', name: '衡绩员工绩点考核系统-0.7.7.msi' },
-    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.msi', name: 'hengji-0.7.7.msi' },
-    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.zip', name: '衡绩员工绩点考核系统-0.7.7.zip' },
-    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.zip', name: 'hengji-0.7.7.zip' },
-    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.exe', name: '衡绩员工绩点考核系统-0.7.7.exe' },
-    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.exe', name: 'hengji-0.7.7.exe' },
-    { src: 'dist-desktop/衡绩员工绩点考核系统-0.7.7.exe', name: 'hengji-portable.exe' }
+    { src: `dist-desktop/hengji-${ver}.msi`, name: `hengji-${ver}.msi` },
+    { src: `dist-desktop/hengji-${ver}.exe`, name: `hengji-${ver}.exe` },
+    { src: `dist-desktop/hengji-${ver}.zip`, name: `hengji-${ver}.zip` },
+    { src: `dist-desktop/hengji-portable-${ver}.exe`, name: `hengji-portable-${ver}.exe` }
   ];
 
   // 刷新获取当前已有资产
@@ -123,7 +119,7 @@ async function main() {
     }
   }
 
-  console.log('\n🎉 All v0.7.7 assets uploaded successfully to GitHub Releases!');
+  console.log(`\n🎉 All v${ver} assets uploaded successfully to GitHub Releases!`);
   console.log(`Release URL: ${release.html_url}`);
 }
 

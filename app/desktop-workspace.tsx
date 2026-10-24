@@ -342,7 +342,7 @@ function BurstLogo({ size = 32 }: { size?: number }) {
 // -------------------------------------------------------------
 // 品牌徽标标识 (Brand Logo: 金黄圆角衡章，内嵌火焰薪火与衡字)
 // -------------------------------------------------------------
-function BrandLogo({ size = 42 }: { size?: number }) {
+function BrandLogo({ size = 52 }: { size?: number }) {
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
       <img
@@ -354,11 +354,11 @@ function BrandLogo({ size = 42 }: { size?: number }) {
           width: size,
           height: size,
           objectFit: 'cover',
-          borderRadius: Math.max(7, Math.round(size * 0.22)),
+          borderRadius: Math.max(8, Math.round(size * 0.22)),
           display: 'inline-block',
           verticalAlign: 'middle',
           flexShrink: 0,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.22)',
+          boxShadow: '0 3px 10px rgba(0,0,0,0.28)',
         }}
       />
     </div>
@@ -1391,10 +1391,10 @@ export default function DesktopWorkspace() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 6px 18px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '18px' }}>
-          <DualBrandLogo size={42} />
+        <div className="brand" style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '0 4px 18px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '18px' }}>
+          <DualBrandLogo size={52} />
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <strong style={{ fontSize: '19px', fontWeight: 800, letterSpacing: '1.5px', color: '#ffffff', lineHeight: 1, whiteSpace: 'nowrap' }}>
+            <strong style={{ fontSize: '21px', fontWeight: 800, letterSpacing: '1.5px', color: '#ffffff', lineHeight: 1, whiteSpace: 'nowrap' }}>
               衡绩考核
             </strong>
           </div>
@@ -2421,12 +2421,12 @@ function UpdateModal({
         // 浏览器环境网页模式下载
         setUpdateStepText(`正在发起浏览器下载 ${formatLabel}...`);
         const filename = format === 'msi'
-          ? `衡绩员工绩点考核系统-${targetVer}.msi`
+          ? `hengji-${targetVer}.msi`
           : format === 'zip'
-          ? `衡绩员工绩点考核系统-${targetVer}.zip`
+          ? `hengji-${targetVer}.zip`
           : format === 'setup'
-          ? `衡绩员工绩点考核系统-Setup-${targetVer}.exe`
-          : `衡绩员工绩点考核系统-${targetVer}.exe`;
+          ? `hengji-${targetVer}.exe`
+          : `hengji-portable-${targetVer}.exe`;
         const downloadUrl = `https://github.com/zoufudun/hengji/releases/download/v${targetVer}/${encodeURIComponent(filename)}`;
         const a = document.createElement('a');
         a.href = downloadUrl;
@@ -2841,7 +2841,7 @@ function UpdateModal({
                   </span>
                 </div>
                 <div style={{ fontSize: '11.5px', color: '#64748b', lineHeight: 1.5 }}>
-                  NSIS 标准向导，支持一键静默覆盖安装与快捷方式维护。
+                  NSIS 标准向导，自动下载并启动图形安装向导完成覆盖与快捷方式维护。
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
@@ -2860,7 +2860,7 @@ function UpdateModal({
                     fontWeight: 600,
                     cursor: (installing || updating) ? 'wait' : 'pointer',
                   }}
-                  title="自动下载并在后台静默覆盖安装到当前目录，然后启动新版本"
+                  title="自动下载并启动 NSIS 安装向导覆盖安装到当前目录"
                 >
                   ⚡ 覆盖安装
                 </button>
@@ -2907,7 +2907,7 @@ function UpdateModal({
                   </span>
                 </div>
                 <div style={{ fontSize: '11.5px', color: '#64748b', lineHeight: 1.5 }}>
-                  Windows Installer 标准包，支持企业组策略分发与静默覆盖部署。
+                  Windows Installer 标准包，自动下载并调出 MSI 安装向导部署。
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
@@ -2926,7 +2926,7 @@ function UpdateModal({
                     fontWeight: 600,
                     cursor: (installing || updating) ? 'wait' : 'pointer',
                   }}
-                  title="自动下载并通过 msiexec 静默覆盖安装到当前目录，然后启动新版本"
+                  title="自动下载并调出 Windows Installer 安装向导进行部署"
                 >
                   ⚡ MSI 安装
                 </button>
@@ -4713,6 +4713,111 @@ function buildAuditorDerivedState(packages: ProjectMeritPackage[], baseState: St
 }
 
 // -------------------------------------------------------------
+// 当月个人绩点前五名直观排行榜组件 (优化：勋章、进度对比条、万单位)
+// -------------------------------------------------------------
+function TopFiveRankingList({ rows }: { rows: ReturnType<typeof rangeReport> }) {
+  const topRows = rows.filter(row => row.points > 0).slice(0, 5);
+  const topPoints = topRows[0]?.points || 1;
+
+  if (topRows.length === 0) {
+    return <Empty text="本月暂未发布任何绩点" />;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+      {topRows.map((row, index) => {
+        const pctOfTop = Math.max(6, Math.min(100, Math.round((row.points / topPoints) * 100)));
+        return (
+          <div
+            key={row.employee.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '10px 14px',
+              borderRadius: '8px',
+              background: index === 0 ? '#fffdf5' : '#ffffff',
+              border: index === 0 ? '1px solid #fef08a' : '1px solid #e2e8f0',
+              boxShadow: index === 0 ? '0 2px 6px rgba(245, 158, 11, 0.08)' : '0 1px 2px rgba(0,0,0,0.02)',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            {/* 勋章/排名标 */}
+            {index === 0 ? (
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '13px', boxShadow: '0 2px 5px rgba(245, 158, 11, 0.35)', flexShrink: 0 }} title="月度第 1 名 · 榜首">
+                🥇
+              </div>
+            ) : index === 1 ? (
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #94a3b8, #64748b)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '13px', boxShadow: '0 2px 5px rgba(100, 116, 139, 0.25)', flexShrink: 0 }} title="月度第 2 名">
+                🥈
+              </div>
+            ) : index === 2 ? (
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #d97706, #b45309)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '13px', boxShadow: '0 2px 5px rgba(180, 83, 9, 0.25)', flexShrink: 0 }} title="月度第 3 名">
+                🥉
+              </div>
+            ) : (
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#f8fafc', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px', border: '1px solid #cbd5e1', flexShrink: 0 }}>
+                {index + 1}
+              </div>
+            )}
+
+            {/* 头像 */}
+            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: index === 0 ? '#fef3c7' : index === 1 ? '#f1f5f9' : index === 2 ? '#ffedd5' : '#f0fdf4', color: index === 0 ? '#b45309' : index === 1 ? '#475569' : index === 2 ? '#9a3412' : '#166534', fontWeight: 700, fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid rgba(0,0,0,0.06)' }}>
+              {row.employee.name.slice(0, 1)}
+            </div>
+
+            {/* 员工信息 */}
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: '150px', flex: '0 1 auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontWeight: 700, fontSize: '13.5px', color: '#0f172a' }}>
+                  {row.employee.name}
+                </span>
+                <GroupTag group={row.employee.group} />
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                {row.employee.department} · {row.details.length} 个项目
+              </div>
+            </div>
+
+            {/* 直观进度对比条 */}
+            <div style={{ flex: 1, padding: '0 10px', minWidth: '80px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontSize: '10.5px', color: '#94a3b8' }}>
+                <span>对比榜首</span>
+                <span>{pctOfTop}%</span>
+              </div>
+              <div style={{ height: '7px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{
+                  width: `${pctOfTop}%`,
+                  height: '100%',
+                  background: index === 0
+                    ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
+                    : index === 1
+                    ? 'linear-gradient(90deg, #3b82f6, #60a5fa)'
+                    : index === 2
+                    ? 'linear-gradient(90deg, #10b981, #34d399)'
+                    : 'linear-gradient(90deg, #0284c7, #38bdf8)',
+                  borderRadius: '4px',
+                  transition: 'width 0.3s ease'
+                }} />
+              </div>
+            </div>
+
+            {/* 数值 (以万为单位，清晰大字号) */}
+            <div style={{ textAlign: 'right', flexShrink: 0, minWidth: '95px' }}>
+              <div style={{ fontSize: '16px', fontWeight: 800, color: index === 0 ? '#b45309' : '#0f172a', fontFamily: 'monospace' }}>
+                {wan(row.points)}
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', marginLeft: '3px' }}>万</span>
+              </div>
+              <div style={{ fontSize: '10.5px', color: '#94a3b8' }}>当月绩点</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
 // 1.0 核算员工作区总览看板（保持图1原生排版与风格）
 // -------------------------------------------------------------
 function AuditorDashboardView({
@@ -4836,19 +4941,7 @@ function AuditorDashboardView({
             </div>
             <button className="text-button" onClick={onNavigateRanking}>查看完整报表</button>
           </div>
-          <div className="ranking">
-            {currentRep.filter(row => row.points > 0).slice(0, 5).map((row, index) => (
-              <div key={row.employee.id}>
-                <b>{index + 1}</b>
-                <span>
-                  {row.employee.name} <GroupTag group={row.employee.group} />
-                  <small>{row.employee.department} · {row.details.length} 个项目</small>
-                </span>
-                <strong>{score(row.points)}</strong>
-              </div>
-            ))}
-            {currentRep.every(row => row.points === 0) && <Empty text="本月暂未发布任何绩点" />}
-          </div>
+          <TopFiveRankingList rows={currentRep} />
         </div>
       </div>
     </>
@@ -5306,19 +5399,7 @@ function DashboardView({
             </div>
             <button className="text-button" onClick={() => onNavigate('reports')}>查看完整报表</button>
           </div>
-          <div className="ranking">
-            {currentRep.filter(row => row.points > 0).slice(0, 5).map((row, index) => (
-              <div key={row.employee.id}>
-                <b>{index + 1}</b>
-                <span>
-                  {row.employee.name} <GroupTag group={row.employee.group} />
-                  <small>{row.employee.department} · {row.details.length} 个项目</small>
-                </span>
-                <strong>{score(row.points)}</strong>
-              </div>
-            ))}
-            {currentRep.every(row => row.points === 0) && <Empty text="本月暂未发布任何绩点" />}
-          </div>
+          <TopFiveRankingList rows={currentRep} />
         </div>
       </div>
     </>
@@ -11665,7 +11746,7 @@ function ReportsView({ state }: { state: State }) {
         return {
           projectId: p.id,
           fen,
-          scoreStr: (fen / 100).toFixed(2),
+          scoreStr: (fen / 1_000_000).toFixed(4),
         };
       });
 
@@ -11676,7 +11757,7 @@ function ReportsView({ state }: { state: State }) {
         employee: r.employee,
         projectScores,
         personalTotalFen: rowPersonalTotal,
-        personalTotalStr: (rowPersonalTotal / 100).toFixed(2),
+        personalTotalStr: (rowPersonalTotal / 1_000_000).toFixed(4),
         originalRow: r,
       };
     });
@@ -11684,7 +11765,7 @@ function ReportsView({ state }: { state: State }) {
     const projectTotals = projects.map((p, pIndex) => ({
       projectId: p.id,
       fen: projectPointsSums[pIndex],
-      totalStr: (projectPointsSums[pIndex] / 100).toFixed(2),
+      totalStr: (projectPointsSums[pIndex] / 1_000_000).toFixed(4),
     }));
 
     return {
@@ -11692,7 +11773,7 @@ function ReportsView({ state }: { state: State }) {
       dataRows,
       projectTotals,
       grandTotalPoints,
-      grandTotalStr: (grandTotalPoints / 100).toFixed(2),
+      grandTotalStr: (grandTotalPoints / 1_000_000).toFixed(4),
     };
   }, [state.projects, rows]);
 
@@ -11709,6 +11790,9 @@ function ReportsView({ state }: { state: State }) {
         description="支持查看整年度、季度、单月度或任意自定义区间的员工获得总额度与明细分润。"
         action={
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <span style={{ padding: '4px 10px', borderRadius: '6px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', fontSize: '12px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <span>📊</span><span>绩点单位：万元</span>
+            </span>
             <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: '3px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
               <button
                 type="button"
@@ -11841,7 +11925,7 @@ function ReportsView({ state }: { state: State }) {
                   );
                 })}
                 <th style={{ width: '130px', padding: '10px 12px', textAlign: 'right', background: '#38bdf8', color: '#0c4a6e', fontWeight: 700, borderLeft: '2px solid #0284c7', position: 'sticky', right: 0, zIndex: 3 }}>
-                  个人累加
+                  个人累加 (万)
                 </th>
               </tr>
             </thead>
@@ -11913,7 +11997,7 @@ function ReportsView({ state }: { state: State }) {
                 <tr style={{ background: '#bae6fd', borderTop: '2px solid #0284c7', borderBottom: '2px solid #0284c7' }}>
                   <td style={{ padding: '10px 8px', textAlign: 'center', background: '#bae6fd', borderRight: '1px solid #7dd3fc', position: 'sticky', left: 0, zIndex: 2 }}></td>
                   <td style={{ padding: '10px 10px', fontWeight: 800, color: '#0c4a6e', fontSize: '13.5px', background: '#bae6fd', borderRight: '1px solid #0284c7', position: 'sticky', left: '60px', zIndex: 2 }}>
-                    项目累加
+                    项目累加 (万)
                   </td>
                   {matrixData.projectTotals.map(projTotal => (
                     <td

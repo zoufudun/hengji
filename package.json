@@ -1,6 +1,6 @@
 {
   "name": "site-creator-vinext-starter",
-  "version": "0.7.7",
+  "version": "0.7.8",
   "description": "TOPFIRE 衡绩员工绩点考核系统 - 桌面离线版",
   "author": "邹富敦 (Phudon Zou) / TOPFIRE 研发团队",
   "private": true,
@@ -96,7 +96,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "衡绩员工绩点考核系统",
-      "artifactName": "衡绩员工绩点考核系统-Setup-${version}.exe"
+      "artifactName": "hengji-${version}.exe"
     },
     "msi": {
       "oneClick": false,
@@ -105,11 +105,11 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "衡绩员工绩点考核系统",
-      "artifactName": "衡绩员工绩点考核系统-${version}.msi",
+      "artifactName": "hengji-${version}.msi",
       "additionalLightArgs": ["-cultures:zh-CN"]
     },
     "portable": {
-      "artifactName": "衡绩员工绩点考核系统-${version}.exe"
+      "artifactName": "hengji-portable-${version}.exe"
     }
   },
   "overrides": {

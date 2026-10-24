@@ -2,10 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
 
-const ver = '0.7.7';
+const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
+const ver = pkg.version || '0.7.8';
 const unpackedDir = path.resolve('dist-desktop/win-unpacked');
-const zipName = `衡绩员工绩点考核系统-${ver}.zip`;
-const aliasName = `hengji-${ver}.zip`;
+const zipName = `hengji-${ver}.zip`;
+const aliasName = `衡绩员工绩点考核系统-${ver}.zip`;
 const outZipPath = path.resolve('dist-desktop', zipName);
 const outAliasPath = path.resolve('dist-desktop', aliasName);
 

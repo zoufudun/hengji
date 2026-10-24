@@ -2531,8 +2531,8 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.7.7';
-export const APP_BUILD = '20261023';
+export const APP_VERSION = '0.7.8';
+export const APP_BUILD = '20261024';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
 
@@ -2694,6 +2694,19 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.7.8',
+    date: '2026-10-24',
+    tag: '重大体验升级',
+    title: '侧边栏徽标尊贵加大、二维透视矩阵全量规范以万为单位、前五名榜单直观重构、多格式覆盖安装进程监控修复',
+    items: [
+      '【品牌徽标尊贵加大】侧边栏金黄底朱红圆角“衡”字主徽标尺寸升级（加大至 52px），搭配 21px 品牌字体，视觉中心更为稳重大气。',
+      '【二维透视矩阵绩点全量规范以“万”呈现】修正二维透视矩阵视图中的单位计算，各项目分润与右侧【个人累加】、底行【项目累加】全量以“万元”为标准单位严格对齐，表头清晰标注“个人累加 (万)”。',
+      '【当月个人绩点前五名直观榜单重构】全新设计排行榜视觉体验：前三名金银铜牌勋章、员工专属头像与团队标签、高辨识度进度柱状对比条、万元清晰数值呈现，直观震撼一目了然。',
+      '【覆盖安装与多格式安装进程全面修复】彻底修复覆盖安装、MSI安装、单文件覆盖、解压覆盖退出后无安装进程的问题：升级安装向导与进程调度机制，显示实时安装覆盖控制台与向导界面，进程平滑接管无缝重启。',
+      '【GitHub 发布文件命名全面统一】GitHub 发布资产全部规范统一为 hengji-0.7.8.msi、hengji-0.7.8.exe、hengji-0.7.8.zip，以及免安装单文件 hengji-portable-0.7.8.exe。'
+    ]
+  },
   {
     version: 'v0.7.7',
     date: '2026-10-23',
