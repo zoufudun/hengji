@@ -3,7 +3,7 @@ import path from 'path';
 import { execFileSync } from 'child_process';
 
 const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
-const ver = pkg.version || '0.7.8';
+const ver = pkg.version || '0.7.9';
 const unpackedDir = path.resolve('dist-desktop/win-unpacked');
 const zipName = `hengji-${ver}.zip`;
 const aliasName = `衡绩员工绩点考核系统-${ver}.zip`;

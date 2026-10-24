@@ -13,9 +13,17 @@ contextBridge.exposeInMainWorld('meritDesktop', {
   showData: () => ipcRenderer.invoke('workspace:show-file'),
   refocusWindow: () => ipcRenderer.invoke('workspace:refocus-window'),
   openUrl: (url) => ipcRenderer.invoke('workspace:open-url', url),
+  getDefaultInstallDir: () => ipcRenderer.invoke('workspace:get-default-install-dir'),
+  chooseInstallDir: (defaultPath) => ipcRenderer.invoke('workspace:choose-install-dir', defaultPath),
+  onUpdateProgress: (callback) => {
+    const handler = (_event, data) => {
+      if (typeof callback === 'function') callback(data);
+    };
+    ipcRenderer.on('workspace:update-progress', handler);
+    return () => ipcRenderer.removeListener('workspace:update-progress', handler);
+  },
   downloadUpdate: (payload) => ipcRenderer.invoke('workspace:download-update', payload),
   installUpdate: (payload) => ipcRenderer.invoke('workspace:install-update', payload),
   showItemInFolder: (filePath) => ipcRenderer.invoke('workspace:show-item-in-folder', filePath),
   openPath: (filePath) => ipcRenderer.invoke('workspace:open-path', filePath)
 });
-

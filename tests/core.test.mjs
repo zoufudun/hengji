@@ -1167,9 +1167,9 @@ test('企业级全量灾备数据 AES-256-GCM 加密导出与权限口令解密�
   assert.equal(legacyDecrypted.state.projects.length, state.projects.length);
 
   // 6. 版本号与更新历史验证
-  assert.equal(APP_VERSION, '0.7.8');
+  assert.equal(APP_VERSION, '0.7.9');
   assert.ok(UPDATE_HISTORY.length >= 20);
-  assert.equal(UPDATE_HISTORY[0].version, 'v0.7.8');
+  assert.equal(UPDATE_HISTORY[0].version, 'v0.7.9');
   assert.ok(UPDATE_HISTORY[0].items.some(it => it.includes('徽标') || it.includes('矩阵') || it.includes('榜单') || it.includes('覆盖安装')));
 });
 

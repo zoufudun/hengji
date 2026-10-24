@@ -498,7 +498,7 @@ function sanitizeState(s: State): State {
   };
 }
 
-function WorkspaceGate({ hasLegacyData, onReady, onError, onOpenGuide, onOpenManual }: {
+function WorkspaceGate({ hasLegacyData, onReady, onError, onOpenGuide, onOpenManual, onOpenAbout, onOpenUpdate, updateResult }: {
   hasLegacyData: boolean;
   onReady(data: {
     name: string;
@@ -514,6 +514,9 @@ function WorkspaceGate({ hasLegacyData, onReady, onError, onOpenGuide, onOpenMan
   onError(message: string): void;
   onOpenGuide(): void;
   onOpenManual(): void;
+  onOpenAbout(): void;
+  onOpenUpdate(): void;
+  updateResult?: UpdateCheckResult | null;
 }) {
   const [mode, setMode] = useState<'home' | 'create' | 'open'>('home');
   const [workspaceType, setWorkspaceType] = useState<WorkspaceType>('general');
@@ -714,6 +717,29 @@ function WorkspaceGate({ hasLegacyData, onReady, onError, onOpenGuide, onOpenMan
           >
             <BookOpen size={15} style={{ color: '#0284c7' }} />
             📖 简易操作手册 (图文版)
+          </button>
+          <button
+            type="button"
+            className="guide-gate-trigger"
+            style={{ background: '#f8fafc', borderColor: '#cbd5e1', color: '#0f172a' }}
+            onClick={onOpenAbout}
+          >
+            <Info size={15} style={{ color: '#0d9488' }} />
+            ℹ️ 关于 (v{APP_VERSION})
+          </button>
+          <button
+            type="button"
+            className="guide-gate-trigger"
+            style={{
+              background: updateResult?.hasUpdate ? '#fff7ed' : '#f0f9ff',
+              borderColor: updateResult?.hasUpdate ? '#fdba74' : '#bae6fd',
+              color: updateResult?.hasUpdate ? '#c2410c' : '#0369a1',
+              fontWeight: 600,
+            }}
+            onClick={onOpenUpdate}
+          >
+            <RefreshCw size={15} style={{ color: updateResult?.hasUpdate ? '#ea580c' : '#0284c7' }} />
+            {updateResult?.hasUpdate ? `🚀 发现新版 v${updateResult.latestVersion} (点击升级)` : '🔍 检测新版'}
           </button>
         </div>
       )}
@@ -1346,7 +1372,36 @@ export default function DesktopWorkspace() {
           setManualChapter(0);
           setManualOpen(true);
         }}
+        onOpenAbout={() => setAboutModalOpen(true)}
+        onOpenUpdate={() => setUpdateModalOpen(true)}
+        updateResult={updateResult}
       />
+      {aboutModalOpen && (
+        <AboutModal
+          onClose={() => setAboutModalOpen(false)}
+          onCheckUpdate={() => {
+            setAboutModalOpen(false);
+            setUpdateModalOpen(true);
+          }}
+          updateResult={updateResult}
+        />
+      )}
+      {updateModalOpen && (
+        <UpdateModal
+          initialResult={updateResult}
+          onClose={() => setUpdateModalOpen(false)}
+        />
+      )}
+      {apertureNoticeOpen && updateResult?.hasUpdate && (
+        <UpdateApertureNotice
+          result={updateResult}
+          onOpenUpdate={() => {
+            setApertureNoticeOpen(false);
+            setUpdateModalOpen(true);
+          }}
+          onClose={() => setApertureNoticeOpen(false)}
+        />
+      )}
       {onboardingOpen && (
         <OnboardingGuideModal
           step={onboardingStep}
@@ -1991,6 +2046,7 @@ export default function DesktopWorkspace() {
             setAboutModalOpen(false);
             setUpdateModalOpen(true);
           }}
+          updateResult={updateResult}
         />
       )}
 
@@ -2024,11 +2080,27 @@ export default function DesktopWorkspace() {
 function AboutModal({
   onClose,
   onCheckUpdate,
+  updateResult,
 }: {
   onClose(): void;
   onCheckUpdate?: () => void;
+  updateResult?: UpdateCheckResult | null;
 }) {
   const [activeTab, setActiveTab] = useState<'intro' | 'history'>('intro');
+  const [localCheck, setLocalCheck] = useState<UpdateCheckResult | null>(updateResult || null);
+  const [checkingNow, setCheckingNow] = useState(false);
+
+  useEffect(() => {
+    if (updateResult) {
+      setLocalCheck(updateResult);
+      return;
+    }
+    setCheckingNow(true);
+    checkAppUpdate(APP_VERSION)
+      .then((res) => setLocalCheck(res))
+      .catch(() => {})
+      .finally(() => setCheckingNow(false));
+  }, [updateResult]);
 
   return (
     <Modal
@@ -2078,6 +2150,7 @@ function AboutModal({
           }}>
             <div><span style={{ opacity: 0.75 }}>软件版本：</span><b style={{ color: '#4ade80', fontSize: '14px' }}>v{APP_VERSION}</b></div>
             <div><span style={{ opacity: 0.75 }}>发布构建：</span><b>Build {APP_BUILD}</b></div>
+            <div><span style={{ opacity: 0.75 }}>新版检测：</span><b style={{ color: localCheck?.hasUpdate ? '#fbbf24' : '#86efac' }}>{checkingNow ? '正在检测...' : localCheck?.hasUpdate ? `发现新版 v${localCheck.latestVersion}` : '已是最新版'}</b></div>
             <div><span style={{ opacity: 0.75 }}>系统授权：</span><b>企业本地私有版 (离线免联网)</b></div>
           </div>
         </div>
@@ -2103,7 +2176,9 @@ function AboutModal({
               type="button"
               style={{
                 marginLeft: 'auto',
-                background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                background: localCheck?.hasUpdate
+                  ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)'
+                  : 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: '8px',
@@ -2113,21 +2188,16 @@ function AboutModal({
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '7px',
-                boxShadow: '0 2px 8px rgba(2,132,199,0.3)',
+                boxShadow: localCheck?.hasUpdate
+                  ? '0 2px 8px rgba(234,88,12,0.35)'
+                  : '0 2px 8px rgba(2,132,199,0.3)',
                 cursor: 'pointer',
                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(2,132,199,0.45)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 8px rgba(2,132,199,0.3)';
-              }}
               onClick={onCheckUpdate}
             >
-              <RefreshCw size={13.5} /> 检查更新...
+              <RefreshCw size={13.5} className={checkingNow ? 'spin-icon' : ''} />
+              {localCheck?.hasUpdate ? `🚀 检测到新版 v${localCheck.latestVersion} (点击下载安装)` : '检测新版 / 在线升级...'}
             </button>
           )}
         </div>
@@ -2355,32 +2425,83 @@ function UpdateModal({
   const [installing, setInstalling] = useState(false);
   const [updateStepText, setUpdateStepText] = useState('正在处理中...');
   const [installStepText, setInstallStepText] = useState('');
+  const [progressPercent, setProgressPercent] = useState<number>(0);
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [downloadedPath, setDownloadedPath] = useState<string>('');
+  const [downloadedFormat, setDownloadedFormat] = useState<'setup' | 'msi' | 'portable' | 'zip' | null>(null);
   const [downloadError, setDownloadError] = useState<string>('');
+  const [installDir, setInstallDir] = useState<string>('D:\\衡绩员工绩点考核系统');
+  const [showInstallChooser, setShowInstallChooser] = useState<boolean>(false);
+
+  const isSystemDrive = /^[Cc]:/.test(installDir.trim());
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.meritDesktop?.getDefaultInstallDir) {
+      window.meritDesktop.getDefaultInstallDir().then((dir) => {
+        if (dir) setInstallDir(dir);
+      }).catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.meritDesktop?.onUpdateProgress) {
+      const unsubscribe = window.meritDesktop.onUpdateProgress((data) => {
+        if (typeof data.percent === 'number') {
+          setProgressPercent(data.percent);
+        }
+        if (data.message) {
+          setUpdateStepText(data.message);
+          setInstallStepText(data.message);
+        }
+      });
+      return () => {
+        if (typeof unsubscribe === 'function') unsubscribe();
+      };
+    }
+  }, []);
+
+  const handleChooseInstallDir = async () => {
+    if (typeof window !== 'undefined' && window.meritDesktop?.chooseInstallDir) {
+      try {
+        const chosen = await window.meritDesktop.chooseInstallDir(installDir);
+        if (chosen) {
+          setInstallDir(chosen);
+        }
+      } catch {}
+    }
+  };
 
   const handleAutoInstall = async (format: 'setup' | 'msi' | 'portable' | 'zip' = 'setup') => {
     if (updating || installing) return;
     setInstalling(true);
     setDownloadError('');
-    setInstallStepText('正在下载最新安装程序...');
-
+    setProgressPercent(5);
     const targetVer = result?.latestVersion || APP_VERSION;
+    const formatLabel = format === 'msi'
+      ? 'MSI 安装包'
+      : format === 'zip'
+      ? 'ZIP 绿色解压版'
+      : format === 'setup'
+      ? 'EXE 安装向导版'
+      : '便携单文件版';
+    setInstallStepText(`正在准备 ${formatLabel} (v${targetVer})...`);
+
     try {
       if (typeof window !== 'undefined' && window.meritDesktop?.installUpdate) {
-        setInstallStepText(`正在下载并准备静默覆盖安装 (v${targetVer})...`);
         const res = await window.meritDesktop.installUpdate({
           version: targetVer,
           format,
-          downloadUrl: result?.downloadUrl
+          installDir: installDir.trim() || 'D:\\衡绩员工绩点考核系统',
+          filePath: downloadedFormat === format && downloadedPath ? downloadedPath : undefined,
         });
         if (res && res.success) {
-          setInstallStepText('安装就绪，正在关闭旧进程并启动新版本...');
+          setProgressPercent(100);
+          setInstallStepText('安装程序已启动，正在无缝切换至新版本...');
         } else {
           throw new Error(res?.message || '自动安装失败');
         }
       } else {
-        handleDownloadOrInstall(format);
+        await handleDownloadOrInstall(format, false);
       }
     } catch (err: any) {
       setDownloadError(err?.message || '自动安装更新失败');
@@ -2388,10 +2509,11 @@ function UpdateModal({
     }
   };
 
-  const handleDownloadOrInstall = async (format: 'setup' | 'msi' | 'portable' | 'zip') => {
+  const handleDownloadOrInstall = async (format: 'setup' | 'msi' | 'portable' | 'zip', openChooserAfter = true) => {
     if (updating || installing) return;
     setUpdating(true);
     setDownloadError('');
+    setProgressPercent(5);
     const targetVer = result?.latestVersion || APP_VERSION;
     const formatLabel = format === 'msi'
       ? 'MSI 安装包'
@@ -2400,20 +2522,23 @@ function UpdateModal({
       : format === 'setup'
       ? 'EXE 安装向导版'
       : '便携单文件版';
-    setUpdateStepText(`正在准备下载 ${formatLabel} 到 D盘...`);
+    setUpdateStepText(`正在高速下载 ${formatLabel} (v${targetVer})...`);
 
     try {
       if (typeof window !== 'undefined' && window.meritDesktop?.downloadUpdate) {
-        setUpdateStepText(`正在下载 ${formatLabel} 至本地 D盘...`);
         const res = await window.meritDesktop.downloadUpdate({
           version: targetVer,
           format,
-          downloadUrl: result?.downloadUrl
         });
         if (res && res.success) {
           setDownloadedPath(res.filePath);
+          setDownloadedFormat(format);
           setUpdateSuccess(true);
+          setProgressPercent(100);
           setUpdateStepText(`已成功保存至 ${res.filePath}`);
+          if (openChooserAfter) {
+            setShowInstallChooser(true);
+          }
         } else {
           throw new Error('未能保存更新包到本地');
         }
@@ -2427,7 +2552,7 @@ function UpdateModal({
           : format === 'setup'
           ? `hengji-${targetVer}.exe`
           : `hengji-portable-${targetVer}.exe`;
-        const downloadUrl = `https://github.com/zoufudun/hengji/releases/download/v${targetVer}/${encodeURIComponent(filename)}`;
+        const downloadUrl = `https://ghfast.top/https://github.com/zoufudun/hengji/releases/download/v${targetVer}/${encodeURIComponent(filename)}`;
         const a = document.createElement('a');
         a.href = downloadUrl;
         a.download = filename;
@@ -2436,7 +2561,9 @@ function UpdateModal({
         a.click();
         document.body.removeChild(a);
         setDownloadedPath(`浏览器默认下载目录 / ${filename}`);
+        setDownloadedFormat(format);
         setUpdateSuccess(true);
+        setProgressPercent(100);
       }
     } catch (err: any) {
       setDownloadError(err?.message || '下载更新包失败');
@@ -2447,6 +2574,7 @@ function UpdateModal({
 
   const doCheck = async () => {
     setChecking(true);
+    setDownloadError('');
     try {
       const res = await checkAppUpdate(APP_VERSION);
       setResult(res);
@@ -2497,8 +2625,8 @@ function UpdateModal({
     >
       <div
         style={{
-          width: '720px',
-          maxWidth: '94%',
+          width: '760px',
+          maxWidth: '95%',
           background: '#ffffff',
           borderRadius: '16px',
           boxShadow: '0 24px 48px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.06)',
@@ -2513,7 +2641,7 @@ function UpdateModal({
         {/* 顶部信息行：Logo + 软件名称与版本 + 右侧醒目操作按钮与关闭 */}
         <div
           style={{
-            padding: '22px 28px',
+            padding: '20px 28px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -2562,7 +2690,7 @@ function UpdateModal({
                 <RefreshCw size={15} className="spin-icon" />
                 检测中...
               </button>
-            ) : installing ? (
+            ) : installing || updating ? (
               <button
                 type="button"
                 disabled
@@ -2571,123 +2699,48 @@ function UpdateModal({
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '8px',
-                  padding: '9px 20px',
-                  fontSize: '14px',
+                  padding: '9px 18px',
+                  fontSize: '13.5px',
                   fontWeight: 600,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
                   boxShadow: '0 4px 14px rgba(37, 99, 235, 0.45)',
                   cursor: 'wait',
-                  opacity: 0.95,
                 }}
               >
                 <Loader2 size={16} className="spin-icon" />
-                {installStepText || '正在覆盖安装并重启...'}
-              </button>
-            ) : updating ? (
-              <button
-                type="button"
-                disabled
-                style={{
-                  background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '9px 20px',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.45)',
-                  cursor: 'wait',
-                  opacity: 0.95,
-                }}
-                title="正在为您下载更新包至本地，请稍候..."
-              >
-                <Loader2 size={16} className="spin-icon" />
-                {updateStepText}
-              </button>
-            ) : updateSuccess ? (
-              <button
-                type="button"
-                style={{
-                  background: '#f0fdf4',
-                  color: '#15803d',
-                  border: '1px solid #86efac',
-                  borderRadius: '8px',
-                  padding: '8px 16px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  cursor: 'pointer',
-                }}
-                onClick={() => {
-                  if (downloadedPath && window.meritDesktop?.showItemInFolder) {
-                    window.meritDesktop.showItemInFolder(downloadedPath);
-                  }
-                }}
-                title={downloadedPath ? `已保存至：${downloadedPath} (点击打开)` : '已成功下载'}
-              >
-                <CheckCircle2 size={15} color="#16a34a" />
-                已下载至本地 (点击查看)
-              </button>
-            ) : result?.hasUpdate ? (
-              <button
-                type="button"
-                style={{
-                  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '9px 20px',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)',
-                  cursor: 'pointer',
-                  transition: 'transform 0.15s, box-shadow 0.15s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.45)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.35)';
-                }}
-                onClick={() => handleAutoInstall('setup')}
-                title="一键自动下载并覆盖安装到当前程序目录，完成后自动启动新版本"
-              >
-                <Sparkles size={16} />
-                自动覆盖升级并重启 (v{result.latestVersion})
+                {installing ? `${installStepText} (${progressPercent}%)` : `${updateStepText} (${progressPercent}%)`}
               </button>
             ) : (
               <button
                 type="button"
                 style={{
-                  background: '#f0fdf4',
-                  color: '#15803d',
-                  border: '1px solid #86efac',
+                  background: result?.hasUpdate
+                    ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)'
+                    : 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)',
+                  color: '#ffffff',
+                  border: 'none',
                   borderRadius: '8px',
-                  padding: '8px 16px',
-                  fontSize: '13px',
+                  padding: '9px 20px',
+                  fontSize: '14px',
                   fontWeight: 600,
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
+                  gap: '8px',
+                  boxShadow: result?.hasUpdate
+                    ? '0 4px 12px rgba(37, 99, 235, 0.35)'
+                    : '0 4px 12px rgba(13, 148, 136, 0.25)',
                   cursor: 'pointer',
+                  transition: 'transform 0.15s, box-shadow 0.15s',
                 }}
-                onClick={doCheck}
-                title="点击重新检查是否有新版本"
+                onClick={() => setShowInstallChooser(true)}
+                title="点击弹出四种安装方式选择窗口（EXE安装版、MSI安装包、便携单文件、ZIP绿色版）"
               >
-                <CheckCircle2 size={15} color="#16a34a" />
-                当前已是最新版
+                <Download size={16} />
+                {result?.hasUpdate
+                  ? `下载新版 / 选择安装方式 (v${result.latestVersion})`
+                  : `选择安装方式 / 重新安装 (v${result?.latestVersion || APP_VERSION})`}
               </button>
             )}
 
@@ -2715,60 +2768,75 @@ function UpdateModal({
           </div>
         </div>
 
-        {/* 分割线与新版本提示状态栏 */}
+        {/* 分割线与新版本提示状态栏 + 实时下载进度条 */}
         <div
           style={{
             borderTop: '1px solid #f1f5f9',
             borderBottom: '1px solid #f1f5f9',
-            padding: '16px 28px',
+            padding: '14px 28px',
             fontSize: '13.5px',
             fontWeight: 600,
             color: '#1e293b',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
             background: '#fafafa',
           }}
         >
-          <div>
-            {checking
-              ? '正在连接官方仓库检测最新版本...'
-              : installing
-              ? (installStepText || '正在覆盖安装并启动新版本，请稍候...')
-              : updating
-              ? (updateStepText || '正在下载更新包至本地 D盘，请稍候...')
-              : updateSuccess
-              ? `🎉 更新包已成功保存至本地！(v${result?.latestVersion || APP_VERSION})`
-              : result?.hasUpdate
-              ? `🚀 检测到新版本: v${result.latestVersion} (支持一键静默覆盖安装或下载独立安装包)`
-              : result?.error
-              ? `检测提示: ${result.error}`
-              : `检测到新版本: 无 (当前已是官方最新版本 v${APP_VERSION})`}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+            <div>
+              {checking
+                ? '正在连接官方仓库检测最新版本...'
+                : installing
+                ? (installStepText || '正在启动无终端安装程序，请稍候...')
+                : updating
+                ? (updateStepText || '正在高速下载更新包至本地，请稍候...')
+                : updateSuccess
+                ? `🎉 更新包已成功下载就绪！(v${result?.latestVersion || APP_VERSION}) 请选择安装方式完成部署`
+                : result?.hasUpdate
+                ? `🚀 检测到新版本: v${result.latestVersion} — 请点击右上角“下载新版 / 选择安装方式”或下方四种安装方式`
+                : result?.error
+                ? `检测提示: ${result.error}`
+                : `检测到新版本: 无 (当前已是官方最新版本 v${APP_VERSION})`}
+            </div>
+            {!checking && (
+              <button
+                type="button"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#0284c7',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontWeight: 500,
+                  padding: 0,
+                  flexShrink: 0,
+                }}
+                onClick={doCheck}
+              >
+                <RefreshCw size={12} />
+                重新检查
+              </button>
+            )}
           </div>
-          {!checking && (
-            <button
-              type="button"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#0284c7',
-                fontSize: '12px',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontWeight: 500,
-                padding: 0,
-              }}
-              onClick={doCheck}
-            >
-              <RefreshCw size={12} />
-              重新检查
-            </button>
+
+          {(installing || updating) && (
+            <div style={{ marginTop: '10px' }}>
+              <div style={{ height: '7px', background: '#e2e8f0', borderRadius: '999px', overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: `${Math.max(5, Math.min(100, progressPercent))}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #2563eb 0%, #06b6d4 100%)',
+                    transition: 'width 0.2s ease',
+                  }}
+                />
+              </div>
+            </div>
           )}
         </div>
 
-        {/* 安装版本发布格式矩阵卡片：EXE安装版、MSI安装包、便携单文件版 */}
+        {/* 安装版本发布格式矩阵卡片：EXE安装版、MSI安装包、便携单文件版、ZIP绿色版 */}
         <div
           style={{
             margin: '16px 28px 0',
@@ -2781,43 +2849,133 @@ function UpdateModal({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>📦 安装版本发布与分发矩阵</span>
+                <span>📦 安装版本发布与分发矩阵（四种方式）</span>
                 <span style={{ fontSize: '11.5px', background: result?.hasUpdate ? '#dbeafe' : '#e2e8f0', color: result?.hasUpdate ? '#1d4ed8' : '#475569', padding: '1px 7px', borderRadius: '4px', fontWeight: 600 }}>
                   目标版本: v{result?.latestVersion || APP_VERSION}
                 </span>
               </div>
               <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px' }}>
-                更新时将自动静默安装并覆盖到当前程序目录，完成后自动无缝启动新版本。
+                全程采用原生无终端静默调度（不弹出黑框/蓝框命令行），默认安装到非系统盘。
               </div>
             </div>
 
-            {result?.hasUpdate && (
-              <button
-                type="button"
-                disabled={installing || updating}
-                onClick={() => handleAutoInstall('setup')}
-                style={{
-                  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '7px 15px',
-                  fontSize: '12.5px',
-                  fontWeight: 600,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
-                  cursor: (installing || updating) ? 'wait' : 'pointer',
-                }}
-              >
-                {installing ? <Loader2 size={14} className="spin-icon" /> : <Sparkles size={14} />}
-                一键自动覆盖安装并重启
-              </button>
-            )}
+            <button
+              type="button"
+              disabled={installing || updating}
+              onClick={() => setShowInstallChooser(true)}
+              style={{
+                background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '7px 15px',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
+                cursor: (installing || updating) ? 'wait' : 'pointer',
+              }}
+            >
+              <Sparkles size={14} />
+              弹出选择安装方式 (四种方式)
+            </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+          {/* 安装目标地址设置栏（MSI安装 / EXE安装 / ZIP解压通用，默认非系统盘） */}
+          <div
+            style={{
+              background: '#ffffff',
+              border: `1px solid ${isSystemDrive ? '#fcd34d' : '#bae6fd'}`,
+              borderRadius: '9px',
+              padding: '10px 12px',
+              marginBottom: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FolderOpen size={14} color="#0284c7" />
+                <span>MSI / EXE / ZIP 安装目标地址（默认非系统盘）：</span>
+              </div>
+              <span
+                style={{
+                  fontSize: '11px',
+                  padding: '1px 7px',
+                  borderRadius: '4px',
+                  fontWeight: 600,
+                  background: isSystemDrive ? '#fef3c7' : '#dcfce7',
+                  color: isSystemDrive ? '#b45309' : '#15803d',
+                }}
+              >
+                {isSystemDrive ? '⚠️ 当前为 C 盘系统盘，建议改为 D 盘等非系统盘' : '✅ 已设为非系统盘目录'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="text"
+                value={installDir}
+                onChange={(e) => setInstallDir(e.target.value)}
+                placeholder="例如：D:\衡绩员工绩点考核系统"
+                style={{
+                  flex: 1,
+                  fontSize: '12px',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  color: '#0f172a',
+                  background: '#f8fafc',
+                }}
+              />
+              {typeof window !== 'undefined' && window.meritDesktop?.chooseInstallDir && (
+                <button
+                  type="button"
+                  onClick={handleChooseInstallDir}
+                  style={{
+                    background: '#0284c7',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <FolderOpen size={13} />
+                  浏览选择地址...
+                </button>
+              )}
+              {isSystemDrive && (
+                <button
+                  type="button"
+                  onClick={() => setInstallDir('D:\\衡绩员工绩点考核系统')}
+                  style={{
+                    background: '#f0fdf4',
+                    color: '#15803d',
+                    border: '1px solid #86efac',
+                    borderRadius: '6px',
+                    padding: '6px 10px',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  设为 D:\ 盘
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
             {/* EXE 安装向导版 */}
             <div
               style={{
@@ -2841,7 +2999,7 @@ function UpdateModal({
                   </span>
                 </div>
                 <div style={{ fontSize: '11.5px', color: '#64748b', lineHeight: 1.5 }}>
-                  NSIS 标准向导，自动下载并启动图形安装向导完成覆盖与快捷方式维护。
+                  NSIS 标准向导，直接调起图形安装向导（不弹终端），预填上方非系统盘路径。
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
@@ -2860,7 +3018,7 @@ function UpdateModal({
                     fontWeight: 600,
                     cursor: (installing || updating) ? 'wait' : 'pointer',
                   }}
-                  title="自动下载并启动 NSIS 安装向导覆盖安装到当前目录"
+                  title={`安装至：${installDir}`}
                 >
                   ⚡ 覆盖安装
                 </button>
@@ -2877,7 +3035,7 @@ function UpdateModal({
                     fontSize: '11.5px',
                     cursor: (installing || updating) ? 'wait' : 'pointer',
                   }}
-                  title="保存 Setup 安装程序到 D盘"
+                  title="下载 Setup.exe 安装包并选择安装方式"
                 >
                   <CloudDownload size={13} />
                 </button>
@@ -2888,7 +3046,7 @@ function UpdateModal({
             <div
               style={{
                 background: '#ffffff',
-                border: '1px solid #cbd5e1',
+                border: '1px solid #67e8f9',
                 borderRadius: '8px',
                 padding: '12px',
                 display: 'flex',
@@ -2906,8 +3064,45 @@ function UpdateModal({
                     .msi 格式
                   </span>
                 </div>
-                <div style={{ fontSize: '11.5px', color: '#64748b', lineHeight: 1.5 }}>
-                  Windows Installer 标准包，自动下载并调出 MSI 安装向导部署。
+                <div style={{ fontSize: '11.5px', color: '#64748b', lineHeight: 1.45 }}>
+                  Windows Installer 标准包，支持自定义非系统盘安装地址，无终端弹窗。
+                </div>
+                <div
+                  style={{
+                    marginTop: '6px',
+                    padding: '4px 6px',
+                    background: '#ecfeff',
+                    border: '1px solid #a5f3fc',
+                    borderRadius: '4px',
+                    fontSize: '10.5px',
+                    color: '#0e7490',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '4px',
+                  }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={installDir}>
+                    📂 {installDir}
+                  </span>
+                  {typeof window !== 'undefined' && window.meritDesktop?.chooseInstallDir && (
+                    <button
+                      type="button"
+                      onClick={handleChooseInstallDir}
+                      style={{
+                        border: 'none',
+                        background: '#0891b2',
+                        color: '#ffffff',
+                        borderRadius: '3px',
+                        padding: '1px 5px',
+                        fontSize: '10px',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                    >
+                      改地址
+                    </button>
+                  )}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
@@ -2926,7 +3121,7 @@ function UpdateModal({
                     fontWeight: 600,
                     cursor: (installing || updating) ? 'wait' : 'pointer',
                   }}
-                  title="自动下载并调出 Windows Installer 安装向导进行部署"
+                  title={`安装 MSI 至指定目录：${installDir}`}
                 >
                   ⚡ MSI 安装
                 </button>
@@ -2943,7 +3138,7 @@ function UpdateModal({
                     fontSize: '11.5px',
                     cursor: (installing || updating) ? 'wait' : 'pointer',
                   }}
-                  title="保存 MSI 安装包到 D盘"
+                  title="下载 MSI 安装包并选择安装方式"
                 >
                   <CloudDownload size={13} />
                 </button>
@@ -2973,7 +3168,7 @@ function UpdateModal({
                   </span>
                 </div>
                 <div style={{ fontSize: '11.5px', color: '#64748b', lineHeight: 1.5 }}>
-                  绿色便携单可执行文件，无需安装写入注册表，双击即用。
+                  绿色便携单可执行文件，后台无窗口静默替换并自动启动新版。
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
@@ -2992,7 +3187,7 @@ function UpdateModal({
                     fontWeight: 600,
                     cursor: (installing || updating) ? 'wait' : 'pointer',
                   }}
-                  title="自动下载便携版覆盖当前主程序并重启"
+                  title="后台静默单文件覆盖并重启（不弹出终端）"
                 >
                   ⚡ 单文件覆盖
                 </button>
@@ -3009,7 +3204,7 @@ function UpdateModal({
                     fontSize: '11.5px',
                     cursor: (installing || updating) ? 'wait' : 'pointer',
                   }}
-                  title="保存便携单文件到 D盘"
+                  title="下载便携单文件并选择安装方式"
                 >
                   <CloudDownload size={13} />
                 </button>
@@ -3039,7 +3234,7 @@ function UpdateModal({
                   </span>
                 </div>
                 <div style={{ fontSize: '11.5px', color: '#64748b', lineHeight: 1.5 }}>
-                  绿色压缩文件包，下载解压即可直接双击运行，免安装。
+                  绿色压缩文件包，后台无窗口静默解压至目标地址并自动重启。
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
@@ -3058,7 +3253,7 @@ function UpdateModal({
                     fontWeight: 600,
                     cursor: (installing || updating) ? 'wait' : 'pointer',
                   }}
-                  title="自动下载 ZIP 包解压覆盖当前程序并重启"
+                  title={`静默解压覆盖至：${installDir}（不弹出终端）`}
                 >
                   ⚡ 解压覆盖
                 </button>
@@ -3075,7 +3270,7 @@ function UpdateModal({
                     fontSize: '11.5px',
                     cursor: (installing || updating) ? 'wait' : 'pointer',
                   }}
-                  title="保存 ZIP 绿色压缩包到 D盘"
+                  title="下载 ZIP 绿色压缩包并选择安装方式"
                 >
                   <CloudDownload size={13} />
                 </button>
@@ -3083,6 +3278,240 @@ function UpdateModal({
             </div>
           </div>
         </div>
+
+        {/* 点击下载后弹出的“选择哪种方式安装（四种方式）”弹窗 */}
+        {showInstallChooser && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(15, 23, 42, 0.72)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 30,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '20px',
+            }}
+            onClick={() => !installing && !updating && setShowInstallChooser(false)}
+          >
+            <div
+              style={{
+                width: '680px',
+                maxWidth: '100%',
+                background: '#ffffff',
+                borderRadius: '14px',
+                border: '1px solid #cbd5e1',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+                padding: '22px 24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Sparkles size={18} color="#2563eb" />
+                    <span>请选择安装方式（四种安装与部署方式 · v{result?.latestVersion || APP_VERSION}）</span>
+                  </h4>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px' }}>
+                    所有安装方式均已优化为原生无终端模式（不弹出黑框终端），MSI 与向导默认安装到非系统盘。
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowInstallChooser(false)}
+                  style={{ border: 'none', background: '#f1f5f9', borderRadius: '6px', padding: '5px', cursor: 'pointer', color: '#475569' }}
+                >
+                  <X size={17} />
+                </button>
+              </div>
+
+              {/* 弹窗内的安装地址选项（特别针对 MSI 安装与 EXE/ZIP 部署，默认非系统盘） */}
+              <div
+                style={{
+                  background: '#f0f9ff',
+                  border: `1px solid ${isSystemDrive ? '#f59e0b' : '#7dd3fc'}`,
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
+                  <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#0369a1' }}>
+                    📍 安装目标地址选项（MSI 安装 / EXE 安装 / ZIP 解压均默认非系统盘）：
+                  </span>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: isSystemDrive ? '#b45309' : '#15803d' }}>
+                    {isSystemDrive ? '⚠️ 请勿默认装入系统盘，建议选择 D 盘' : '✅ 默认非系统盘安全路径'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    value={installDir}
+                    onChange={(e) => setInstallDir(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: '7px 10px',
+                      fontSize: '12.5px',
+                      borderRadius: '6px',
+                      border: '1px solid #93c5fd',
+                      background: '#ffffff',
+                      color: '#0f172a',
+                    }}
+                  />
+                  {typeof window !== 'undefined' && window.meritDesktop?.chooseInstallDir && (
+                    <button
+                      type="button"
+                      onClick={handleChooseInstallDir}
+                      style={{
+                        background: '#0284c7',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '7px 14px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <FolderOpen size={14} />
+                      选择安装目录...
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* 四种安装方式大卡片列表 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ border: '1.5px solid #bfdbfe', background: '#f8fafc', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>方式一：EXE 安装版 (Setup.exe)</span>
+                      <span style={{ fontSize: '10.5px', background: '#dbeafe', padding: '1px 6px', borderRadius: '4px' }}>推荐向导</span>
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '4px', lineHeight: 1.45 }}>
+                      启动 NSIS 图形安装向导（无终端弹窗），自动预填上方所选非系统盘目录完成覆盖升级。
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      disabled={installing || updating}
+                      onClick={() => handleAutoInstall('setup')}
+                      style={{ flex: 1, background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '7px 10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      ⚡ 立即 EXE 覆盖安装
+                    </button>
+                    <button
+                      type="button"
+                      disabled={installing || updating}
+                      onClick={() => handleDownloadOrInstall('setup', false)}
+                      style={{ background: '#ffffff', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '7px 10px', fontSize: '12px', cursor: 'pointer' }}
+                    >
+                      仅下载
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ border: '1.5px solid #67e8f9', background: '#ecfeff', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#0e7490', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>方式二：MSI 安装包 (.msi)</span>
+                      <span style={{ fontSize: '10.5px', background: '#cffafe', padding: '1px 6px', borderRadius: '4px' }}>可选安装地址</span>
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#155e75', marginTop: '4px', lineHeight: 1.45 }}>
+                      Windows Installer 标准包，直接安装至上方选定的非系统盘地址（<b>{installDir}</b>），不弹终端。
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      disabled={installing || updating}
+                      onClick={() => handleAutoInstall('msi')}
+                      style={{ flex: 1, background: '#0891b2', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '7px 10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      ⚡ 立即 MSI 安装 (至所选地址)
+                    </button>
+                    <button
+                      type="button"
+                      disabled={installing || updating}
+                      onClick={() => handleDownloadOrInstall('msi', false)}
+                      style={{ background: '#ffffff', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '7px 10px', fontSize: '12px', cursor: 'pointer' }}
+                    >
+                      仅下载
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ border: '1.5px solid #bbf7d0', background: '#f0fdf4', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>方式三：便携单文件 (Portable.exe)</span>
+                      <span style={{ fontSize: '10.5px', background: '#dcfce7', padding: '1px 6px', borderRadius: '4px' }}>免安装</span>
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#166534', marginTop: '4px', lineHeight: 1.45 }}>
+                      绿色便携单文件，后台静默覆盖当前程序并自动重启（不写注册表、不弹终端窗口）。
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      disabled={installing || updating}
+                      onClick={() => handleAutoInstall('portable')}
+                      style={{ flex: 1, background: '#16a34a', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '7px 10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      ⚡ 立即单文件覆盖重启
+                    </button>
+                    <button
+                      type="button"
+                      disabled={installing || updating}
+                      onClick={() => handleDownloadOrInstall('portable', false)}
+                      style={{ background: '#ffffff', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '7px 10px', fontSize: '12px', cursor: 'pointer' }}
+                    >
+                      仅下载
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ border: '1.5px solid #fed7aa', background: '#fff7ed', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#9a3412', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>方式四：ZIP 绿色解压版 (.zip)</span>
+                      <span style={{ fontSize: '10.5px', background: '#ffedd5', padding: '1px 6px', borderRadius: '4px' }}>解压即用</span>
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#9a3412', marginTop: '4px', lineHeight: 1.45 }}>
+                      绿色免安装压缩包，后台静默解压覆盖至上方所选目录并自动启动新版（不弹终端）。
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      disabled={installing || updating}
+                      onClick={() => handleAutoInstall('zip')}
+                      style={{ flex: 1, background: '#ea580c', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '7px 10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      ⚡ 立即 ZIP 解压覆盖
+                    </button>
+                    <button
+                      type="button"
+                      disabled={installing || updating}
+                      onClick={() => handleDownloadOrInstall('zip', false)}
+                      style={{ background: '#ffffff', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '7px 10px', fontSize: '12px', cursor: 'pointer' }}
+                    >
+                      仅下载
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 下载结果与文件路径展示卡片 */}
         {downloadedPath && (

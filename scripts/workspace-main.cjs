@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const { spawn } = require('node:child_process');
 const { encryptWorkspace, decryptWorkspace } = require('./workspace-crypto.cjs');
 let session = null;
 
@@ -63,6 +64,41 @@ function restoreFocus(win) {
     win.focus();
     win.webContents.focus();
   }
+}
+
+// 获取默认的非系统盘安装目录（优先当前非系统盘目录，其次 D:\ / E:\ / F:\）
+function getDefaultInstallDir() {
+  const currentDir = path.dirname(process.execPath);
+  const upperCurrent = currentDir.toUpperCase();
+  if (
+    !upperCurrent.startsWith('C:') &&
+    !upperCurrent.includes('\\TEMP\\') &&
+    !upperCurrent.includes('\\NODE_MODULES\\') &&
+    !upperCurrent.includes('\\DIST-DESKTOP')
+  ) {
+    return currentDir;
+  }
+
+  const nonSystemDrives = ['D:\\', 'E:\\', 'F:\\', 'G:\\'];
+  for (const drive of nonSystemDrives) {
+    try {
+      if (fs.existsSync(drive)) {
+        return path.join(drive, '衡绩员工绩点考核系统');
+      }
+    } catch {}
+  }
+
+  return path.join(app.getPath('documents') || 'D:\\', '衡绩员工绩点考核系统');
+}
+
+function getDefaultDownloadDir() {
+  const nonSystemDrives = ['D:\\', 'E:\\', 'F:\\'];
+  for (const drive of nonSystemDrives) {
+    try {
+      if (fs.existsSync(drive)) return drive;
+    } catch {}
+  }
+  return app.getPath('downloads') || app.getPath('desktop') || os.tmpdir();
 }
 
 function createWindow() {
@@ -239,6 +275,36 @@ app.whenReady().then(() => {
     return false;
   });
 
+  ipcMain.handle('workspace:get-default-install-dir', () => {
+    return getDefaultInstallDir();
+  });
+
+  ipcMain.handle('workspace:choose-install-dir', async (_event, currentPath) => {
+    const win = BrowserWindow.fromWebContents(_event.sender) || BrowserWindow.getFocusedWindow();
+    let defaultPath = typeof currentPath === 'string' && currentPath.trim() ? currentPath.trim() : getDefaultInstallDir();
+    try {
+      if (!fs.existsSync(defaultPath)) {
+        const parentDir = path.dirname(defaultPath);
+        defaultPath = fs.existsSync(parentDir) ? parentDir : getDefaultDownloadDir();
+      }
+    } catch {
+      defaultPath = getDefaultDownloadDir();
+    }
+    const result = await dialog.showOpenDialog(win, {
+      title: '选择安装目标地址（建议选择 D 盘等非系统盘）',
+      defaultPath,
+      properties: ['openDirectory', 'createDirectory']
+    });
+    restoreFocus(win);
+    if (result.canceled || !result.filePaths || result.filePaths.length === 0) return null;
+    let chosen = result.filePaths[0];
+    // 如果用户直接选择了盘符根目录（如 D:\），自动追加子目录名称保持整洁
+    if (/^[A-Za-z]:\\?$/.test(chosen.trim())) {
+      chosen = path.join(chosen.trim(), '衡绩员工绩点考核系统');
+    }
+    return chosen;
+  });
+
   function getAssetFilenames(ver, format = 'setup') {
     const fmt = String(format).toLowerCase();
     if (fmt === 'msi') {
@@ -250,9 +316,7 @@ app.whenReady().then(() => {
     if (fmt === 'portable') {
       return [
         `hengji-portable-${ver}.exe`,
-        `hengji-portable.exe`,
-        `hengji-${ver}.exe`,
-        `衡绩员工绩点考核系统-${ver}.exe`
+        `hengji-portable.exe`
       ];
     }
     // 'setup' / 'exe' / default
@@ -264,304 +328,385 @@ app.whenReady().then(() => {
     ];
   }
 
-  async function resolveReleaseAssetUrl(ver, format = 'setup') {
+  function sendProgress(win, data) {
     try {
-      const apiRes = await fetch(`https://api.github.com/repos/zoufudun/hengji/releases/tags/v${ver}`, {
-        headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'Hengji-Desktop-App' }
-      });
-      if (apiRes.ok) {
-        const relData = await apiRes.json();
-        const assets = Array.isArray(relData.assets) ? relData.assets : [];
-        const fmt = String(format).toLowerCase();
-        if (fmt === 'zip') {
-          const zip = assets.find(a => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.zip'));
-          if (zip && zip.browser_download_url) return zip.browser_download_url;
-        } else if (fmt === 'msi') {
-          const msi = assets.find(a => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.msi'));
-          if (msi && msi.browser_download_url) return msi.browser_download_url;
-        } else if (fmt === 'portable') {
-          const portable = assets.find(a => typeof a.name === 'string' && (a.name.toLowerCase().includes('portable') || a.name.toLowerCase().endsWith('.exe')));
-          if (portable && portable.browser_download_url) return portable.browser_download_url;
-        } else {
-          const setup = assets.find(a => typeof a.name === 'string' && (a.name.toLowerCase().includes('setup') || a.name.toLowerCase() === `hengji-${ver}.exe`));
-          if (setup && setup.browser_download_url) return setup.browser_download_url;
-        }
-        const exe = assets.find(a => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.exe'));
-        if (exe && exe.browser_download_url) return exe.browser_download_url;
+      if (win && !win.isDestroyed() && win.webContents) {
+        win.webContents.send('workspace:update-progress', data);
       }
+    } catch {}
+  }
+
+  async function downloadStreamFromUrl(url, destFile, onChunkProgress) {
+    const controller = new AbortController();
+    let connectTimer = setTimeout(() => controller.abort(new Error('连接超时')), 9000);
+    let stallTimer = null;
+
+    const resetStallTimer = () => {
+      if (stallTimer) clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => controller.abort(new Error('下载流传输超时')), 15000);
+    };
+
+    try {
+      const response = await fetch(url, {
+        redirect: 'follow',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Hengji-Desktop-Updater/1.0'
+        }
+      });
+      clearTimeout(connectTimer);
+      connectTimer = null;
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      if (contentType.includes('text/html')) {
+        throw new Error('返回了 HTML 页面而非二进制安装包');
+      }
+
+      const totalBytes = parseInt(response.headers.get('content-length') || '0', 10) || 0;
+      if (totalBytes > 0 && totalBytes < 512 * 1024) {
+        throw new Error('文件体积异常');
+      }
+
+      const tempPart = `${destFile}.part-${Date.now()}`;
+      const fileStream = fs.createWriteStream(tempPart);
+      let transferred = 0;
+      let lastReportTime = 0;
+
+      resetStallTimer();
+
+      if (response.body && typeof response.body.getReader === 'function') {
+        const reader = response.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          resetStallTimer();
+          if (value && value.byteLength > 0) {
+            transferred += value.byteLength;
+            fileStream.write(Buffer.from(value));
+            const now = Date.now();
+            if (now - lastReportTime > 120) {
+              lastReportTime = now;
+              const percent = totalBytes > 0 ? Math.min(99, Math.round((transferred / totalBytes) * 100)) : 50;
+              onChunkProgress({
+                percent,
+                transferredMB: (transferred / 1024 / 1024).toFixed(1),
+                totalMB: totalBytes > 0 ? (totalBytes / 1024 / 1024).toFixed(1) : '未知'
+              });
+            }
+          }
+        }
+      } else {
+        const arrayBuf = await response.arrayBuffer();
+        transferred = arrayBuf.byteLength;
+        fileStream.write(Buffer.from(arrayBuf));
+      }
+
+      if (stallTimer) clearTimeout(stallTimer);
+      await new Promise((resolve, reject) => {
+        fileStream.end((err) => (err ? reject(err) : resolve()));
+      });
+
+      const finalStat = fs.statSync(tempPart);
+      if (finalStat.size < 1024 * 1024) {
+        try { fs.unlinkSync(tempPart); } catch {}
+        throw new Error('下载的文件不完整');
+      }
+
+      if (fs.existsSync(destFile)) {
+        try { fs.unlinkSync(destFile); } catch {}
+      }
+      fs.renameSync(tempPart, destFile);
+      return true;
     } catch (err) {
-      console.warn('resolveReleaseAssetUrl error:', err);
+      if (connectTimer) clearTimeout(connectTimer);
+      if (stallTimer) clearTimeout(stallTimer);
+      throw err;
     }
-    return null;
+  }
+
+  async function obtainUpdateFile({ ver, format, targetDir, win }) {
+    const filenames = getAssetFilenames(ver, format);
+    const primaryFilename = filenames[0];
+    const destDir = targetDir || getDefaultDownloadDir();
+    try { fs.mkdirSync(destDir, { recursive: true }); } catch {}
+    const targetPath = path.join(destDir, primaryFilename);
+
+    sendProgress(win, {
+      status: 'locating',
+      format,
+      percent: 5,
+      message: `正在准备 ${primaryFilename}...`
+    });
+
+    const execDir = path.dirname(process.execPath);
+    const searchDirs = [
+      execDir,
+      path.join(execDir, '..'),
+      path.join(execDir, '..', 'dist-desktop'),
+      path.join(__dirname, '..', 'dist-desktop'),
+      path.join(__dirname, '..', '..', 'dist-desktop'),
+      path.join(__dirname, '..', '..', '..', 'dist-desktop'),
+      path.join(process.cwd(), 'dist-desktop'),
+      destDir,
+      'D:\\',
+      app.getPath('downloads'),
+      app.getPath('desktop'),
+      os.tmpdir()
+    ].filter(Boolean);
+
+    for (const fn of filenames) {
+      for (const dir of searchDirs) {
+        try {
+          const src = path.join(dir, fn);
+          if (fs.existsSync(src)) {
+            const stats = fs.statSync(src);
+            if (stats.size > 1024 * 1024) {
+              if (path.resolve(src) !== path.resolve(targetPath)) {
+                fs.copyFileSync(src, targetPath);
+              }
+              sendProgress(win, {
+                status: 'done',
+                format,
+                percent: 100,
+                transferredMB: (stats.size / 1024 / 1024).toFixed(1),
+                totalMB: (stats.size / 1024 / 1024).toFixed(1),
+                message: `安装包已就绪: ${targetPath}`
+              });
+              return { filePath: targetPath, folder: destDir, fileName: primaryFilename };
+            }
+          }
+        } catch {}
+      }
+    }
+
+    // 构建多源高速下载通道（国内加速镜像优先 + 官方源兜底）
+    const candidateUrls = [];
+    for (const fn of filenames) {
+      const githubReleaseUrl = `https://github.com/zoufudun/hengji/releases/download/v${ver}/${encodeURIComponent(fn)}`;
+      candidateUrls.push(
+        `https://ghfast.top/${githubReleaseUrl}`,
+        `https://gh-proxy.com/${githubReleaseUrl}`,
+        `https://mirror.ghproxy.com/${githubReleaseUrl}`,
+        githubReleaseUrl
+      );
+    }
+
+    let downloaded = false;
+    let lastError = null;
+    for (let i = 0; i < candidateUrls.length; i++) {
+      const url = candidateUrls[i];
+      try {
+        sendProgress(win, {
+          status: 'downloading',
+          format,
+          percent: 8,
+          message: `正在连接高速下载通道 (${i + 1}/${candidateUrls.length})...`
+        });
+        await downloadStreamFromUrl(url, targetPath, ({ percent, transferredMB, totalMB }) => {
+          sendProgress(win, {
+            status: 'downloading',
+            format,
+            percent,
+            transferredMB,
+            totalMB,
+            message: `正在下载 ${primaryFilename}: ${percent}% (${transferredMB} MB / ${totalMB} MB)`
+          });
+        });
+        downloaded = true;
+        break;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    if (!downloaded) {
+      sendProgress(win, {
+        status: 'error',
+        format,
+        message: `下载失败: ${lastError ? lastError.message : '无法连接下载服务器'}`
+      });
+      throw new Error(`未能下载 ${primaryFilename}，请检查网络连接或稍后重试`);
+    }
+
+    const finalStats = fs.statSync(targetPath);
+    sendProgress(win, {
+      status: 'done',
+      format,
+      percent: 100,
+      transferredMB: (finalStats.size / 1024 / 1024).toFixed(1),
+      totalMB: (finalStats.size / 1024 / 1024).toFixed(1),
+      message: `下载完成: ${targetPath}`
+    });
+
+    return {
+      filePath: targetPath,
+      folder: destDir,
+      fileName: primaryFilename
+    };
   }
 
   ipcMain.handle('workspace:download-update', async (_event, payload) => {
-    const ver = (payload && payload.version) ? String(payload.version).replace(/^v/, '') : '0.7.8';
+    const win = BrowserWindow.fromWebContents(_event.sender) || BrowserWindow.getFocusedWindow();
+    const ver = (payload && payload.version) ? String(payload.version).replace(/^v/, '') : '0.7.9';
     const format = payload && payload.format ? String(payload.format).toLowerCase() : 'setup';
-    const filenames = getAssetFilenames(ver, format);
-    const filename = filenames[0];
+    const targetDir = (payload && payload.targetDir && String(payload.targetDir).trim())
+      ? String(payload.targetDir).trim()
+      : getDefaultDownloadDir();
 
-    // 优先下载/保存至 D:\ 盘，如无 D盘 则降级至系统下载目录
-    let targetDir = 'D:\\';
-    try {
-      if (!fs.existsSync(targetDir)) {
-        targetDir = app.getPath('downloads') || app.getPath('desktop') || 'C:\\';
-      }
-    } catch {
-      targetDir = app.getPath('downloads') || app.getPath('desktop') || 'C:\\';
-    }
-
-    const targetPath = path.join(targetDir, filename);
-
-    // 查找本地已有的桌面版安装程序包进行高速直拷（离线环境百分百可靠）
-    const searchDirs = [
-      path.join(__dirname, '..', 'dist-desktop'),
-      path.join(process.cwd(), 'dist-desktop'),
-      path.join(__dirname, '..'),
-      targetDir,
-      app.getPath('downloads'),
-      app.getPath('desktop')
-    ].filter(Boolean);
-
-    let copiedFromLocal = false;
-    for (const fn of filenames) {
-      for (const dir of searchDirs) {
-        const src = path.join(dir, fn);
-        if (fs.existsSync(src) && path.resolve(src) !== path.resolve(targetPath)) {
-          try {
-            const stats = fs.statSync(src);
-            if (stats.size > 1024 * 1024) {
-              fs.copyFileSync(src, targetPath);
-              copiedFromLocal = true;
-              break;
-            }
-          } catch (e) {
-            console.warn('Check local source error:', src, e);
-          }
-        }
-      }
-      if (copiedFromLocal) break;
-    }
-
-    if (!copiedFromLocal) {
-      let fetchUrl = (payload && payload.downloadUrl && String(payload.downloadUrl).startsWith('http')) ? payload.downloadUrl : null;
-      if (!fetchUrl) {
-        fetchUrl = await resolveReleaseAssetUrl(ver, format);
-      }
-      if (!fetchUrl) {
-        fetchUrl = `https://github.com/zoufudun/hengji/releases/download/v${ver}/${encodeURIComponent(filename)}`;
-      }
-      let response = await fetch(fetchUrl, { redirect: 'follow' });
-      if (!response.ok) {
-        for (const altFn of filenames) {
-          if (altFn === filename) continue;
-          const altUrl = `https://github.com/zoufudun/hengji/releases/download/v${ver}/${encodeURIComponent(altFn)}`;
-          try {
-            const r = await fetch(altUrl, { redirect: 'follow' });
-            if (r.ok) {
-              response = r;
-              break;
-            }
-          } catch {}
-        }
-      }
-      if (!response.ok) {
-        throw new Error(`下载失败 (HTTP ${response.status})：未能从官方渠道获取 ${filename}`);
-      }
-      const buffer = Buffer.from(await response.arrayBuffer());
-      fs.writeFileSync(targetPath, buffer);
-    }
-
-    try {
-      shell.showItemInFolder(targetPath);
-    } catch (e) {
-      console.warn('shell.showItemInFolder error:', e);
-    }
+    const result = await obtainUpdateFile({ ver, format, targetDir, win });
 
     return {
       success: true,
-      filePath: targetPath,
-      folder: targetDir,
-      fileName: filename
+      filePath: result.filePath,
+      folder: result.folder,
+      fileName: result.fileName,
+      format
     };
   });
 
   ipcMain.handle('workspace:install-update', async (_event, payload) => {
-    const ver = (payload && payload.version) ? String(payload.version).replace(/^v/, '') : '0.7.8';
+    const win = BrowserWindow.fromWebContents(_event.sender) || BrowserWindow.getFocusedWindow();
+    const ver = (payload && payload.version) ? String(payload.version).replace(/^v/, '') : '0.7.9';
     const format = payload && payload.format ? String(payload.format).toLowerCase() : 'setup';
     const currentExe = process.execPath;
-    const currentDir = path.dirname(currentExe);
+    const targetInstallDir = (payload && payload.installDir && String(payload.installDir).trim())
+      ? String(payload.installDir).trim()
+      : getDefaultInstallDir();
 
-    // 1. 查找或获取针对该格式的安装包
-    const candidateFilenames = getAssetFilenames(ver, format);
-    let installerPath = null;
-    const searchDirs = [
-      path.join(__dirname, '..', 'dist-desktop'),
-      path.join(process.cwd(), 'dist-desktop'),
-      'D:\\',
-      app.getPath('downloads'),
-      app.getPath('desktop')
-    ].filter(Boolean);
+    try {
+      fs.mkdirSync(targetInstallDir, { recursive: true });
+    } catch {}
 
-    for (const fn of candidateFilenames) {
-      for (const d of searchDirs) {
-        const cand = path.join(d, fn);
-        if (fs.existsSync(cand)) {
-          try {
-            if (fs.statSync(cand).size > 1024 * 1024) {
-              installerPath = cand;
-              break;
-            }
-          } catch {}
-        }
-      }
-      if (installerPath) break;
-    }
+    let installerPath = (payload && payload.filePath && fs.existsSync(payload.filePath))
+      ? payload.filePath
+      : null;
 
-    // 若本地未找到打包产物，从远端高速下载到系统临时目录
     if (!installerPath) {
-      const ext = format === 'msi' ? '.msi' : format === 'zip' ? '.zip' : '.exe';
-      const tempFilename = candidateFilenames[0] || `hengji-installer-${ver}-${Date.now()}${ext}`;
-      const tempPath = path.join(os.tmpdir(), tempFilename);
-
-      let fetchUrl = (payload && payload.downloadUrl && String(payload.downloadUrl).startsWith('http')) ? payload.downloadUrl : null;
-      if (!fetchUrl) {
-        fetchUrl = await resolveReleaseAssetUrl(ver, format);
-      }
-      if (!fetchUrl) {
-        fetchUrl = `https://github.com/zoufudun/hengji/releases/download/v${ver}/${encodeURIComponent(candidateFilenames[0])}`;
-      }
-      let response = await fetch(fetchUrl, { redirect: 'follow' });
-      if (!response.ok) {
-        for (const altFn of candidateFilenames) {
-          if (altFn === candidateFilenames[0]) continue;
-          const altUrl = `https://github.com/zoufudun/hengji/releases/download/v${ver}/${encodeURIComponent(altFn)}`;
-          try {
-            const r = await fetch(altUrl, { redirect: 'follow' });
-            if (r.ok) {
-              response = r;
-              break;
-            }
-          } catch {}
-        }
-      }
-      if (!response.ok) {
-        throw new Error(`下载安装包失败 (HTTP ${response.status})：无法获取更新包`);
-      }
-      const buffer = Buffer.from(await response.arrayBuffer());
-      fs.writeFileSync(tempPath, buffer);
-      installerPath = tempPath;
+      const obtained = await obtainUpdateFile({
+        ver,
+        format,
+        targetDir: getDefaultDownloadDir(),
+        win
+      });
+      installerPath = obtained.filePath;
     }
 
-    // 2. 生成可视化的自动化覆盖安装脚本 (bat)，保证用户能看到清晰的安装进程并处理好文件锁
-    const scriptPath = path.join(os.tmpdir(), `hengji-apply-update-${Date.now()}.bat`);
-    let scriptContent = '';
-
-    if (format === 'setup') {
-      scriptContent = `@echo off
-chcp 65001 >nul
-title 衡绩员工绩点考核系统 - 覆盖安装向导 (v${ver})
-color 1F
-echo ========================================================
-echo       衡绩员工绩点考核系统 - 正在启动覆盖安装向导
-echo ========================================================
-echo.
-echo [1/2] 正在等待原程序完全退出以释放文件占用...
-timeout /t 2 /nobreak >nul
-echo [2/2] 正在启动安装向导，请在向导界面中完成安装...
-start "" "${installerPath}" /D=${currentDir}
-timeout /t 3 /nobreak >nul
-del "%~f0" >nul 2>&1
-exit
-`;
-    } else if (format === 'msi') {
-      scriptContent = `@echo off
-chcp 65001 >nul
-title 衡绩员工绩点考核系统 - MSI 安装向导 (v${ver})
-color 1F
-echo ========================================================
-echo       衡绩员工绩点考核系统 - 正在启动 MSI 安装向导
-echo ========================================================
-echo.
-echo [1/2] 正在等待原程序完全退出以释放文件占用...
-timeout /t 2 /nobreak >nul
-echo [2/2] 正在启动 Windows Installer 安装程序...
-msiexec.exe /i "${installerPath}"
-timeout /t 3 /nobreak >nul
-del "%~f0" >nul 2>&1
-exit
-`;
-    } else if (format === 'portable') {
-      scriptContent = `@echo off
-chcp 65001 >nul
-title 衡绩员工绩点考核系统 - 便携单文件覆盖更新 (v${ver})
-color 2F
-echo ========================================================
-echo       衡绩员工绩点考核系统 - 便携单文件覆盖更新
-echo ========================================================
-echo.
-echo [1/3] 正在等待原程序完全退出释放文件锁...
-timeout /t 2 /nobreak >nul
-set RETRY=0
-:retry_copy
-echo [2/3] 正在覆盖更新主程序文件...
-copy /y "${installerPath}" "${currentExe}" >nul
-if errorlevel 1 (
-    set /a RETRY+=1
-    if %RETRY% leq 12 (
-        echo 文件仍被占用，等待 1 秒后重试 (%RETRY%/12)...
-        timeout /t 1 /nobreak >nul
-        goto retry_copy
-    ) else (
-        echo 覆盖更新失败：文件可能被其它进程占用，请关闭后手动复制。
-        pause
-        exit /b 1
-    )
-)
-echo [3/3] 单文件覆盖更新成功！正在自动启动新版本...
-start "" "${currentExe}"
-timeout /t 2 /nobreak >nul
-del "%~f0" >nul 2>&1
-exit
-`;
-    } else {
-      // zip 绿色解压版
-      scriptContent = `@echo off
-chcp 65001 >nul
-title 衡绩员工绩点考核系统 - 绿色版解压覆盖 (v${ver})
-color 6F
-echo ========================================================
-echo       衡绩员工绩点考核系统 - 绿色版解压覆盖更新
-echo ========================================================
-echo.
-echo [1/3] 正在等待原程序完全退出释放文件锁...
-timeout /t 2 /nobreak >nul
-echo [2/3] 正在解压新版本文件并覆盖到当前程序目录...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path '${installerPath.replace(/'/g, "''")}' -DestinationPath '${currentDir.replace(/'/g, "''")}' -Force"
-echo [3/3] 解压覆盖完成！正在自动启动新版本...
-start "" "${currentExe}"
-timeout /t 2 /nobreak >nul
-del "%~f0" >nul 2>&1
-exit
-`;
-    }
-
-    fs.writeFileSync(scriptPath, scriptContent, 'utf8');
-
-    // 3. 独立弹出新窗口执行更新安装向导脚本
-    const { spawn } = require('child_process');
-    const child = spawn('cmd.exe', ['/c', 'start', '""', scriptPath], {
-      detached: true,
-      stdio: 'ignore'
+    sendProgress(win, {
+      status: 'installing',
+      format,
+      percent: 100,
+      message: `正在启动安装程序并更新至 ${targetInstallDir}...`
     });
-    child.unref();
 
-    // 4. 退出当前软件以释放文件锁
+    // 四种安装方式均采用无终端窗口 (windowsHide: true) 原生启动，绝不弹出黑框或蓝框命令行终端
+    if (format === 'setup') {
+      // 1. EXE 安装版 (NSIS 原生图形向导，自动预填所选非系统盘目录)
+      const child = spawn(installerPath, [`/D=${targetInstallDir}`], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      });
+      child.unref();
+    } else if (format === 'msi') {
+      // 2. MSI 安装包 (Windows Installer 原生图形向导，传入用户选择的非系统盘安装地址)
+      const child = spawn('msiexec.exe', [
+        '/i',
+        installerPath,
+        `APPLICATIONFOLDER=${targetInstallDir}`,
+        `INSTALLDIR=${targetInstallDir}`,
+        `TARGETDIR=${targetInstallDir}`,
+        'WixAppFolder=WixPerMachineFolder',
+        'ALLUSERS=1'
+      ], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      });
+      child.unref();
+    } else if (format === 'portable') {
+      // 3. 便携单文件覆盖更新（后台静默替换并重启，windowsHide: true 绝不弹出终端窗口）
+      const isPackagedExe = app.isPackaged && !currentExe.toLowerCase().endsWith('electron.exe');
+      const targetExe = isPackagedExe
+        ? currentExe
+        : path.join(targetInstallDir, `衡绩员工绩点考核系统-${ver}.exe`);
+      const srcEscaped = installerPath.replace(/'/g, "''");
+      const dstEscaped = targetExe.replace(/'/g, "''");
+      const psScript = `
+Start-Sleep -Milliseconds 1500
+$retry = 0
+while ($retry -lt 15) {
+  try {
+    Copy-Item -LiteralPath '${srcEscaped}' -Destination '${dstEscaped}' -Force -ErrorAction Stop
+    break
+  } catch {
+    $retry++
+    Start-Sleep -Milliseconds 800
+  }
+}
+Start-Process -FilePath '${dstEscaped}'
+`;
+      const child = spawn('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-WindowStyle',
+        'Hidden',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        psScript
+      ], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      });
+      child.unref();
+    } else {
+      // 4. ZIP 绿色解压覆盖版（后台静默解压至目标目录并自动启动，windowsHide: true 绝不弹出终端窗口）
+      const srcEscaped = installerPath.replace(/'/g, "''");
+      const dirEscaped = targetInstallDir.replace(/'/g, "''");
+      const fallbackExeEscaped = currentExe.replace(/'/g, "''");
+      const psScript = `
+Start-Sleep -Milliseconds 1500
+try {
+  Expand-Archive -LiteralPath '${srcEscaped}' -DestinationPath '${dirEscaped}' -Force -ErrorAction Stop
+} catch {}
+$exeCandidate = Join-Path '${dirEscaped}' '衡绩员工绩点考核系统.exe'
+if (Test-Path -LiteralPath $exeCandidate) {
+  Start-Process -FilePath $exeCandidate
+} elseif (Test-Path -LiteralPath '${fallbackExeEscaped}') {
+  Start-Process -FilePath '${fallbackExeEscaped}'
+}
+`;
+      const child = spawn('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-WindowStyle',
+        'Hidden',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        psScript
+      ], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      });
+      child.unref();
+    }
+
     setTimeout(() => {
       app.quit();
-    }, 400);
+    }, 350);
 
-    return { success: true, message: '正在自动启动安装向导并更新版本...' };
+    return {
+      success: true,
+      installDir: targetInstallDir,
+      message: '已启动无终端静默更新流程...'
+    };
   });
 
   ipcMain.handle('workspace:show-item-in-folder', (_event, filePath) => {

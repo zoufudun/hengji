@@ -2531,7 +2531,7 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.7.8';
+export const APP_VERSION = '0.7.9';
 export const APP_BUILD = '20261024';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
@@ -2609,7 +2609,7 @@ export async function checkAppUpdate(currentVersion = APP_VERSION): Promise<Upda
             releaseName: hasUpdate ? `v${rawVersion} 全新版本` : `v${currentVersion} 最新稳定版`,
             releaseNotes: hasUpdate ? '发现全新发布版本，请点击下方按钮直接下载更新。' : '当前系统已处于官方最新稳定状态。',
             publishedAt: new Date().toLocaleDateString(),
-            downloadUrl: `${GITHUB_RELEASES_URL}/download/v${rawVersion}/衡绩员工绩点考核系统-${rawVersion}.exe`,
+            downloadUrl: `${GITHUB_RELEASES_URL}/download/v${rawVersion}/hengji-${rawVersion}.exe`,
             htmlUrl: `${GITHUB_RELEASES_URL}/tag/v${rawVersion}`,
             checkedAt,
           };
@@ -2671,7 +2671,7 @@ export async function checkAppUpdate(currentVersion = APP_VERSION): Promise<Upda
           releaseName: hasUpdate ? `v${rawVersion} 全新版本` : `v${currentVersion} 最新稳定版`,
           releaseNotes: hasUpdate ? '发现全新发布版本，请点击下方按钮直接下载更新。' : '当前系统已处于官方最新稳定状态。',
           publishedAt: new Date().toLocaleDateString(),
-          downloadUrl: `${GITHUB_RELEASES_URL}/download/v${rawVersion}/衡绩员工绩点考核系统-${rawVersion}.exe`,
+          downloadUrl: `${GITHUB_RELEASES_URL}/download/v${rawVersion}/hengji-${rawVersion}.exe`,
           htmlUrl: `${GITHUB_RELEASES_URL}/tag/v${rawVersion}`,
           checkedAt,
         };
@@ -2694,6 +2694,18 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.7.9',
+    date: '2026-10-24',
+    tag: '重大更新',
+    title: '点击下载弹出四种安装方式选择、MSI非系统盘安装地址自定义、消除终端弹窗、启动页新增关于与检测新版',
+    items: [
+      '【点击下载弹出四种安装方式选择与多源高速下载】修复检测到新版后点击下载转圈卡死的问题，内置本地智能识别与多加速源自动切换及实时百分比进度条；点击下载立即弹出四种安装方式选择器（EXE安装版、MSI安装包、便携单文件、ZIP绿色版）。',
+      '【MSI安装及全格式自定义安装路径（默认非系统盘）】新增安装目标地址设置栏与文件夹浏览选择器，默认指向 D:\\衡绩员工绩点考核系统 等非系统盘，绝不默认装入系统盘；MSI 安装向导全程开启安装目录修改界面。',
+      '【彻底消除终端命令行弹窗】全面重构四种安装方式的底层执行机制，采用原生 GUI 进程直启与无窗口后台任务（windowsHide: true），点击覆盖安装、MSI安装、单文件覆盖、解压覆盖均平滑静默运行，不再弹出黑框/蓝框终端窗口。',
+      '【安全工作区初始页新增“关于”与“检测新版”】在“选择你的安全工作区”初始画面新增“关于系统”与“检测新版”快捷入口，无需进入工作区即可直接查看系统关于页面并实时检测与升级新版本。'
+    ]
+  },
   {
     version: 'v0.7.8',
     date: '2026-10-24',

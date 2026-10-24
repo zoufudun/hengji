@@ -15,7 +15,7 @@ async function main() {
   const token = await getGitHubToken();
   const repo = 'zoufudun/hengji';
   const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
-  const ver = pkg.version || '0.7.8';
+  const ver = pkg.version || '0.7.9';
   const tag = `v${ver}`;
   const headers = {
     'Authorization': `token ${token}`,
