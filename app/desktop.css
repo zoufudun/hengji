@@ -2800,8 +2800,16 @@ button:disabled{opacity:.55;cursor:not-allowed}
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: flex-start;
-  gap: 12px;
+  justify-content: space-between; /* 确保图2稳稳对齐右边大图底边 */
+  height: 100%;
+}
+
+.cc-hero-top-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
 }
 
 .cc-release-badge {
@@ -2816,7 +2824,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   transition: all 0.15s ease;
   flex-wrap: wrap;
 }
@@ -2846,15 +2854,16 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .cc-hero-title-group {
   display: flex;
   flex-direction: column;
-  gap: 6px; /* 三行极紧凑，类似图1 */
+  gap: 10px; /* 图1三行行间距适当调宽，舒展漂亮不挤压 */
   margin: 0;
+  width: 100%;
 }
 
 .cc-hero-brand-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 0;
+  margin-bottom: 2px;
 }
 
 .cc-hero-dual-logos {
@@ -2883,24 +2892,24 @@ button:disabled{opacity:.55;cursor:not-allowed}
   letter-spacing: -0.02em;
   color: var(--cc-text);
   margin: 0;
-  line-height: 1.08;
+  line-height: 1.12;
 }
 
 .cc-hero-en-sub {
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--cc-text-muted);
   font-weight: 600;
   letter-spacing: 0.04em;
   display: block;
-  margin-top: 1px;
+  margin-top: 2px;
 }
 
 .cc-hero-slogan {
-  font-size: 27px;
+  font-size: 28px;
   font-weight: 900;
   color: var(--cc-text);
   margin: 0;
-  line-height: 1.22;
+  line-height: 1.28; /* 行间距适度加宽，排版更漂亮 */
 }
 
 .cc-gradient-accent {
@@ -2916,11 +2925,20 @@ button:disabled{opacity:.55;cursor:not-allowed}
 }
 
 .cc-hero-tagline {
-  font-size: 15px;
+  font-size: 15.5px;
   font-weight: 500;
   color: var(--cc-text-secondary);
   margin: 0;
-  line-height: 1.35;
+  line-height: 1.45; /* 优雅的段落行高 */
+}
+
+.cc-hero-bottom-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: auto; /* 保证稳稳贴紧底边，与右侧大图底边对齐！ */
+  padding-bottom: 2px;
+  width: 100%;
 }
 
 .cc-hero-buttons {
@@ -2938,7 +2956,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  margin-top: 20px;
+  margin-top: 0; /* 贴底对齐 */
   width: 100%;
 }
 
@@ -5715,4 +5733,139 @@ button:disabled{opacity:.55;cursor:not-allowed}
 
 .cc-parchment-root.cc-dark .cc-doc-step-tag {
   background: #10b981;
+}
+
+/* ================= 图4 风格的高质感 Markdown 代码块 ================= */
+.cc-md-code-card {
+  position: relative;
+  background: #ebe5d8;
+  border: 1px solid rgba(60, 45, 30, 0.09);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin: 16px 0 20px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, Monaco, monospace;
+  box-shadow: 0 1px 4px rgba(60, 45, 30, 0.04);
+}
+
+.cc-parchment-root.cc-dark .cc-md-code-card {
+  background: #1c1c1f;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.cc-md-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.cc-md-code-lang {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #8c8375;
+  text-transform: uppercase;
+}
+
+.cc-parchment-root.cc-dark .cc-md-code-lang {
+  color: #9ca3af;
+}
+
+.cc-md-code-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  font-size: 11.5px;
+  color: #8c8375;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 5px;
+  transition: all 0.15s ease;
+}
+
+.cc-md-code-copy-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--cc-terracotta);
+}
+
+.cc-parchment-root.cc-dark .cc-md-code-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #34d399;
+}
+
+.cc-md-code-content {
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: #27221e;
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.cc-parchment-root.cc-dark .cc-md-code-content {
+  color: #e4e4e7;
+}
+
+.cc-md-code-comment {
+  color: #78716c;
+  font-style: italic;
+}
+
+.cc-md-code-keyword {
+  color: #8b5cf6;
+  font-weight: 600;
+}
+
+.cc-md-code-option {
+  color: #d97706;
+  font-weight: 600;
+}
+
+.cc-md-code-cmd {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.cc-parchment-root.cc-dark .cc-md-code-cmd {
+  color: #f8fafc;
+}
+
+/* ================= Markdown ASCII 流程与架构图卡片 ================= */
+.cc-md-diagram-card {
+  background: #ece6db;
+  border: 1px solid rgba(60, 45, 30, 0.1);
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin: 18px 0;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, Monaco, monospace;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #332d27;
+}
+
+.cc-parchment-root.cc-dark .cc-md-diagram-card {
+  background: #18181b;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #d4d4d8;
+}
+
+/* ================= Markdown 引用块与提示 ================= */
+.cc-md-quote {
+  border-left: 4px solid var(--cc-terracotta);
+  background: rgba(200, 90, 50, 0.06);
+  border-radius: 0 10px 10px 0;
+  padding: 12px 18px;
+  margin: 16px 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--cc-text);
+}
+
+.cc-parchment-root.cc-dark .cc-md-quote {
+  border-left-color: #10b981;
+  background: rgba(16, 185, 129, 0.08);
 }

@@ -15,6 +15,7 @@ import {
   Download,
   Play,
   Copy,
+  Check,
   ChevronRight,
   ExternalLink,
   GitBranch,
@@ -48,6 +49,117 @@ export interface DocBook {
   titleZh: string;
   titleEn: string;
   chapters: DocChapter[];
+}
+
+/**
+ * 图4 风格的高端 Markdown 代码块卡片组件
+ * 包含：语言标识徽标 (BASH / POWERSHELL)、语法关键字高亮、注释斜体、一键复制
+ */
+interface MarkdownCodeCardProps {
+  lang?: string;
+  code: string;
+  copyKey: string;
+  onCopyText?: (text: string, key: string) => void;
+  copiedKey?: string;
+}
+
+export function MarkdownCodeCard({
+  lang = 'BASH',
+  code,
+  copyKey,
+  onCopyText,
+  copiedKey
+}: MarkdownCodeCardProps) {
+  const isCopied = copiedKey === copyKey;
+
+  const renderHighlightedLines = (rawCode: string) => {
+    const lines = rawCode.split('\n');
+    return lines.map((line, idx) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        return <div key={idx} style={{ height: '0.9em' }} />;
+      }
+      // 注释行：灰色斜体
+      if (trimmed.startsWith('#') || trimmed.startsWith('//')) {
+        return (
+          <div key={idx} className="cc-md-code-comment">
+            {line}
+          </div>
+        );
+      }
+
+      // 对命令行的分词与高亮处理
+      const tokens = line.split(/(\s+|"[^"]*"|'[^']*')/);
+      return (
+        <div key={idx} className="cc-md-code-line">
+          {tokens.map((token, tIdx) => {
+            if (/^(brew|git|npm|npx|node)$/.test(token)) {
+              return <span key={tIdx} className="cc-md-code-cmd">{token}</span>;
+            }
+            if (/^(install|commit|push|tag|add|status|build|test|run|checkout|clone|publish)$/.test(token)) {
+              return <span key={tIdx} className="cc-md-code-keyword">{token}</span>;
+            }
+            if (/^(--[a-zA-Z0-9_-]+|-[a-zA-Z0-9]+)$/.test(token)) {
+              return <span key={tIdx} className="cc-md-code-option">{token}</span>;
+            }
+            if (token.startsWith('"') || token.startsWith("'")) {
+              return <span key={tIdx} style={{ color: '#047857' }}>{token}</span>;
+            }
+            return <span key={tIdx}>{token}</span>;
+          })}
+        </div>
+      );
+    });
+  };
+
+  return (
+    <div className="cc-md-code-card">
+      <div className="cc-md-code-header">
+        <span className="cc-md-code-lang">{lang}</span>
+        {onCopyText && (
+          <button
+            type="button"
+            className="cc-md-code-copy-btn"
+            onClick={() => onCopyText(code, copyKey)}
+            title="复制代码"
+          >
+            {isCopied ? (
+              <>
+                <Check size={12} style={{ color: '#10b981' }} />
+                <span style={{ color: '#10b981', fontWeight: '600' }}>已复制</span>
+              </>
+            ) : (
+              <>
+                <Copy size={12} />
+                <span>复制</span>
+              </>
+            )}
+          </button>
+        )}
+      </div>
+      <div className="cc-md-code-content">
+        {renderHighlightedLines(code)}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Markdown ASCII 流程与架构图卡片组件
+ */
+export function MarkdownDiagram({ diagram, title }: { diagram: string; title?: string }) {
+  return (
+    <div className="cc-md-diagram-card">
+      {title && (
+        <div style={{ color: 'var(--cc-text-muted)', fontSize: '11px', fontWeight: '700', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          {title}
+        </div>
+      )}
+      <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit' }}>
+        <code>{diagram}</code>
+      </pre>
+    </div>
+  );
 }
 
 export const DOC_BOOKS: DocBook[] = [
@@ -118,6 +230,7 @@ export const DOC_BOOKS: DocBook[] = [
         titleZh: '综合管理员新手实操指南（5步上手）',
         titleEn: 'General Admin 5-Step Rapid Guide',
         sections: [
+          { id: 'sec-admin-overview', titleZh: '业务闭环总览与五步流程图', titleEn: 'Business Loop Overview & Diagram', level: 1 },
           { id: 'sec-admin-step1', titleZh: '第一步：创建安全加密数据库', titleEn: 'Step 1: Create Secure Encrypted Database', level: 1 },
           { id: 'sec-admin-step2', titleZh: '第二步：录入团队编制与工程合同', titleEn: 'Step 2: Enter Roster & Contracts', level: 1 },
           { id: 'sec-admin-step3', titleZh: '第三步：项目全周期额度防透支排期', titleEn: 'Step 3: Phased Anti-Overdraft Scheduling', level: 1 },
@@ -238,7 +351,6 @@ export function DocArticleContent({
   onCopyText,
   copiedKey
 }: DocArticleContentProps) {
-  // 根据选中的 chapterId 渲染对应的正文板块
   switch (chapterId) {
     // ==========================================
     // 文章 1：衡绩软件深度介绍
@@ -267,6 +379,23 @@ export function DocArticleContent({
                 ? 'In modern engineering, aerospace, defense, and complex hardware/software R&D, a project typically spans 6 to 36 months, with contract values ranging from hundreds of thousands to tens of millions. Team members frequently participate in multiple projects simultaneously across overall system design, product prototyping, and specialized component R&D. Traditional HR software or generic SaaS tools cannot handle contract-bound budget caps, phased delivery milestones, or cross-project personnel contribution aggregation.'
                 : '在现代工程制造、国防军工、高端装备、科研院所以及复杂软硬件研发领域，项目周期通常跨越 6 至 36 个月，单个项目合同金额从数十万到数千万元不等。一个技术骨干往往同时承担 3~5 个在研项目的不同研发任务。通用的人事考核软件（如各类基于固定工资折算的在线 SaaS 系统）由于无法理解“工程工作令号”、“合同额度刚性锁定”、“多阶段交付里程碑”以及“一人跨多项目绩点分摊”等严苛工业场景，根本无法落地。'}
             </p>
+
+            <MarkdownDiagram
+              title={isEn ? 'Dual-Anchor Merit Calculation Architecture' : '衡绩核心：双锚定工程产值考核模型'}
+              diagram={`┌─────────────────────────────────────────────────────────────────────────────┐
+│                       衡绩双锚定工程产值量化模型                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  【工程合同基石】                    【全周期防透支】                 【个人实干贡献】
+┌──────────────────┐               ┌──────────────────┐             ┌──────────────────┐
+│ 项目工作令合同额 │ ──── 乘以 ───▶│ 当月排期释放比例 │ ── 乘以 ──▶│ 员工当月分配占比 │
+│ (1绩点 = 1万元)  │               │ (前低后高交付锚定)│             │ (团队成员闭环100%)│
+└──────────────────┘               └──────────────────┘             └──────────────────┘
+                                                                             │
+                                                                             ▼
+                                                                    【员工当月所得绩点】
+                                                                    (BigInt最大余数补差)`}
+            />
 
             <div className="cc-doc-step-card" style={{ marginTop: '16px' }}>
               <div className="cc-doc-step-header">
@@ -328,15 +457,13 @@ export function DocArticleContent({
           {/* 小节 3: 设计哲学 */}
           <section id="sec-intro-philosophy" className="cc-cl-sec">
             <h2>{isEn ? 'Design Philosophy & Compliance' : '三、设计哲学与合规保障'}</h2>
-            <div className="cc-doc-callout">
+            <div className="cc-md-quote">
               <strong style={{ color: 'var(--cc-terracotta)', display: 'block', marginBottom: '6px' }}>
                 🛡️ {isEn ? 'Core Design Axiom: Transparency, Reproducibility, Zero Cloud Reliance' : '核心设计铁律：规则透明、计算可复现、绝不上云'}
               </strong>
-              <p style={{ fontSize: '13px', margin: 0, color: 'var(--cc-text-secondary)' }}>
-                {isEn
-                  ? 'All calculation parameters, contract totals, and monthly release ratios are recorded with cryptographic timestamps. Any stakeholder or auditor can recalculate the exact merit matrix down to the cent, eliminating subjective ambiguity.'
-                  : '衡绩坚信：考核的权威来源于算法的不可争议性。系统所有的合同基数、分配比例、发布时间戳均具备严密审计链。任何经授权的领导或审计人员，输入相同的初始数据与规则，均可 100% 重现计算结果，杜绝人情分、印象分，以客观工程产值服人。'}
-              </p>
+              {isEn
+                ? 'All calculation parameters, contract totals, and monthly release ratios are recorded with cryptographic timestamps. Any stakeholder or auditor can recalculate the exact merit matrix down to the cent, eliminating subjective ambiguity.'
+                : '衡绩坚信：考核的权威来源于算法的不可争议性。系统所有的合同基数、分配比例、发布时间戳均具备严密审计链。任何经授权的领导或审计人员，输入相同的初始数据与规则，均可 100% 重现计算结果，杜绝人情分、印象分，以客观工程产值服人。'}
             </div>
           </section>
         </div>
@@ -557,41 +684,90 @@ export function DocArticleContent({
       );
 
     // ==========================================
-    // 文章 2：衡绩软件新手操作手册（管理员 + 核算员）
+    // 文章 2：衡绩软件新手操作手册（管理员 + 核算员图文并茂）
     // ==========================================
     case 'manual-admin':
       return (
         <div>
           <div className="cc-cl-article-header">
             <h1>{isEn ? '2.1 General Admin 5-Step Practical Guide' : '2.1 综合管理员新手实操指南（5步上手）'}</h1>
-            <span className="cc-cl-date">{isEn ? 'Role: Project Manager & Department Head' : '适用角色：部门负责人 / 综合管理员 / 项目经理'}</span>
+            <span className="cc-cl-date">{isEn ? 'Role: Department Head & Project Manager' : '适用角色：部门负责人 / 综合管理员 / 项目经理'}</span>
           </div>
 
           <p className="cc-cl-summary">
             {isEn
               ? 'This guide provides comprehensive, step-by-step instructions for General Administrators. Learn how to initialize your encrypted workspace, import rosters and contracts, schedule phased overdraft-proof quotas, execute monthly evaluations, and export audit packages.'
-              : '本操作手册面向综合管理员与项目负责人。采用图文并茂的卡片化步骤教学，手把手教您在 10 分钟内完成安全建库、花名册与合同录入、防透支排期规划、月底集中分配发布以及数据包交接全套流程。'}
+              : '本操作手册专为综合管理员与项目负责人编写。系统采用端到端的数据量化流转架构，手把手教您在 10 分钟内完成安全建库、花名册与合同录入、防透支排期规划、月底集中分配发布以及数据包交接全套流程。'}
           </p>
 
           <hr className="cc-cl-divider" />
+
+          {/* 业务总览流程图 */}
+          <section id="sec-admin-overview" className="cc-cl-sec">
+            <h2>{isEn ? 'Business Loop Overview & Diagram' : '🧭 五步核心业务闭环总览流程图'}</h2>
+            <MarkdownDiagram
+              title={isEn ? '5-Step Closed-Loop Business Workflow' : '衡绩系统 5 步核心业务闭环流程图'}
+              diagram={`┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           衡绩系统 5 步核心业务闭环流程图                           │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+   【第 1 步：建立工作区】       【第 2 步：初始化主体】        【第 3 步：顶层规划设计】
+   ┌───────────────────┐        ┌───────────────────┐        ┌───────────────────┐
+   │  新建安全工作区    │ ─────▶ │  导入部门员工名册  │ ─────▶ │  全周期额度规划    │
+   │  .hengji 本地存储  │        │  (总体/产品/研发) │        │  (稳健交付防透支) │
+   │  AES-256 口令加密 │        │  导入合同项目清单  │        │  项目组模版比例   │
+   └───────────────────┘        └───────────────────┘        └───────────────────┘
+                                                                       │
+                                                                       ▼
+   【第 5 步：报表与荣誉】       【第 4 步：月底考评发布】
+   ┌───────────────────┐        ┌───────────────────┐
+   │  周期绩点报表透视  │ ◀───── │  月度分配集中大表  │
+   │  横向个人·纵向项目 │        │  ⚡ 套用当月规划   │
+   │  双向 100% 闭环求和│        │  配置成员比例 100%│
+   │  考核之星荣誉殿堂  │        │  🚀 一键批量发布   │
+   └───────────────────┘        └───────────────────┘`}
+            />
+          </section>
 
           {/* 步骤 1 */}
           <section id="sec-admin-step1" className="cc-cl-sec">
             <div className="cc-doc-step-card">
               <div className="cc-doc-step-header">
                 <span className="cc-doc-step-tag">STEP 1</span>
-                <strong style={{ fontSize: '16px' }}>{isEn ? 'Create Secure Encrypted Workspace' : '第一步：创建安全加密数据库'}</strong>
+                <strong style={{ fontSize: '16px' }}>{isEn ? 'Create Secure Encrypted Workspace' : '第一步：新建安全工作区（数据安全与存储根基）'}</strong>
               </div>
               <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
                 {isEn
                   ? 'Launch the HengJi client, select [General Admin Workspace], choose a safe storage path (recommended on non-system drives such as D:\\ or E:\\), and define a strong master encryption password.'
-                  : '启动衡绩软件后，进入主入口界面，选择【🏢 综合管理工作区（推荐）】。点击【新建数据库】，系统将弹出安全向导：'}
+                  : '衡绩系统采用完全离线优先架构，零网络依赖。系统不会把业务数据隐蔽放到 C 盘用户目录，所有部门员工、工程项目、月度分配与绩点流水均保存在用户自主指定的 `.hengji` 工作区文件中，从物理层面杜绝保密数据泄露。'}
               </p>
-              <div className="cc-doc-callout" style={{ margin: '10px 0' }}>
-                <b>💡 {isEn ? 'Best Practice for File Location' : '建库位置最佳实践'}</b>：
-                {isEn
-                  ? 'Always select non-system disks (e.g. D:\\HengJi_Workspace\\). File format will be .hengji. Remember your master password—due to offline encryption, forgotten passwords cannot be recovered via cloud resets!'
-                  : '推荐将数据库文件建立在非系统盘（如 `D:\\衡绩考核数据\\`），文件名如 `2026年度工程研发部.hengji`。请务必牢记设置的主密码——基于纯离线零外网设计，一旦密码遗忘，任何人都无法通过云端找回！'}
+
+              <MarkdownDiagram
+                title={isEn ? 'Workspace Initialization Architecture' : '第一步：工作区建立机制示意'}
+                diagram={`双击运行软件 ──▶ 【+ 新建工作区】 ──▶ 选择非系统盘 (D:/E:/保密盘)
+                                           │
+                   ┌───────────────────────┴───────────────────────┐
+                   ▼                                               ▼
+      【🏢 综合管理工作区 (首选推荐)】                【📊 绩效核算工作区】
+      适合超级管理员统揽全局                          适合专职核算员汇总数据包
+                   │                                               │
+                   └───────────────────────┬───────────────────────┘
+                                           ▼
+                              设置管理员口令 (AES-256)
+                              (在个人电脑亦可直接留空免密)
+                                           ▼
+                             生成 .hengji 加密工作区文件
+                             (每次保存自动生成 .backup 镜像)`}
+              />
+
+              <div className="cc-md-quote">
+                <b>💡 {isEn ? 'Operation Guide' : '具体操作指引'}</b>：
+                <ol style={{ paddingLeft: '18px', margin: '6px 0 0', lineHeight: '1.6' }}>
+                  <li><b>选择工作区</b>：在欢迎界面点击【🏢 综合管理工作区（首选推荐）】。</li>
+                  <li><b>指定存储位置（强烈推荐非系统盘）</b>：请务必选择非系统盘（如 D 盘或 E 盘），文件后缀为 `.hengji`。</li>
+                  <li><b>设置管理员口令</b>：输入主密码，系统采用 `PBKDF2-SHA256`（100,000次加盐迭代）结合 `AES-256-GCM` 加密；在个人专用电脑上亦可留空免密。</li>
+                  <li><b>自动备份双重兜底</b>：每次保存前，系统会在同目录自动生成 `.hengji.backup` 实时镜像，确保安全无忧。</li>
+                </ol>
               </div>
             </div>
           </section>
@@ -601,24 +777,36 @@ export function DocArticleContent({
             <div className="cc-doc-step-card">
               <div className="cc-doc-step-header">
                 <span className="cc-doc-step-tag">STEP 2</span>
-                <strong style={{ fontSize: '16px' }}>{isEn ? 'Import Team Roster & Engineering Contracts' : '第二步：录入团队编制与工程合同'}</strong>
+                <strong style={{ fontSize: '16px' }}>{isEn ? 'Import Team Roster & Engineering Contracts' : '第二步：导入部门员工花名册与工程合同（初始化主体）'}</strong>
               </div>
               <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
                 {isEn
                   ? 'Navigate to [Team Roster] and [Project Lifecycle]. You can batch import members via Excel/CSV or add them manually. The smart parser automatically strips thousand separators (e.g. 1,500,000.00) and maps members to General, Product, or R&D groups.'
-                  : '点击左侧导航栏的【团队编制花名册】与【项目全周期管理】。系统全面兼容财务部门导出的 Excel / CSV 台账：'}
+                  : '建立考核所需的“人”（员工档案与专业组归属）与“事”（工程合同项目与工作令号）两大基石数据。'}
               </p>
-              <ul style={{ paddingLeft: '18px', fontSize: '13px', lineHeight: '1.7', margin: '8px 0' }}>
-                <li>
-                  <b>{isEn ? 'Unique Employee ID' : '员工唯一工号绑定'}</b>：{isEn ? 'Every member is identified by their unique Employee ID (e.g. EMP001). This guarantees that even if names are identical across departments, cross-project aggregation will never mismatch.' : '每个成员以工号为全局唯一标识（如 EMP001）。即使出现同名同姓，跨项目汇总也绝不错配。'}
-                </li>
-                <li>
-                  <b>{isEn ? 'Functional Group Tagging' : '专业组标签划分'}</b>：{isEn ? 'Assign members to Overall General, Product, or Specialized R&D groups, powering automated department trend comparisons and star ratings.' : '为成员勾选总体组、产品组或研发组。后续在团队月度分配大表中可一键快速勾选该组人员，无需逐人点选。'}
-                </li>
-                <li>
-                  <b>{isEn ? 'Contract Order ID' : '工作令号与子合同绑定'}</b>：{isEn ? 'Link contract values and phase descriptions under designated project order IDs with zero data loss.' : '录入项目名称、工作令号及合同总金额（万元）。支持同一工作令号下多份子合同独立登记。'}
-                </li>
-              </ul>
+
+              <MarkdownDiagram
+                title={isEn ? 'Subject Initialization Diagram' : '第二步：业务主体初始化示意'}
+                diagram={`【员工管理】                                     【项目库管理】
+[员工与专业组]                                   [项目库与额度]
+     │                                                │
+┌────┴─────────────────────────┐                 ┌────┴─────────────────────────┐
+│ 选项A: 📥 批量导入员工 CSV   │                 │ 选项A: 📥 批量导入项目 CSV   │
+│ 选项B: ⚡ 一键初始化内置成员 │                 │ 选项B: ➕ 新建单项工程合同   │
+│ 选项C: ➕ 手动单个添加员工   │                 └──────────────────────────────┘
+└──────────────────────────────┘                              │
+               │                                              ▼
+               ▼                                 【财务格式全自动自适应清洗】
+     【专业组自动归类绑定】                         • 自动剥离千分位逗号 (1,309,000.00)
+     • 总体组 (系统方案/总体协调)                  • 自动清除货币符号 (¥、$、元、万元)
+     • 产品组 (硬件结构/产品定义)                  • 浮点超长小数四舍五入到分 (33.333333)
+     • 研发组 (算法/嵌入式/软件)                   • 同工作令号多子合同独立核算`}
+              />
+
+              <div className="cc-md-quote">
+                <b>💡 {isEn ? 'Smart Features' : '特色高容错能力'}</b>：
+                系统全面兼容财务部门导出的 Excel / CSV 台账。即使金额带有千分位逗号（如 `1,500,000.00`）或货币符号（¥、元），系统均能毫秒级清洗为标准数值，并按唯一工号实现全局唯一绑定。
+              </div>
             </div>
           </section>
 
@@ -627,20 +815,31 @@ export function DocArticleContent({
             <div className="cc-doc-step-card">
               <div className="cc-doc-step-header">
                 <span className="cc-doc-step-tag">STEP 3</span>
-                <strong style={{ fontSize: '16px' }}>{isEn ? 'Phased Anti-Overdraft Quota Scheduling' : '第三步：项目全周期额度防透支排期'}</strong>
+                <strong style={{ fontSize: '16px' }}>{isEn ? 'Phased Anti-Overdraft Quota Scheduling' : '第三步：项目全周期额度防透支排期规划'}</strong>
               </div>
               <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
                 {isEn
                   ? 'Open [Monthly Allocation] or [Project Lifecycle], click on the project schedule button, and apply the "Robust Phased Delivery" template. The system verifies that the sum of all monthly quota percentages strictly equals 100%.'
-                  : '进入【月度绩效分配】或【项目全周期管理】，点击项目的【额度排期】按钮。推荐直接点击【套用“🎯 稳健交付型”排期法则】：'}
+                  : '针对长周期工程项目，最忌讳“项目刚立项就把绩效分光，后期进入成品发货与试验终验时有活无钱可分”。衡绩内置“稳健交付型（前低后高）”排期机制：'}
               </p>
-              <div className="cc-doc-callout" style={{ margin: '10px 0' }}>
-                <b>🛡️ {isEn ? 'Three-Phase Anti-Overdraft Allocation Rule' : '三段式防透支核心法则'}</b>：
-                <ol style={{ paddingLeft: '18px', margin: '6px 0 0', lineHeight: '1.6' }}>
-                  <li>{isEn ? 'Month 1 (Inception / Proposal): Strictly capped at 0% ~ 10% (default 5%).' : '首月（立项方案论证期）：严格限制在 0% ~ 10%（默认 5%），设立封顶线。'}</li>
-                  <li>{isEn ? 'Mid-to-Late Months (Core R&D & Delivery): Scaled progressively, with major 45%+ weight on acceptance.' : '中后期（成品研制、总装联调与发货出厂）：额度前低后高，交付月集中释放 45%+ 大头，攻坚期动力充沛。'}</li>
-                  <li>{isEn ? 'Final Month (Warranty & Field Support): 5% hard retention.' : '末月（现场维保与终检验收）：刚性锁定 5% 尾款额度，保修期技术支持不撂挑子。'}</li>
-                </ol>
+
+              <MarkdownDiagram
+                title={isEn ? 'Three-Phase Anti-Overdraft Model' : '第三步：三段式前低后高防透支配比法则'}
+                diagram={`【项目全周期 100% 额度配比】
+┌───────────────────────┬───────────────────────────────────┬─────────────────────┐
+│   前期立项与方案论证   │       主体研制、试验与成品交付     │   现场维保与终检验收 │
+│   (首月 0%~10%，限高) │       (前低后高递增，大头 45%+)   │   (末月刚性锁定 5%) │
+└───────────────────────┴───────────────────────────────────┴─────────────────────┘
+  ▲ 约束：避免前期瓜分       ▲ 导向：重头激励锁定出厂发货交付     ▲ 保障：售后技术不撂挑子`}
+              />
+
+              <div className="cc-md-quote">
+                <b>🛡️ {isEn ? 'Three Phases' : '三段式配比细则'}</b>：
+                <ul style={{ paddingLeft: '18px', margin: '4px 0 0', lineHeight: '1.6' }}>
+                  <li><b>前期争取阶段（首月 0% ~ 10% 可调，默认 5%）</b>：设立硬性封顶，防止项目未落地就提前消耗预算。</li>
+                  <li><b>主体研制与交付阶段（前低后高，交付月集中释放 45%+ 大头）</b>：重头激励锁定在成品交付与试验终验。</li>
+                  <li><b>售后维保阶段（末月固定保留 5%）</b>：在项目周期最后一个月刚性锁定 5% 额度，保障售后服务持续性。</li>
+                </ul>
               </div>
             </div>
           </section>
@@ -650,18 +849,37 @@ export function DocArticleContent({
             <div className="cc-doc-step-card">
               <div className="cc-doc-step-header">
                 <span className="cc-doc-step-tag">STEP 4</span>
-                <strong style={{ fontSize: '16px' }}>{isEn ? 'Monthly Allocation & Batch Release' : '第四步：月底集中考评分配与一键发布'}</strong>
+                <strong style={{ fontSize: '16px' }}>{isEn ? 'Monthly Allocation & Batch Release' : '第四步：月底集中分配与批量发布'}</strong>
               </div>
               <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
                 {isEn
                   ? 'At the end of each month, administrators enter the [Monthly Allocation] unified matrix. Review all projects, add team members, adjust share percentages (which must sum up to exactly 100%), and click [Batch Release] to lock the month.'
-                  : '每到月底考评窗口期，综合管理员进入【月度分配】全景透视大表：'}
+                  : '每到月底考评窗口期，综合管理员进入【月度绩效分配】全景透视大表：'}
               </p>
-              <ul style={{ paddingLeft: '18px', fontSize: '13px', lineHeight: '1.7', margin: '8px 0' }}>
-                <li>{isEn ? 'Click [Apply Planned Quota] to auto-populate monthly quota budgets from your schedule.' : '点击【套用排期计划】，各项目当月规划额度自动注入，无需手动敲打计算器。'}</li>
-                <li>{isEn ? 'Check team members in each project and configure their share percentages. BigInt ensures exact 100.00% closure.' : '勾选参评团队成员，配置其当月贡献占比。系统右侧实时显示已分配占比合计，只有达到 100.00% 才能绿灯保存。'}</li>
-                <li>{isEn ? 'Click [Batch Release All Projects] to generate immutable cryptographic hashes and lock the month.' : '分配确认无误后，点击【批量发布当月所有项目】，系统生成数字签名并锁定当前月度，防止后续无意篡改。'}</li>
-              </ul>
+
+              <MarkdownDiagram
+                title={isEn ? 'Monthly Matrix Execution Workflow' : '第四步：月度分配全项目当月集中大表操作机制'}
+                diagram={`【进入月度分配】 ──▶ 选定考核月份 (如 2026-10) ──▶ 点击【⚡ 套用当月规划】
+                                                            │
+    ┌───────────────────────────────────────────────────────┴────────────────────────┐
+    ▼                                                       ▼                        ▼
+【项目 A：雷达总体方案】                                 【项目 B：信号处理板卡】   【...更多在研项目】
+• 额度：5.00 万元                                        • 额度：12.50 万元        • 一屏全景平铺
+• 成员分配比例合计：100% ────▶ [发布状态：已发布 √]       • 比例合计：100% √        • 无需逐个点开弹窗
+    │                                                       │
+    └───────────────────────────────────────────────────────┴────────────────────────┐
+                                                                                     ▼
+                                                                        【🚀 点击一键批量发布】
+                                                                        (加盖数字签名防篡改锁定)`}
+              />
+
+              <div className="cc-md-quote">
+                <b>💡 {isEn ? 'Exact Verification' : '核心计算公式与严密守恒'}</b>：
+                <br />
+                <code>员工当月绩点（万元） = 项目合同总额 × 当月项目分配比例 × 员工当月分配率</code>
+                <br />
+                当月项目内所有参评成员的分配比例之和必须精确等于 100%，底层采用 <b>BigInt 与最大余数补差法</b>，确保分毫不差。
+              </div>
             </div>
           </section>
 
@@ -675,11 +893,11 @@ export function DocArticleContent({
               <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
                 {isEn
                   ? 'Navigate to [Data Asset Center], click [Export Project Package (.hengji)] to generate handoff files for the dedicated auditor. You can also export standard Excel/CSV payroll ledgers with one click.'
-                  : '当月分配发布完成后，管理员进入【数据资产中心】：'}
+                  : '当月分配发布完成后，管理员进入【数据资产中心】或【报表中心】：'}
               </p>
               <ul style={{ paddingLeft: '18px', fontSize: '13px', lineHeight: '1.7', margin: '8px 0' }}>
-                <li><b>{isEn ? 'Export Encrypted Package (.hengji)' : '导出项目加密数据包 (.hengji)'}</b>：{isEn ? 'Generates tamper-proof encrypted data packets containing this project’s metadata and allocations to transfer to the auditor.' : '一键导出带有完整数据指纹的 `.hengji` 加密交接包，通过内网安全邮件交接给专职绩效核算员。'}</li>
-                <li><b>{isEn ? 'Export CSV / Excel' : '一键导出财务标准报表 (CSV / Excel)'}</b>：{isEn ? 'Generates clean, pre-formatted payroll tables ready for ERP/OA salary calculation.' : '一键导出包含项目名称、员工工号、姓名、当月分配额、合同基数等全要素的标准报表。'}</li>
+                <li><b>导出项目加密数据包 (.hengji)</b>：一键导出带有完整数据指纹的 `.hengji` 加密交接包，通过内网安全邮件交接给专职绩效核算员。</li>
+                <li><b>一键导出财务标准报表 (CSV / Excel)</b>：一键导出横向个人×纵向项目的二维闭环矩阵表，分毫不差直接交接财务。</li>
               </ul>
             </div>
           </section>
@@ -727,14 +945,19 @@ export function DocArticleContent({
               <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
                 {isEn
                   ? 'In the [Data Package Import Center], drag and drop all .hengji packages received from project managers into the dropzone. The system decrypts and validates them simultaneously.'
-                  : '在核算员工作区界面的【数据包导入中心】，直接选中各项目经理发来的多个 `.hengji` 加密文件（支持单次 10~50 个文件），直接拖入网页或客户端虚线框内：'}
+                  : '在核算员工作区界面的【数据包导入中心】，直接选中各项目经理发来的多个 `.hengji` 加密文件（支持单次 10~50 个文件），直接拖入虚线框内：'}
               </p>
-              <div className="cc-doc-callout" style={{ margin: '10px 0' }}>
-                <b>🛡️ {isEn ? 'Automated Security Verification' : '导入自动化安全校验'}</b>：
-                {isEn
-                  ? 'The system validates package integrity, checks for duplicate project order IDs, verifies employee ID continuity, and flags any tampered files immediately.'
-                  : '系统在导入瞬间自动执行三重审计：① 校验数据包数字指纹是否完整防篡改；② 检查工作令号是否重复；③ 校验人员工号与基础档案的一致性。全部通过后显示绿色对勾。'}
-              </div>
+
+              <MarkdownDiagram
+                title={isEn ? 'Package Ingestion & Verification Flow' : '数据包导入与自动审计流程示意'}
+                diagram={`各项目经理发来文件 ──▶ 选中 10~50 个 .hengji 文件 ──▶ 批量拖拽至导入虚线框
+                                                                │
+     ┌──────────────────────────────────────────────────────────┴─────────────────────────┐
+     ▼                                                          ▼                         ▼
+【第一重：防篡改指纹】                                      【第二重：工作令号去重】   【第三重：员工工号校对】
+SHA-256 数字校验和比对                                     防止同一项目重复计入       同名不同工号严格物理隔离
+全部通过显示绿色对勾 √                                     异常红灯即刻阻断           确保分摊归集精准落位`}
+              />
             </div>
           </section>
 
@@ -751,8 +974,8 @@ export function DocArticleContent({
                   : '点击【一键执行跨项目穿透汇总】。系统底层算法瞬间完成跨项目人员穿透归集：'}
               </p>
               <ul style={{ paddingLeft: '18px', fontSize: '13px', lineHeight: '1.7', margin: '8px 0' }}>
-                <li>{isEn ? 'A team member participating in Project A (3.2 pts) and Project B (4.5 pts) is automatically unified into a total of 7.7 pts.' : '若张工程师在“某型号雷达总体”（分得 3.2 绩点）与“数字信号处理研发”（分得 4.5 绩点）均有兼项，系统自动合并为该员工总计 7.7 绩点。'}</li>
-                <li>{isEn ? 'Clicking on any employee expands their contribution breakdown across projects, complete with order IDs and release timestamps.' : '点击表格中任何一名员工的名字，即可向下展开查看他在各个项目中的详细分配占比、项目工作令号与项目负责人评语。'}</li>
+                <li><b>一人多项目兼项聚合</b>：若张工程师在“某型号雷达总体”（分得 3.2 绩点）与“数字信号处理研发”（分得 4.5 绩点）均有兼项，系统自动合并为该员工总计 7.7 绩点。</li>
+                <li><b>穿透明细展开</b>：点击表格中任何一名员工的名字，即可向下展开查看他在各个项目中的详细分配占比、项目工作令号与项目负责人评语。</li>
               </ul>
             </div>
           </section>
@@ -866,7 +1089,7 @@ export function DocArticleContent({
       );
 
     // ==========================================
-    // 文章 3：远程推送与发布部署教程（纯命令行实操）
+    // 文章 3：远程推送与发布部署教程（图4高质感代码块实操）
     // ==========================================
     case 'deploy-prep':
       return (
@@ -891,14 +1114,21 @@ export function DocArticleContent({
                 ? 'Open your terminal (PowerShell or Bash) in the project root directory and check your Node and npm versions (Node 18+ required):'
                 : '在项目根目录下打开终端（PowerShell 或 Bash），检查 Node 与 npm 基础环境（要求 Node.js 18.0 或更高版本）：'}
             </p>
-            <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-              <code>node -v{'\n'}npm -v</code>
-            </pre>
-            <div className="cc-doc-callout">
+
+            <MarkdownCodeCard
+              lang="POWERSHELL"
+              code={`# 检查 Node.js 与 npm 运行时版本\nnode -v\nnpm -v`}
+              copyKey="cmd-check-node"
+              onCopyText={onCopyText}
+              copiedKey={copiedKey}
+            />
+
+            <div className="cc-md-quote">
               <b>⚠️ {isEn ? 'Three-Way Version Consistency Rule' : '三处版本号必须严格一致'}</b>：
+              <br />
               {isEn
                 ? 'Ensure APP_VERSION in lib/core.ts, version in package.json, and the current release tag share the exact same version string (e.g. 0.7.10).'
-                : '每次发布前，请检查以下三处版本号字符串是否完全统一（例如统一为 `0.7.10`）：\n① `package.json` 中的 `"version": "0.7.10"`\n② `lib/core.ts` 中的 `export const APP_VERSION = \'0.7.10\';`\n③ `app/desktop-updater.ts` 中的当前版本常量。'}
+                : `每次发布前，请检查以下三处版本号字符串是否完全统一（例如统一为 ${APP_VERSION}）：\n① package.json 中的 "version": "${APP_VERSION}"\n② lib/core.ts 中的 export const APP_VERSION = '${APP_VERSION}';\n③ app/desktop-updater.ts 中的当前版本常量。`}
             </div>
           </section>
 
@@ -909,9 +1139,15 @@ export function DocArticleContent({
                 ? 'Execute the automated test suite to verify BigInt precision, quota calculations, and auditor rollup algorithms:'
                 : '执行自动化单测命令，严密校验 BigInt 闭环算法、防透支排期逻辑及核算员跨项目归集：'}
             </p>
-            <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-              <code>npm test</code>
-            </pre>
+
+            <MarkdownCodeCard
+              lang="BASH"
+              code={`# 执行全量自动化单元测试套件\nnpm test`}
+              copyKey="cmd-npm-test"
+              onCopyText={onCopyText}
+              copiedKey={copiedKey}
+            />
+
             <div className="cc-doc-step-card" style={{ marginTop: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#16a34a', fontWeight: '700' }}>
                 <CheckCircle2 size={18} />
@@ -946,9 +1182,14 @@ export function DocArticleContent({
           <section id="sec-deploy-commit" className="cc-cl-sec">
             <h2>{isEn ? '1. Git Status, Add & Semantic Commit' : '1. 代码暂存与标准化语义提交'}</h2>
             <p>{isEn ? 'Inspect working directory changes and stage all files:' : '查看当前代码状态，并将改动加入暂存区：'}</p>
-            <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-              <code>{`# 1. 检查本地工作区状态\ngit status\n\n# 2. 将所有修改与新文件加入暂存区\ngit add .\n\n# 3. 提交版本更新记录\ngit commit -m "release: v${APP_VERSION} - system update and improvements"`}</code>
-            </pre>
+
+            <MarkdownCodeCard
+              lang="BASH"
+              code={`# 1. 检查本地工作区状态\ngit status\n\n# 2. 将所有修改与新文件加入暂存区\ngit add .\n\n# 3. 提交版本更新记录，附带清晰语义说明\ngit commit -m "release: v${APP_VERSION} - update and improvements"`}
+              copyKey="cmd-git-commit"
+              onCopyText={onCopyText}
+              copiedKey={copiedKey}
+            />
           </section>
 
           <section id="sec-deploy-tag" className="cc-cl-sec">
@@ -956,15 +1197,21 @@ export function DocArticleContent({
             <p>
               {isEn
                 ? 'Create a Git annotated tag matching the release version (e.g. v0.7.10), then push both the main branch and the tag to GitHub:'
-                : '使用 `-a` 参数创建带附注说明的版本标签（例如 `v0.7.10`），然后分别将 `main` 分支与新标签推送到远程：'}
+                : `使用 -a 参数创建带附注说明的版本标签（例如 v${APP_VERSION}），然后分别将 main 分支与新标签推送到远程：`}
             </p>
-            <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-              <code>{`# 1. 创建附注版本标签\ngit tag -a v${APP_VERSION} -m "release v${APP_VERSION}"\n\n# 2. 推送 main 分支最新代码\ngit push origin main\n\n# 3. 将新版本标签推送到远程\ngit push origin v${APP_VERSION}`}</code>
-            </pre>
-            <div className="cc-doc-callout">
+
+            <MarkdownCodeCard
+              lang="BASH"
+              code={`# 1. 创建附注版本标签\ngit tag -a v${APP_VERSION} -m "release v${APP_VERSION}"\n\n# 2. 推送 main 分支最新代码至远程\ngit push origin main\n\n# 3. 将新版本标签推送到远程 GitHub 仓库\ngit push origin v${APP_VERSION}`}
+              copyKey="cmd-git-tag-push"
+              onCopyText={onCopyText}
+              copiedKey={copiedKey}
+            />
+
+            <div className="cc-md-quote">
               <b>💡 {isEn ? 'Remote Push Verification' : '推送成功核验'}</b>：
               {isEn
-                ? 'Open https://github.com/' + GITHUB_REPO + '/tags to verify that the new tag appears.'
+                ? `Visit https://github.com/${GITHUB_REPO}/tags to verify that the new tag appears.`
                 : `命令执行完毕后，访问 https://github.com/${GITHUB_REPO}/tags 即可看到已成功生成的版本标签。`}
             </div>
           </section>
@@ -990,9 +1237,14 @@ export function DocArticleContent({
           <section id="sec-deploy-bundle" className="cc-cl-sec">
             <h2>{isEn ? '1. Desktop Web Bundle Production Build with Vite' : '1. 前端 Web Bundle 生产环境构建'}</h2>
             <p>{isEn ? 'Bundle the desktop UI code with Vite:' : '首先使用专用的桌面端 Vite 配置文件进行高压缩生产编译：'}</p>
-            <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-              <code>npx vite build --config vite.desktop.config.ts</code>
-            </pre>
+
+            <MarkdownCodeCard
+              lang="BASH"
+              code={`# 编译桌面端前端 Bundle\nnpx vite build --config vite.desktop.config.ts`}
+              copyKey="cmd-vite-build"
+              onCopyText={onCopyText}
+              copiedKey={copiedKey}
+            />
           </section>
 
           <section id="sec-deploy-builder" className="cc-cl-sec">
@@ -1002,17 +1254,28 @@ export function DocArticleContent({
                 ? 'Execute electron-builder targeting Windows x64 to generate NSIS, MSI, and Portable binaries simultaneously:'
                 : '通过 electron-builder 一次性编译生成 NSIS 安装向导、MSI 企业级静默安装包以及 Portable 便携单文件版：'}
             </p>
-            <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-              <code>npx electron-builder --win nsis msi portable --x64</code>
-            </pre>
+
+            <MarkdownCodeCard
+              lang="BASH"
+              code={`# 一次性编译打包 EXE、MSI 与 Portable 单文件\nnpx electron-builder --win nsis msi portable --x64`}
+              copyKey="cmd-builder"
+              onCopyText={onCopyText}
+              copiedKey={copiedKey}
+            />
           </section>
 
           <section id="sec-deploy-zip" className="cc-cl-sec">
             <h2>{isEn ? '3. Generate Portable ZIP Archive via Script' : '3. 构建 ZIP 绿色免安装完整包'}</h2>
             <p>{isEn ? 'Package the uncompressed win-unpacked directory into a standalone ZIP file:' : '运行项目内置的压缩脚本，将免安装文件夹打包为绿色 ZIP 压缩包：'}</p>
-            <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-              <code>node scripts/build-zip.mjs</code>
-            </pre>
+
+            <MarkdownCodeCard
+              lang="BASH"
+              code={`# 执行 ZIP 压缩脚本打包绿色完整包\nnode scripts/build-zip.mjs`}
+              copyKey="cmd-build-zip"
+              onCopyText={onCopyText}
+              copiedKey={copiedKey}
+            />
+
             <div className="cc-doc-step-card" style={{ marginTop: '12px' }}>
               <strong>{isEn ? 'Artifact Output Verification' : '构建产物检查清单（release/ 目录下）'}</strong>：
               <ul style={{ paddingLeft: '18px', fontSize: '13px', margin: '6px 0 0', lineHeight: '1.7' }}>
@@ -1045,16 +1308,22 @@ export function DocArticleContent({
           <section id="sec-deploy-gh-upload" className="cc-cl-sec">
             <h2>{isEn ? '1. Upload Assets via publish-release-github.mjs' : '1. 使用原生脚本一键自动上传资产包'}</h2>
             <p>{isEn ? 'Run the native release publishing script in terminal:' : '在终端中执行项目自带的自动化发布脚本：'}</p>
-            <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-              <code>node scripts/publish-release-github.mjs</code>
-            </pre>
-            <div className="cc-doc-callout">
+
+            <MarkdownCodeCard
+              lang="BASH"
+              code={`# 自动创建 Release 并上传 4 大安装文件及 SHA-256 校验和\nnode scripts/publish-release-github.mjs`}
+              copyKey="cmd-publish-release"
+              onCopyText={onCopyText}
+              copiedKey={copiedKey}
+            />
+
+            <div className="cc-md-quote">
               <b>🛡️ {isEn ? 'Script Capabilities' : '脚本执行动作解析'}</b>：
               <ol style={{ paddingLeft: '18px', margin: '6px 0 0', lineHeight: '1.6', fontSize: '13px' }}>
-                <li>{isEn ? 'Detects local Git credentials or GITHUB_TOKEN automatically.' : '自动读取本地已授权的 Git 凭证管理器或 GITHUB_TOKEN。'}</li>
-                <li>{isEn ? 'Creates GitHub Release matching current version tag if it does not exist.' : '检查并自动创建匹配当前版本标签（如 v' + APP_VERSION + '）的 Release 条目。'}</li>
-                <li>{isEn ? 'Uploads all 4 binaries with multi-part stream handling, replacing existing outdated assets.' : '并发上传 4 种分发包，遇到旧文件自动安全替换。'}</li>
-                <li>{isEn ? 'Generates markdown release notes with direct download links and acceleration mirror URLs.' : '自动在 Release 页面生成排版工整的更新说明与极速镜像下载链接。'}</li>
+                <li>自动读取本地已授权的 Git 凭证管理器或 <code>GITHUB_TOKEN</code> 环境变量。</li>
+                <li>检查并自动创建匹配当前版本标签（如 <code>v{APP_VERSION}</code>）的 GitHub Release 条目。</li>
+                <li>并发分块上传 4 种分发包（EXE、MSI、Portable、ZIP），遇旧文件自动安全替换。</li>
+                <li>在 Release 页面生成工整的更新说明与极速镜像加速下载直链。</li>
               </ol>
             </div>
           </section>
@@ -1081,7 +1350,7 @@ export function DocArticleContent({
           <p className="cc-cl-summary">
             {isEn
               ? 'Compile the official landing page and web sandbox demo into optimized static web assets, and deploy them to the gh-pages branch via the deploy script.'
-              : '将衡绩官方网站、在线沙盒体验工作台以及完整在线文档中心编译为高优化的静态 Web 资源，并通过部署脚本推送到 GitHub 的 `gh-pages` 分支。'}
+              : '将衡绩官方网站、在线沙盒体验工作台以及完整在线文档中心编译为高优化的静态 Web 资源，并通过部署脚本推送到 GitHub 的 gh-pages 分支。'}
           </p>
 
           <hr className="cc-cl-divider" />
@@ -1089,20 +1358,32 @@ export function DocArticleContent({
           <section id="sec-deploy-pages-build" className="cc-cl-sec">
             <h2>{isEn ? '1. Build Web Artifacts via npm run pages:build' : '1. 编译官方网站静态资源'}</h2>
             <p>{isEn ? 'Run the production web build:' : '在终端中执行官方网站的生产编译命令：'}</p>
-            <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-              <code>npm run pages:build</code>
-            </pre>
+
+            <MarkdownCodeCard
+              lang="BASH"
+              code={`# 编译打包官方网页版静态资源\nnpm run pages:build`}
+              copyKey="cmd-pages-build"
+              onCopyText={onCopyText}
+              copiedKey={copiedKey}
+            />
+
             <small style={{ color: 'var(--cc-text-muted)' }}>
-              {isEn ? 'Compiles React app into dist/ with proper base URL routing (/hengji/) and injects 404.html for SPA fallback.' : '该命令会将应用打包至 `dist/` 目录，配置好相对路由前缀 `/hengji/`，并自动注入 `404.html` 防止刷新页面白屏。'}
+              {isEn ? 'Compiles React app into dist/ with proper base URL routing (/hengji/) and injects 404.html for SPA fallback.' : '该命令会将应用打包至 dist/ 目录，配置好相对路由前缀 /hengji/，并自动注入 404.html 防止刷新页面白屏。'}
             </small>
           </section>
 
           <section id="sec-deploy-pages-push" className="cc-cl-sec">
             <h2>{isEn ? '2. Push to gh-pages Branch via deploy-pages.mjs' : '2. 执行 deploy-pages 脚本推送到 gh-pages 分支'}</h2>
-            <p>{isEn ? 'Run the deployment script:' : '执行专用的推送脚本，将 `dist` 产物推送到 `gh-pages` 分支：'}</p>
-            <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-              <code>node scripts/deploy-pages.mjs</code>
-            </pre>
+            <p>{isEn ? 'Run the deployment script:' : '执行专用的推送脚本，将 dist 产物推送到 gh-pages 分支：'}</p>
+
+            <MarkdownCodeCard
+              lang="BASH"
+              code={`# 执行脚本将编译结果推送到 gh-pages 静态发布分支\nnode scripts/deploy-pages.mjs`}
+              copyKey="cmd-pages-deploy"
+              onCopyText={onCopyText}
+              copiedKey={copiedKey}
+            />
+
             <div className="cc-doc-step-card" style={{ marginTop: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#16a34a', fontWeight: '700' }}>
                 <CheckCircle2 size={18} />
@@ -1138,9 +1419,14 @@ export function DocArticleContent({
           <section id="sec-deploy-oneliner" className="cc-cl-sec">
             <h2>{isEn ? '1. Terminal Full-Pipeline Continuous One-Liner' : '1. 💡 终端一键全流程流水线命令'}</h2>
             <p>{isEn ? 'Execute the entire sequence (Testing → Desktop Packaging → Web Build → GitHub Release → GitHub Pages) in one line:' : '如果您熟悉流程，可直接在终端中复制以下单行命令，一次性全自动完成测试、桌面打包、Release 上传与 Pages 部署：'}</p>
-            <pre style={{ background: 'var(--cc-surface-hover)', padding: '14px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '12.5px', lineHeight: '1.6' }}>
-              <code>npm test &amp;&amp; npx vite build --config vite.desktop.config.ts &amp;&amp; npx electron-builder --win nsis msi portable --x64 &amp;&amp; node scripts/build-zip.mjs &amp;&amp; npm run pages:build &amp;&amp; node scripts/publish-release-github.mjs &amp;&amp; node scripts/deploy-pages.mjs</code>
-            </pre>
+
+            <MarkdownCodeCard
+              lang="POWERSHELL"
+              code={`# 纯命令行全自动连击流水线：测试 -> 打包 -> 网页编译 -> Release上传 -> Pages部署\nnpm test && npx vite build --config vite.desktop.config.ts && npx electron-builder --win nsis msi portable --x64 && node scripts/build-zip.mjs && npm run pages:build && node scripts/publish-release-github.mjs && node scripts/deploy-pages.mjs`}
+              copyKey="cmd-oneliner"
+              onCopyText={onCopyText}
+              copiedKey={copiedKey}
+            />
           </section>
 
           <section id="sec-deploy-trouble" className="cc-cl-sec">
@@ -1154,8 +1440,15 @@ export function DocArticleContent({
               <p style={{ fontSize: '13px', color: 'var(--cc-text-secondary)', margin: '8px 0 0', lineHeight: '1.6' }}>
                 {isEn
                   ? 'Cause: GitHub password authentication was deprecated. Solution: Generate a Personal Access Token (classic) with repo scope on GitHub, and update Windows Credential Manager or set GITHUB_TOKEN environment variable.'
-                  : '原因：GitHub 已废弃密码认证方式。解决办法：前往 GitHub Settings -> Developer Settings -> Personal access tokens 生成具有 repo 权限的 Token，在 Windows 凭据管理器中更新密码，或在终端中设置环境变量：\n`$env:GITHUB_TOKEN="ghp_你的Token"`'}
+                  : '原因：GitHub 已废弃密码认证方式。解决办法：前往 GitHub Settings -> Developer Settings -> Personal access tokens 生成具有 repo 权限的 Token，在 Windows 凭据管理器中更新密码，或在终端中设置环境变量：'}
               </p>
+              <MarkdownCodeCard
+                lang="POWERSHELL"
+                code={`# 在 PowerShell 中临时设置 GITHUB_TOKEN 环境变量\n$env:GITHUB_TOKEN="ghp_你的PersonalAccessToken"`}
+                copyKey="cmd-token-fix"
+                onCopyText={onCopyText}
+                copiedKey={copiedKey}
+              />
             </div>
 
             <div className="cc-doc-step-card" style={{ marginBottom: '14px' }}>
@@ -1166,8 +1459,15 @@ export function DocArticleContent({
               <p style={{ fontSize: '13px', color: 'var(--cc-text-secondary)', margin: '8px 0 0', lineHeight: '1.6' }}>
                 {isEn
                   ? 'Cause: Network instability when uploading 75MB+ binaries. Solution: Re-run `node scripts/publish-release-github.mjs`. The script will detect already uploaded files and resume/retry failed ones.'
-                  : '原因：个别网络环境下直连 GitHub Releases API 出现超时重置。解决办法：重新运行 `node scripts/publish-release-github.mjs` 即可，脚本具有断点检测能力，已成功上传的文件会自动跳过，仅补传失败资产。'}
+                  : '原因：个别网络环境下直连 GitHub Releases API 出现超时重置。解决办法：重新运行发布脚本，脚本具有断点智能检测能力，已成功上传的文件会自动跳过，仅补传失败资产：'}
               </p>
+              <MarkdownCodeCard
+                lang="BASH"
+                code={`# 重新执行发布脚本，自动跳过已上传文件，续传失败资产\nnode scripts/publish-release-github.mjs`}
+                copyKey="cmd-publish-retry"
+                onCopyText={onCopyText}
+                copiedKey={copiedKey}
+              />
             </div>
 
             <div className="cc-doc-step-card">
@@ -1178,7 +1478,7 @@ export function DocArticleContent({
               <p style={{ fontSize: '13px', color: 'var(--cc-text-secondary)', margin: '8px 0 0', lineHeight: '1.6' }}>
                 {isEn
                   ? 'Use Ctrl + F5 (or Cmd + Shift + R on Mac) to perform a hard refresh, bypassing browser caches.'
-                  : '解决办法：按下 `Ctrl + F5`（Mac 用户按 `Cmd + Shift + R`）强制刷新浏览器缓存，即可加载最新部署的网页。'}
+                  : '解决办法：按下 Ctrl + F5（Mac 用户按 Cmd + Shift + R）强制刷新浏览器缓存，即可加载最新部署的网页。'}
               </p>
             </div>
           </section>

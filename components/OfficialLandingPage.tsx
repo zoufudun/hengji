@@ -423,85 +423,91 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
             <div className="cc-hero-split">
               {/* 左栏：品牌价值主张 + 核心标语 + 操作按钮 */}
               <div className="cc-hero-left">
-                <button
-                  type="button"
-                  className="cc-release-badge"
-                  onClick={() => navigatePage('changelog')}
-                  title={isEn ? 'Click to view version changelog' : '点击查看版本更新日志'}
-                >
-                  <Sparkles size={13} className="cc-badge-spark" />
-                  <span>🎉 v{latestVer} {isEn ? 'Released' : '正式发布'}</span>
-                  <span className="cc-badge-sep">|</span>
-                  <span className="cc-badge-hl">
-                    {isEn ? 'Offline Encrypted · Anti-Overdraft · Closed-Loop Audit' : '离线加密 · 稳健防透支 · 双向闭环'}
-                  </span>
-                </button>
+                {/* 上半部分：图 1 内容（发布徽章 + 品牌标题 + 大标语 + 副标语，行间距舒展美观） */}
+                <div className="cc-hero-top-group">
+                  <button
+                    type="button"
+                    className="cc-release-badge"
+                    onClick={() => navigatePage('changelog')}
+                    title={isEn ? 'Click to view version changelog' : '点击查看版本更新日志'}
+                  >
+                    <Sparkles size={13} className="cc-badge-spark" />
+                    <span>🎉 v{latestVer} {isEn ? 'Released' : '正式发布'}</span>
+                    <span className="cc-badge-sep">|</span>
+                    <span className="cc-badge-hl">
+                      {isEn ? 'Offline Encrypted · Anti-Overdraft · Closed-Loop Audit' : '离线加密 · 稳健防透支 · 双向闭环'}
+                    </span>
+                  </button>
 
-                <div className="cc-hero-title-group">
-                  <div className="cc-hero-brand-row">
-                    <div className="cc-hero-dual-logos" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                      <img src={brandHengSeal} alt="衡" className="cc-hero-seal" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }} />
-                      <img src={brandBurstFlower} alt="衡绩" className="cc-hero-logo" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'contain' }} />
+                  <div className="cc-hero-title-group">
+                    <div className="cc-hero-brand-row">
+                      <div className="cc-hero-dual-logos" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                        <img src={brandHengSeal} alt="衡" className="cc-hero-seal" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }} />
+                        <img src={brandBurstFlower} alt="衡绩" className="cc-hero-logo" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'contain' }} />
+                      </div>
+                      <div>
+                        <h1>{isEn ? 'HengJi' : '衡绩'}</h1>
+                        <span className="cc-hero-en-sub">Engineering & R&D Merit Evaluation Platform</span>
+                      </div>
                     </div>
-                    <div>
-                      <h1>{isEn ? 'HengJi' : '衡绩'}</h1>
-                      <span className="cc-hero-en-sub">Engineering & R&D Merit Evaluation Platform</span>
-                    </div>
+
+                    <h2 className="cc-hero-slogan">
+                      {isEn ? (
+                        <>
+                          Measure every project contribution <span className="cc-gradient-accent">with precision and equity</span>
+                        </>
+                      ) : (
+                        <>
+                          让每一份项目贡献，<span className="cc-gradient-accent">都有据可衡</span>
+                        </>
+                      )}
+                    </h2>
+
+                    <p className="cc-hero-tagline">
+                      {isEn
+                        ? 'Unify and manage your engineering project and team merit evaluation workflow.'
+                        : '统一管理你的工程项目与团队绩效考核工作流'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 下半部分：图 2 内容（三个操作按钮 + 运行环境说明，稳稳对齐右边大图底边） */}
+                <div className="cc-hero-bottom-group">
+                  <div className="cc-hero-buttons-row">
+                    <button
+                      type="button"
+                      className="cc-btn-hero-primary"
+                      onClick={() => navigatePage('download')}
+                    >
+                      <Download size={16} />
+                      <span>{isEn ? 'Free Download' : '免费下载'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="cc-btn-hero-secondary"
+                      onClick={() => onLaunchDemo('dashboard', 'general')}
+                    >
+                      <Play size={14} fill="currentColor" />
+                      <span>{isEn ? 'Live Demo' : '在线体验'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="cc-btn-hero-docs"
+                      onClick={() => navigatePage('docs')}
+                    >
+                      <span>{isEn ? 'Documentation →' : '查看文档 →'}</span>
+                    </button>
                   </div>
 
-                  <h2 className="cc-hero-slogan">
-                    {isEn ? (
-                      <>
-                        Measure every project contribution <span className="cc-gradient-accent">with precision and equity</span>
-                      </>
-                    ) : (
-                      <>
-                        让每一份项目贡献，<span className="cc-gradient-accent">都有据可衡</span>
-                      </>
-                    )}
-                  </h2>
-
-                  <p className="cc-hero-tagline">
-                    {isEn
-                      ? 'Unify and manage your engineering project and team merit evaluation workflow.'
-                      : '统一管理你的工程项目与团队绩效考核工作流'}
-                  </p>
-                </div>
-
-                <div className="cc-hero-buttons-row">
-                  <button
-                    type="button"
-                    className="cc-btn-hero-primary"
-                    onClick={() => navigatePage('download')}
-                  >
-                    <Download size={16} />
-                    <span>{isEn ? 'Free Download' : '免费下载'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="cc-btn-hero-secondary"
-                    onClick={() => onLaunchDemo('dashboard', 'general')}
-                  >
-                    <Play size={14} fill="currentColor" />
-                    <span>{isEn ? 'Live Demo' : '在线体验'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="cc-btn-hero-docs"
-                    onClick={() => navigatePage('docs')}
-                  >
-                    <span>{isEn ? 'Documentation →' : '查看文档 →'}</span>
-                  </button>
-                </div>
-
-                <div className="cc-hero-env-note">
-                  <span>
-                    {isEn
-                      ? 'Supports Windows 10+ · Fully Offline · Non-System Drive Security'
-                      : '支持 Windows 10+ · 纯离线免云端 · 非系统盘安全存储'}
-                  </span>
+                  <div className="cc-hero-env-note">
+                    <span>
+                      {isEn
+                        ? 'Supports Windows 10+ · Fully Offline · Non-System Drive Security'
+                        : '支持 Windows 10+ · 纯离线免云端 · 非系统盘安全存储'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
