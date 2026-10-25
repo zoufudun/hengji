@@ -441,9 +441,9 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
 
                   <div className="cc-hero-title-group">
                     <div className="cc-hero-brand-row">
-                      <div className="cc-hero-dual-logos" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                        <img src={brandHengSeal} alt="衡" className="cc-hero-seal" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }} />
-                        <img src={brandBurstFlower} alt="衡绩" className="cc-hero-logo" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'contain' }} />
+                      <div className="cc-hero-dual-logos">
+                        <img src={brandHengSeal} alt="衡" className="cc-hero-seal" />
+                        <img src={brandBurstFlower} alt="衡绩" className="cc-hero-logo" />
                       </div>
                       <div>
                         <h1>{isEn ? 'HengJi' : '衡绩'}</h1>
