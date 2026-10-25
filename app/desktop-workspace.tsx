@@ -354,12 +354,11 @@ function BrandLogo({ size = 52 }: { size?: number }) {
         style={{
           width: size,
           height: size,
-          objectFit: 'cover',
-          borderRadius: Math.max(8, Math.round(size * 0.22)),
+          objectFit: 'contain',
           display: 'inline-block',
           verticalAlign: 'middle',
           flexShrink: 0,
-          boxShadow: '0 3px 10px rgba(0,0,0,0.28)',
+          filter: 'drop-shadow(0 3px 8px rgba(0,0,0,0.22))',
         }}
       />
     </div>

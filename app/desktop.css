@@ -2612,9 +2612,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .cc-brand-seal {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
-  object-fit: cover;
-  box-shadow: 0 2px 6px rgba(60, 45, 30, 0.16);
+  object-fit: contain;
+  filter: drop-shadow(0 2px 5px rgba(60, 45, 30, 0.14));
 }
 
 .cc-brand-flower {
@@ -2792,15 +2791,16 @@ button:disabled{opacity:.55;cursor:not-allowed}
   max-width: 1460px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 430px 1fr;
+  grid-template-columns: 440px 1fr;
   gap: 36px;
-  align-items: center;
+  align-items: stretch;
 }
 
 .cc-hero-left {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  justify-content: space-between;
 }
 
 .cc-release-badge {
@@ -2858,9 +2858,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .cc-hero-seal {
   width: 52px;
   height: 52px;
-  border-radius: 12px;
-  object-fit: cover;
-  box-shadow: 0 6px 16px rgba(60, 45, 30, 0.18);
+  object-fit: contain;
+  filter: drop-shadow(0 5px 12px rgba(60, 45, 30, 0.16));
 }
 
 .cc-hero-logo {
@@ -2997,6 +2996,64 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .cc-btn-outline:hover {
   background: var(--cc-surface-hover);
   transform: translateY(-2px);
+}
+
+/* 左栏底部 2x2 核心保障指标网格（填充左栏下方留白，与右栏等高对齐） */
+.cc-hero-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  width: 100%;
+  max-width: 420px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--cc-border-strong);
+}
+
+.cc-hero-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: var(--cc-card);
+  border: 1px solid var(--cc-border);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.cc-hero-stat-card:hover {
+  background: var(--cc-surface);
+  border-color: var(--cc-terracotta);
+  transform: translateY(-2px);
+}
+
+.cc-stat-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--cc-terracotta-soft);
+  color: var(--cc-terracotta);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cc-hero-stat-card strong {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--cc-text);
+  line-height: 1.25;
+}
+
+.cc-hero-stat-card span {
+  display: block;
+  font-size: 10.5px;
+  color: var(--cc-text-muted);
+  margin-top: 2px;
+  line-height: 1.25;
 }
 
 /* ==================== 右栏：图2 单行六大模块切换栏 + 图1 1:1 真实软件界面 ==================== */
@@ -3138,8 +3195,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .hj-real-dual-logo .seal-img {
   width: 32px;
   height: 32px;
-  border-radius: 7px;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .hj-real-dual-logo .flower-badge {
