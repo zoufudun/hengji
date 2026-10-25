@@ -37,6 +37,7 @@
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^1.31.0",
+    "mermaid": "^12.2.0",
     "next": "16.3.4",
     "next-themes": "^0.4.6",
     "radix-ui": "^1.6.7",
@@ -80,12 +81,29 @@
     "appId": "com.topfire.merit",
     "productName": "衡绩员工绩点考核系统",
     "compression": "normal",
-    "extraMetadata": { "dependencies": {} },
-    "directories": { "output": "dist-desktop" },
+    "extraMetadata": {
+      "dependencies": {}
+    },
+    "directories": {
+      "output": "dist-desktop"
+    },
     "npmRebuild": false,
-    "files": ["build/desktop/**/*", "build/icon.ico", "build/icon.png", "scripts/workspace-main.cjs", "scripts/workspace-preload.cjs", "scripts/workspace-crypto.cjs", "package.json", "!node_modules/**/*"],
+    "files": [
+      "build/desktop/**/*",
+      "build/icon.ico",
+      "build/icon.png",
+      "scripts/workspace-main.cjs",
+      "scripts/workspace-preload.cjs",
+      "scripts/workspace-crypto.cjs",
+      "package.json",
+      "!node_modules/**/*"
+    ],
     "win": {
-      "target": ["nsis", "msi", "portable"],
+      "target": [
+        "nsis",
+        "msi",
+        "portable"
+      ],
       "icon": "app/favicon.ico"
     },
     "nsis": {
@@ -106,7 +124,9 @@
       "createStartMenuShortcut": true,
       "shortcutName": "衡绩员工绩点考核系统",
       "artifactName": "hengji-${version}.msi",
-      "additionalLightArgs": ["-cultures:zh-CN"]
+      "additionalLightArgs": [
+        "-cultures:zh-CN"
+      ]
     },
     "portable": {
       "artifactName": "hengji-portable-${version}.exe"

@@ -1,4 +1,5 @@
 import React from 'react';
+import mermaid from 'mermaid';
 import {
   ShieldCheck,
   HardDrive,
@@ -139,6 +140,104 @@ export function MarkdownCodeCard({
       </div>
       <div className="cc-md-code-content">
         {renderHighlightedLines(code)}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 高级现代化 Mermaid 矢量流程图与架构图组件
+ */
+export function MermaidDiagram({
+  chart,
+  title,
+  subtitle
+}: {
+  chart: string;
+  title?: string;
+  subtitle?: string;
+}) {
+  const [svgHtml, setSvgHtml] = React.useState<string>('');
+  const [error, setError] = React.useState<string | null>(null);
+  const [showCode, setShowCode] = React.useState<boolean>(false);
+  const [copied, setCopied] = React.useState<boolean>(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const renderChart = async () => {
+      try {
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'loose',
+          theme: 'neutral',
+          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+        });
+        const uniqueId = 'mermaid-' + Math.random().toString(36).substring(2, 9);
+        const { svg } = await mermaid.render(uniqueId, chart.trim());
+        if (isMounted) {
+          setSvgHtml(svg);
+          setError(null);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setError(err?.message || 'Mermaid render error');
+        }
+      }
+    };
+    renderChart();
+    return () => {
+      isMounted = false;
+    };
+  }, [chart]);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(chart.trim());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="cc-mermaid-card">
+      <div className="cc-mermaid-header">
+        <div>
+          {title && <div className="cc-mermaid-title">{title}</div>}
+          {subtitle && <div className="cc-mermaid-sub">{subtitle}</div>}
+        </div>
+        <button
+          type="button"
+          className="cc-mermaid-toggle-btn"
+          onClick={() => setShowCode(!showCode)}
+          title="查看/复制 Mermaid 源码"
+        >
+          <FileCode size={13} />
+          <span>{showCode ? '收起源码' : 'Mermaid 源码'}</span>
+        </button>
+      </div>
+
+      {showCode && (
+        <div className="cc-mermaid-code-drawer">
+          <div className="cc-mermaid-code-bar">
+            <span>MERMAID FLOWCHART CODE</span>
+            <button type="button" className="cc-md-code-copy-btn" onClick={handleCopy}>
+              {copied ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
+              <span>{copied ? '已复制' : '复制代码'}</span>
+            </button>
+          </div>
+          <pre><code>{chart.trim()}</code></pre>
+        </div>
+      )}
+
+      <div className="cc-mermaid-canvas" ref={containerRef}>
+        {svgHtml ? (
+          <div className="cc-mermaid-svg-wrapper" dangerouslySetInnerHTML={{ __html: svgHtml }} />
+        ) : error ? (
+          <div className="cc-mermaid-error">
+            <pre><code>{chart}</code></pre>
+          </div>
+        ) : (
+          <div className="cc-mermaid-loading">正在渲染高质量图表...</div>
+        )}
       </div>
     </div>
   );
@@ -870,27 +969,21 @@ export function DocArticleContent({
           {/* 业务总览流程图 */}
           <section id="sec-admin-overview" className="cc-cl-sec">
             <h2>{isEn ? 'Business Loop Overview & Diagram' : '🧭 五步核心业务闭环总览流程图'}</h2>
-            <MarkdownDiagram
-              title={isEn ? '5-Step Closed-Loop Business Workflow' : '衡绩系统 5 步核心业务闭环流程图'}
-              diagram={`┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           衡绩系统 5 步核心业务闭环流程图                           │
-└─────────────────────────────────────────────────────────────────────────────────┘
+            <MermaidDiagram
+              title={isEn ? '5-Step Closed-Loop Business Workflow' : '🧭 衡绩系统 5 步核心业务闭环总览流程图'}
+              subtitle={isEn ? 'End-to-End Workflow: Workspace ➔ Subjects ➔ Scheduling ➔ Matrix ➔ Rollup & Stars' : '端到端业务流：建库 ➔ 初始化 ➔ 排期 ➔ 月底考评 ➔ 归集与荣誉'}
+              chart={`flowchart LR
+    S1["<b>STEP 1</b><br/>🏢 <b>新建安全工作区</b><br/>• .hengji 本地文件存储<br/>• AES-256 口令加密"] 
+    -->|第一步完成| S2["<b>STEP 2</b><br/>👥 <b>初始化业务主体</b><br/>• 导入部门员工花名册<br/>• 导入工程合同与工作令"]
+    -->|第二步完成| S3["<b>STEP 3</b><br/>📊 <b>顶层防透支排期</b><br/>• 全周期 100% 额度配比<br/>• 前低后高稳健交付锚定"]
+    -->|第三步完成| S4["<b>STEP 4</b><br/>⚡ <b>月底考评与发布</b><br/>• 全项目透视集中大表<br/>• 团队比例 100% 闭环核验<br/>• 🚀 一键批量数字签名发布"]
+    -->|第四步完成| S5["<b>STEP 5</b><br/>🏆 <b>财务报表与荣誉殿堂</b><br/>• 横向个人 · 纵向项目双向对齐<br/>• BigInt 分毫不差最大余数补差<br/>• 月度/季度/年度绩星榜"]
 
-   【第 1 步：建立工作区】       【第 2 步：初始化主体】        【第 3 步：顶层规划设计】
-   ┌───────────────────┐        ┌───────────────────┐        ┌───────────────────┐
-   │  新建安全工作区    │ ─────▶ │  导入部门员工名册  │ ─────▶ │  全周期额度规划    │
-   │  .hengji 本地存储  │        │  (总体/产品/研发) │        │  (稳健交付防透支) │
-   │  AES-256 口令加密 │        │  导入合同项目清单  │        │  项目组模版比例   │
-   └───────────────────┘        └───────────────────┘        └───────────────────┘
-                                                                       │
-                                                                       ▼
-   【第 5 步：报表与荣誉】       【第 4 步：月底考评发布】
-   ┌───────────────────┐        ┌───────────────────┐
-   │  周期绩点报表透视  │ ◀───── │  月度分配集中大表  │
-   │  横向个人·纵向项目 │        │  ⚡ 套用当月规划   │
-   │  双向 100% 闭环求和│        │  配置成员比例 100%│
-   │  考核之星荣誉殿堂  │        │  🚀 一键批量发布   │
-   └───────────────────┘        └───────────────────┘`}
+    style S1 fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#9a3412
+    style S2 fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e40af
+    style S3 fill:#fefce8,stroke:#ca8a04,stroke-width:2px,color:#854d0e
+    style S4 fill:#fdf4ff,stroke:#a855f7,stroke-width:2px,color:#7e22ce
+    style S5 fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#166534`}
             />
           </section>
 
@@ -907,22 +1000,28 @@ export function DocArticleContent({
                   : '衡绩系统采用完全离线优先架构，零网络依赖。系统不会把业务数据隐蔽放到 C 盘用户目录，所有部门员工、工程项目、月度分配与绩点流水均保存在用户自主指定的 `.hengji` 工作区文件中，从物理层面杜绝保密数据泄露。'}
               </p>
 
-              <MarkdownDiagram
-                title={isEn ? 'Workspace Initialization Architecture' : '第一步：工作区建立机制示意'}
-                diagram={`双击运行软件 ──▶ 【+ 新建工作区】 ──▶ 选择非系统盘 (D:/E:/保密盘)
-                                           │
-                   ┌───────────────────────┴───────────────────────┐
-                   ▼                                               ▼
-      【🏢 综合管理工作区 (首选推荐)】                【📊 绩效核算工作区】
-      适合超级管理员统揽全局                          适合专职核算员汇总数据包
-                   │                                               │
-                   └───────────────────────┬───────────────────────┘
-                                           ▼
-                              设置管理员口令 (AES-256)
-                              (在个人电脑亦可直接留空免密)
-                                           ▼
-                             生成 .hengji 加密工作区文件
-                             (每次保存自动生成 .backup 镜像)`}
+              <MermaidDiagram
+                title={isEn ? 'Workspace Initialization Architecture' : '第一步：工作区建立机制架构图'}
+                subtitle={isEn ? 'Dual-Workspace Architecture · Non-System Drive Security · PBKDF2/AES-256' : '非系统盘物理隔离 · 综合管理与绩效核算双模式 · PBKDF2/AES-256 口令加密'}
+                chart={`flowchart TD
+    Start["🚀 双击运行「衡绩」客户端"] --> Create["➕ 点击【新建工作区】"]
+    Create --> Disk["💾 选择非系统盘安全存储<br/><i>(推荐 D:/E:/科研保密盘，绝不落盘 C 盘)</i>"]
+    
+    Disk --> Mode1["🏢 <b>综合管理工作区</b> (首选推荐)<br/>• 面向部门长与项目负责人<br/>• 管理员工名册、工程合同与月度排期分配"]
+    Disk --> Mode2["📊 <b>绩效核算工作区</b><br/>• 面向专职核算员与财务审计<br/>• 批量导入项目数据包，全员跨项目自动归集"]
+    
+    Mode1 --> Pwd["🔐 设置高强口令 (PBKDF2 + AES-256-GCM 认证加密)<br/><i>(个人专属电脑亦可留空免密极速启动)</i>"]
+    Mode2 --> Pwd
+    
+    Pwd --> File["✅ 生成 <b>.hengji</b> 独立离线加密数据库<br/><i>(每次修改保存自动在同目录生成 .backup 镜像灾备)</i>"]
+
+    style Start fill:#f8fafc,stroke:#64748b,stroke-width:1.5px
+    style Create fill:#f8fafc,stroke:#64748b,stroke-width:1.5px
+    style Disk fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#166534
+    style Mode1 fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#9a3412
+    style Mode2 fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e40af
+    style Pwd fill:#fefce8,stroke:#ca8a04,stroke-width:2px,color:#854d0e
+    style File fill:#ecfdf5,stroke:#059669,stroke-width:2px,color:#065f46`}
               />
 
               <div className="cc-md-quote">
@@ -950,22 +1049,35 @@ export function DocArticleContent({
                   : '建立考核所需的“人”（员工档案与专业组归属）与“事”（工程合同项目与工作令号）两大基石数据。'}
               </p>
 
-              <MarkdownDiagram
-                title={isEn ? 'Subject Initialization Diagram' : '第二步：业务主体初始化示意'}
-                diagram={`【员工管理】                                     【项目库管理】
-[员工与专业组]                                   [项目库与额度]
-     │                                                │
-┌────┴─────────────────────────┐                 ┌────┴─────────────────────────┐
-│ 选项A: 📥 批量导入员工 CSV   │                 │ 选项A: 📥 批量导入项目 CSV   │
-│ 选项B: ⚡ 一键初始化内置成员 │                 │ 选项B: ➕ 新建单项工程合同   │
-│ 选项C: ➕ 手动单个添加员工   │                 └──────────────────────────────┘
-└──────────────────────────────┘                              │
-               │                                              ▼
-               ▼                                 【财务格式全自动自适应清洗】
-     【专业组自动归类绑定】                         • 自动剥离千分位逗号 (1,309,000.00)
-     • 总体组 (系统方案/总体协调)                  • 自动清除货币符号 (¥、$、元、万元)
-     • 产品组 (硬件结构/产品定义)                  • 浮点超长小数四舍五入到分 (33.333333)
-     • 研发组 (算法/嵌入式/软件)                   • 同工作令号多子合同独立核算`}
+              <MermaidDiagram
+                title={isEn ? 'Subject Initialization Architecture' : '第二步：业务主体（人与事）双基石初始化流程'}
+                subtitle={isEn ? 'Personnel Matrix Binding · Financial Auto-Cleaning · Employee ID & Contract Order Anchoring' : '员工专业组绑定 · 合同金额财务自适应清洗 · 唯一工号与工作令号锚定'}
+                chart={`flowchart TD
+    subgraph S1["👥 员工人员库初始化 (人)"]
+        direction TB
+        M1["📥 批量导入员工 CSV 表"]
+        M2["⚡ 一键套用内置演示编制"]
+        M3["➕ 手动单个添加员工档案"]
+        M1 --> MG["🎯 专业组自动归类绑定<br/>• 总体组 (系统方案 / 总体协调)<br/>• 产品组 (硬件结构 / 产品定义)<br/>• 研发组 (算法 / 嵌入式 / 软件)"]
+        M2 --> MG
+        M3 --> MG
+    end
+
+    subgraph S2["📁 工程项目库初始化 (事)"]
+        direction TB
+        P1["📥 批量导入项目合同 CSV 表"]
+        P2["➕ 手动新建单项工程合同"]
+        P1 --> PC["🧹 财务格式自适应高容错清洗引擎<br/>• 自动剥离千分位逗号 (如 1,500,000.00)<br/>• 自动清除货币符号 (¥、$、元、万元)<br/>• 超长浮点小数四舍五入精确到分<br/>• 同一工作令号多子合同独立核算"]
+        P2 --> PC
+    end
+
+    MG & PC --> Ready["🚀 <b>“人”与“事”双基石就绪</b><br/>以唯一员工工号与工程工作令号精准绑定"]
+
+    style S1 fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px
+    style S2 fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px
+    style MG fill:#ffffff,stroke:#ea580c,stroke-width:1.5px
+    style PC fill:#ffffff,stroke:#2563eb,stroke-width:1.5px
+    style Ready fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#166534`}
               />
 
               <div className="cc-md-quote">
@@ -988,14 +1100,24 @@ export function DocArticleContent({
                   : '针对长周期工程项目，最忌讳“项目刚立项就把绩效分光，后期进入成品发货与试验终验时有活无钱可分”。衡绩内置“稳健交付型（前低后高）”排期机制：'}
               </p>
 
-              <MarkdownDiagram
+              <MermaidDiagram
                 title={isEn ? 'Three-Phase Anti-Overdraft Model' : '第三步：三段式前低后高防透支配比法则'}
-                diagram={`【项目全周期 100% 额度配比】
-┌───────────────────────┬───────────────────────────────────┬─────────────────────┐
-│   前期立项与方案论证   │       主体研制、试验与成品交付     │   现场维保与终检验收 │
-│   (首月 0%~10%，限高) │       (前低后高递增，大头 45%+)   │   (末月刚性锁定 5%) │
-└───────────────────────┴───────────────────────────────────┴─────────────────────┘
-  ▲ 约束：避免前期瓜分       ▲ 导向：重头激励锁定出厂发货交付     ▲ 保障：售后技术不撂挑子`}
+                subtitle={isEn ? 'Phased Quota Lifecycle: Inception Cap ➔ Delivery Peak ➔ Warranty Retention' : '全周期额度生命周期：首月限高5% ➔ 交付月锁定45%+ ➔ 末月保底5%'}
+                chart={`flowchart LR
+    subgraph Whole["🎯 工程项目全周期 100% 额度硬顶锁定 (1 绩点 ≡ 1 万元合同产值)"]
+        direction LR
+        P1["<b>Phase 1: 前期立项与论证</b><br/>• 额度限高：<b>0% ~ 10%</b> (默认 5%)<br/>• <b>刚性红线约束</b><br/>• 彻底防止项目立项即瓜分透支"]
+        -->|前低递进| P2["<b>Phase 2: 主体研制与交付</b><br/>• 额度递增：锁定 <b>45%+ 核心大头</b><br/>• <b>交付成果强锚定</b><br/>• 重金激励出厂试验与发货攻坚"]
+        -->|保底闭环| P3["<b>Phase 3: 现场维保与验收</b><br/>• 额度保留：刚性锁定 <b>5%</b><br/>• <b>售后履约保障</b><br/>• 杜绝发货后人员撂挑子不管售后"]
+    end
+
+    Whole --> Verify["⚖️ <b>全周期闭环校验</b>：所有月份额度百分比之和严格必须 ＝ 100.00%"]
+
+    style Whole fill:#fafaf9,stroke:#78716c,stroke-width:1.5px
+    style P1 fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#9a3412
+    style P2 fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#166534
+    style P3 fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e40af
+    style Verify fill:#fefce8,stroke:#ca8a04,stroke-width:2px,color:#854d0e`}
               />
 
               <div className="cc-md-quote">
@@ -1022,20 +1144,39 @@ export function DocArticleContent({
                   : '每到月底考评窗口期，综合管理员进入【月度绩效分配】全景透视大表：'}
               </p>
 
-              <MarkdownDiagram
+              <MermaidDiagram
                 title={isEn ? 'Monthly Matrix Execution Workflow' : '第四步：月度分配全项目当月集中大表操作机制'}
-                diagram={`【进入月度分配】 ──▶ 选定考核月份 (如 2026-10) ──▶ 点击【⚡ 套用当月规划】
-                                                            │
-    ┌───────────────────────────────────────────────────────┴────────────────────────┐
-    ▼                                                       ▼                        ▼
-【项目 A：雷达总体方案】                                 【项目 B：信号处理板卡】   【...更多在研项目】
-• 额度：5.00 万元                                        • 额度：12.50 万元        • 一屏全景平铺
-• 成员分配比例合计：100% ────▶ [发布状态：已发布 √]       • 比例合计：100% √        • 无需逐个点开弹窗
-    │                                                       │
-    └───────────────────────────────────────────────────────┴────────────────────────┐
-                                                                                     ▼
-                                                                        【🚀 点击一键批量发布】
-                                                                        (加盖数字签名防篡改锁定)`}
+                subtitle={isEn ? 'Apply Phased Plan · One-Screen Matrix · 100% Exact Verification · Batch Tamper-Proof Release' : '套用当月规划 · 一屏平铺所有在研项目 · 团队比例严格100% · 一键批量发布'}
+                chart={`flowchart TD
+    subgraph StepA["1. 选定考评月份并套用规划"]
+        direction LR
+        A1["📊 进入【月度绩效分配】大表"] --> A2["📅 选定考评月份 (例: 2026-10)"]
+        A2 --> A3["⚡ 点击【套用当月规划】<br/><small>自动按排期提取各项目可用额度与成员基准</small>"]
+    end
+
+    subgraph StepB["2. 全景大表平铺透视与微调 (无需切换弹窗)"]
+        direction TB
+        A3 --> P1["<b>📁 项目A: 雷达总体方案</b><br/>• 当月可用额度: 5.00 万元<br/>• 成员分摊比例合计: <b>100%</b><br/>• 状态: 闭环校验通过 √"]
+        A3 --> P2["<b>📁 项目B: 信号处理板卡</b><br/>• 当月可用额度: 12.50 万元<br/>• 成员分摊比例合计: <b>100%</b><br/>• 状态: 闭环校验通过 √"]
+        A3 --> P3["<b>📁 ...全量在研工程项目</b><br/>• 一屏平铺纵览所有项目<br/>• 组员配比按最大余数法补差<br/>• 动态高亮未满100%项目"]
+    end
+
+    subgraph StepC["3. 终审与一键批量发布"]
+        direction LR
+        P1 & P2 & P3 --> BatchRel["🚀 <b>点击【一键批量发布】</b><br/>加盖数字签名 · 物理锁定当月分配 · 杜绝二次非授权篡改"]
+    end
+
+    style StepA fill:#f8fafc,stroke:#cbd5e1,stroke-width:1.5px
+    style StepB fill:#fafaf9,stroke:#94a3b8,stroke-width:1.5px
+    style StepC fill:#f0fdf4,stroke:#86efac,stroke-width:1.5px
+
+    style A1 fill:#ffffff,stroke:#0284c7,stroke-width:1.5px,color:#0369a1
+    style A2 fill:#ffffff,stroke:#0284c7,stroke-width:1.5px,color:#0369a1
+    style A3 fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1d4ed8
+    style P1 fill:#ffffff,stroke:#ea580c,stroke-width:1.5px,color:#c2410c
+    style P2 fill:#ffffff,stroke:#ea580c,stroke-width:1.5px,color:#c2410c
+    style P3 fill:#ffffff,stroke:#64748b,stroke-width:1.5px,color:#334155
+    style BatchRel fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#15803d`}
               />
 
               <div className="cc-md-quote">
@@ -1113,15 +1254,39 @@ export function DocArticleContent({
                   : '在核算员工作区界面的【数据包导入中心】，直接选中各项目经理发来的多个 `.hengji` 加密文件（支持单次 10~50 个文件），直接拖入虚线框内：'}
               </p>
 
-              <MarkdownDiagram
-                title={isEn ? 'Package Ingestion & Verification Flow' : '数据包导入与自动审计流程示意'}
-                diagram={`各项目经理发来文件 ──▶ 选中 10~50 个 .hengji 文件 ──▶ 批量拖拽至导入虚线框
-                                                                │
-     ┌──────────────────────────────────────────────────────────┴─────────────────────────┐
-     ▼                                                          ▼                         ▼
-【第一重：防篡改指纹】                                      【第二重：工作令号去重】   【第三重：员工工号校对】
-SHA-256 数字校验和比对                                     防止同一项目重复计入       同名不同工号严格物理隔离
-全部通过显示绿色对勾 √                                     异常红灯即刻阻断           确保分摊归集精准落位`}
+              <MermaidDiagram
+                title={isEn ? 'Package Ingestion & Verification Flow' : '核算员数据包导入与自动审计流程示意'}
+                subtitle={isEn ? 'Batch Drag & Drop · 3-Layer Security Shield (Fingerprint/Deduplication/Employee Isolation) · Instant Rollup' : '批量拖拽导入 · 三重底层安全防线（防篡改/去重/工号隔离） · 1秒自动归集'}
+                chart={`flowchart TD
+    subgraph Import["📥 批量导入环节 (零学习成本拖拽交互)"]
+        direction LR
+        Src["📁 各项目经理独立导出<br/>.hengji 加密交接包"] --> Multi["🖱️ 选中 10~50 个文件<br/>(支持多选与全选)"]
+        Multi --> Drop["🎯 直接批量拖拽至<br/>【数据包导入中心】虚线框"]
+    end
+
+    subgraph Shields["🛡️ 三重底层安全校验与合规审计网关"]
+        direction TB
+        Drop --> S1["<b>第一重：防篡改指纹校验</b><br/>• SHA-256 完整性摘要比对<br/>• 文件内容若被外力篡改即刻报警<br/>• 自动亮起绿色验签对勾 √"]
+        Drop --> S2["<b>第二重：工程工作令号去重</b><br/>• 自动检测同名或同令号项目<br/>• 彻底防止同一工程重复计入薪酬<br/>• 冲突红灯即刻阻断并提示版本"]
+        Drop --> S3["<b>第三重：员工唯一工号校对</b><br/>• 同名同姓员工按工号物理隔离<br/>• 自动关联部门与归属专业组<br/>• 确保跨项目归集精准无误落位"]
+    end
+
+    subgraph Success["✨ 成果与穿透核算"]
+        direction LR
+        S1 & S2 & S3 --> Agg["⚡ <b>1秒自动完成跨项目归集与穿透大表</b><br/>生成个人全景薪酬核算矩阵 · 随时一键导出交接财务"]
+    end
+
+    style Import fill:#eff6ff,stroke:#93c5fd,stroke-width:1.5px
+    style Shields fill:#fafaf9,stroke:#78716c,stroke-width:1.5px
+    style Success fill:#f0fdf4,stroke:#86efac,stroke-width:1.5px
+
+    style Src fill:#ffffff,stroke:#0284c7,stroke-width:1.5px,color:#0369a1
+    style Multi fill:#ffffff,stroke:#0284c7,stroke-width:1.5px,color:#0369a1
+    style Drop fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1d4ed8
+    style S1 fill:#ffffff,stroke:#059669,stroke-width:1.5px,color:#065f46
+    style S2 fill:#ffffff,stroke:#d97706,stroke-width:1.5px,color:#92400e
+    style S3 fill:#ffffff,stroke:#2563eb,stroke-width:1.5px,color:#1e40af
+    style Agg fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#15803d`}
               />
             </div>
           </section>
