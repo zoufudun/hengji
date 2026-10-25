@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 
-async function getGitHubToken() {
+export async function getGitHubToken() {
   if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN.trim();
   if (process.env.GH_TOKEN) return process.env.GH_TOKEN.trim();
 
@@ -197,7 +197,9 @@ async function main() {
   console.log(`Release URL: ${release.html_url}`);
 }
 
-main().catch(err => {
-  console.error('Fatal error:', err);
-  process.exit(1);
-});
+if (process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('publish-release-github.mjs')) {
+  main().catch(err => {
+    console.error('Fatal error:', err);
+    process.exit(1);
+  });
+}
