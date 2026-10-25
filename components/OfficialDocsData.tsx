@@ -1,5 +1,4 @@
 import React from 'react';
-import mermaid from 'mermaid';
 import {
   ShieldCheck,
   HardDrive,
@@ -145,8 +144,212 @@ export function MarkdownCodeCard({
   );
 }
 
+interface FlowNodeDef {
+  id: string;
+  label: string;
+  subgraphId: string | null;
+}
+
+interface FlowSubgraphDef {
+  id: string;
+  title: string;
+  direction: 'LR' | 'TD';
+  nodeIds: string[];
+}
+
+interface FlowStyleDef {
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: string;
+  color?: string;
+}
+
+interface FlowEdgeDef {
+  from: string;
+  to: string;
+  label: string;
+}
+
+function parseMermaidFlowchartAST(rawChart: string) {
+  const normalized = rawChart
+    .replace(/\r\n/g, '\n')
+    .replace(/\n\s*(-->)/g, ' $1');
+
+  const lines = normalized
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  let rootDirection: 'LR' | 'TD' = 'TD';
+  const nodes = new Map<string, FlowNodeDef>();
+  const subgraphs = new Map<string, FlowSubgraphDef>();
+  const styles = new Map<string, FlowStyleDef>();
+  const edges: FlowEdgeDef[] = [];
+
+  let currentSubgraph: FlowSubgraphDef | null = null;
+
+  const registerNode = (rawToken: string): string[] => {
+    const token = rawToken.trim();
+    const m = token.match(/^([A-Za-z0-9_]+)\s*\["([\s\S]*)"\]$/);
+    if (m) {
+      const id = m[1];
+      const label = m[2];
+      if (!nodes.has(id)) {
+        nodes.set(id, { id, label, subgraphId: currentSubgraph ? currentSubgraph.id : null });
+        if (currentSubgraph && !currentSubgraph.nodeIds.includes(id)) {
+          currentSubgraph.nodeIds.push(id);
+        }
+      } else {
+        const existing = nodes.get(id)!;
+        if (label && (!existing.label || existing.label === id)) {
+          existing.label = label;
+        }
+      }
+      return [id];
+    }
+
+    const parts = token
+      .split('&')
+      .map((p) => p.trim())
+      .filter(Boolean);
+    const ids: string[] = [];
+    for (const p of parts) {
+      const idMatch = p.match(/^([A-Za-z0-9_]+)$/);
+      if (idMatch) {
+        const id = idMatch[1];
+        if (!subgraphs.has(id) && !nodes.has(id)) {
+          nodes.set(id, { id, label: id, subgraphId: currentSubgraph ? currentSubgraph.id : null });
+          if (currentSubgraph && !currentSubgraph.nodeIds.includes(id)) {
+            currentSubgraph.nodeIds.push(id);
+          }
+        }
+        ids.push(id);
+      }
+    }
+    return ids;
+  };
+
+  for (const line of lines) {
+    if (line.startsWith('flowchart ') || line.startsWith('graph ')) {
+      const parts = line.split(/\s+/);
+      rootDirection = parts[1] === 'LR' ? 'LR' : 'TD';
+      continue;
+    }
+    if (line.startsWith('direction ')) {
+      const dir = line.split(/\s+/)[1];
+      if (currentSubgraph) {
+        currentSubgraph.direction = dir === 'LR' ? 'LR' : 'TD';
+      } else {
+        rootDirection = dir === 'LR' ? 'LR' : 'TD';
+      }
+      continue;
+    }
+    if (line.startsWith('subgraph ')) {
+      const m = line.match(/^subgraph\s+([A-Za-z0-9_]+)\s*(?:\["([^"]+)"\])?/);
+      if (m) {
+        const sg: FlowSubgraphDef = {
+          id: m[1],
+          title: m[2] || m[1],
+          direction: 'TD',
+          nodeIds: []
+        };
+        subgraphs.set(sg.id, sg);
+        currentSubgraph = sg;
+      }
+      continue;
+    }
+    if (line === 'end') {
+      currentSubgraph = null;
+      continue;
+    }
+    if (line.startsWith('style ')) {
+      const m = line.match(/^style\s+([A-Za-z0-9_]+)\s+(.+)$/);
+      if (m) {
+        const id = m[1];
+        const propStr = m[2];
+        const styleObj: FlowStyleDef = {};
+        for (const pair of propStr.split(',')) {
+          const [k, v] = pair.split(':').map((s) => (s ? s.trim() : ''));
+          if (k === 'fill') styleObj.fill = v;
+          if (k === 'stroke') styleObj.stroke = v;
+          if (k === 'stroke-width') styleObj.strokeWidth = v;
+          if (k === 'color') styleObj.color = v;
+        }
+        styles.set(id, styleObj);
+      }
+      continue;
+    }
+
+    if (line.includes('-->')) {
+      const arrowRegex = /-->(?:\|([^|]*)\|)?/g;
+      const segments: string[] = [];
+      const arrowLabels: string[] = [];
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = arrowRegex.exec(line)) !== null) {
+        segments.push(line.slice(lastIndex, match.index));
+        arrowLabels.push(match[1] ? match[1].trim() : '');
+        lastIndex = arrowRegex.lastIndex;
+      }
+      segments.push(line.slice(lastIndex));
+
+      const segNodeIds = segments.map((seg) => registerNode(seg));
+      for (let i = 0; i < segNodeIds.length - 1; i++) {
+        const fromIds = segNodeIds[i];
+        const toIds = segNodeIds[i + 1];
+        const label = arrowLabels[i];
+        for (const f of fromIds) {
+          for (const t of toIds) {
+            edges.push({ from: f, to: t, label });
+          }
+        }
+      }
+    } else {
+      registerNode(line);
+    }
+  }
+
+  return { rootDirection, nodes, subgraphs, styles, edges };
+}
+
+function computeTopologicalLayers(
+  itemIds: string[],
+  edges: FlowEdgeDef[],
+  ownerFn: (id: string) => string
+) {
+  const rank = new Map<string, number>();
+  itemIds.forEach((id) => rank.set(id, 0));
+
+  const validLinks: FlowEdgeDef[] = [];
+  for (const e of edges) {
+    const u = ownerFn(e.from);
+    const v = ownerFn(e.to);
+    if (u && v && u !== v && rank.has(u) && rank.has(v)) {
+      validLinks.push({ from: u, to: v, label: e.label });
+    }
+  }
+
+  for (let i = 0; i < itemIds.length; i++) {
+    for (const link of validLinks) {
+      const rU = rank.get(link.from) ?? 0;
+      const rV = rank.get(link.to) ?? 0;
+      if (rU + 1 > rV) {
+        rank.set(link.to, rU + 1);
+      }
+    }
+  }
+
+  const maxRank = Math.max(0, ...Array.from(rank.values()));
+  const layers: string[][] = [];
+  for (let r = 0; r <= maxRank; r++) {
+    const layer = itemIds.filter((id) => rank.get(id) === r);
+    if (layer.length > 0) layers.push(layer);
+  }
+  return { layers, validLinks };
+}
+
 /**
- * 高级现代化 Mermaid 矢量流程图与架构图组件
+ * 高级现代化 Mermaid 矢量流程图与架构图组件（内置同步矢量图形渲染引擎，0延迟、100%生成高清可视化流程图）
  */
 export function MermaidDiagram({
   chart,
@@ -157,44 +360,280 @@ export function MermaidDiagram({
   title?: string;
   subtitle?: string;
 }) {
-  const [svgHtml, setSvgHtml] = React.useState<string>('');
-  const [error, setError] = React.useState<string | null>(null);
   const [showCode, setShowCode] = React.useState<boolean>(false);
   const [copied, setCopied] = React.useState<boolean>(false);
-  const containerRef = React.useRef<HTMLDivElement>(null);
 
-  React.useEffect(() => {
-    let isMounted = true;
-    const renderChart = async () => {
-      try {
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: 'loose',
-          theme: 'neutral',
-          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif"
-        });
-        const uniqueId = 'mermaid-' + Math.random().toString(36).substring(2, 9);
-        const { svg } = await mermaid.render(uniqueId, chart.trim());
-        if (isMounted) {
-          setSvgHtml(svg);
-          setError(null);
-        }
-      } catch (err: any) {
-        if (isMounted) {
-          setError(err?.message || 'Mermaid render error');
-        }
-      }
-    };
-    renderChart();
-    return () => {
-      isMounted = false;
-    };
-  }, [chart]);
+  const ast = React.useMemo(() => parseMermaidFlowchartAST(chart), [chart]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(chart.trim());
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // 渲染单个节点卡片
+  const renderNodeCard = (nodeId: string, isCompact?: boolean) => {
+    const node = ast.nodes.get(nodeId);
+    if (!node) return null;
+    const st = ast.styles.get(nodeId) || {};
+    const fill = st.fill || '#ffffff';
+    const stroke = st.stroke || '#cbd5e1';
+    const textColor = st.color || '#1e293b';
+
+    const rawLines = node.label
+      .split(/<br\s*\/?>|\\n/i)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    let stepBadge: string | null = null;
+    let headerHtml = rawLines[0] || node.id;
+    let bodyLines = rawLines.slice(1);
+
+    // 识别 STEP N 徽标行
+    const plainFirst = headerHtml.replace(/<[^>]+>/g, '').trim();
+    if (/^STEP\s*\d+$/i.test(plainFirst) && bodyLines.length > 0) {
+      stepBadge = plainFirst.toUpperCase();
+      headerHtml = bodyLines[0];
+      bodyLines = bodyLines.slice(1);
+    }
+
+    return (
+      <div
+        key={nodeId}
+        className={`cc-flow-node-card ${isCompact ? 'is-compact' : ''}`}
+        style={{
+          backgroundColor: fill,
+          borderColor: stroke,
+          borderTopColor: stroke,
+          color: textColor
+        }}
+      >
+        {stepBadge && (
+          <div className="cc-flow-step-pill" style={{ backgroundColor: stroke, color: '#ffffff' }}>
+            {stepBadge}
+          </div>
+        )}
+        <div
+          className="cc-flow-node-title"
+          style={{ color: textColor }}
+          dangerouslySetInnerHTML={{ __html: headerHtml }}
+        />
+        {bodyLines.length > 0 && (
+          <div className="cc-flow-node-body">
+            {bodyLines.map((line, lIdx) => {
+              const isBullet = line.startsWith('•') || line.startsWith('·');
+              const cleanText = isBullet ? line.replace(/^[•·]\s*/, '') : line;
+              if (isBullet) {
+                return (
+                  <div key={lIdx} className="cc-flow-bullet-row">
+                    <span className="cc-flow-bullet-dot" style={{ backgroundColor: stroke }} />
+                    <span
+                      className="cc-flow-bullet-text"
+                      dangerouslySetInnerHTML={{ __html: cleanText }}
+                    />
+                  </div>
+                );
+              }
+              return (
+                <div
+                  key={lIdx}
+                  className="cc-flow-desc-row"
+                  dangerouslySetInnerHTML={{ __html: cleanText }}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // 渲染横向 SVG 矢量连接箭头 (LR)
+  const renderHorizontalArrow = (label?: string, key?: string) => (
+    <div key={key} className="cc-flow-lr-arrow">
+      {label && <span className="cc-flow-edge-pill">{label}</span>}
+      <svg viewBox="0 0 42 22" className="cc-flow-lr-svg" aria-hidden="true">
+        <circle cx="4" cy="11" r="3" fill="#c85a32" />
+        <line
+          x1="7"
+          y1="11"
+          x2="31"
+          y2="11"
+          stroke="#c85a32"
+          strokeWidth="2"
+          strokeDasharray="3.5 2.5"
+        />
+        <polygon points="39,11 29,6 29,16" fill="#c85a32" />
+      </svg>
+    </div>
+  );
+
+  // 渲染纵向 SVG 矢量分支/汇聚连接线 (TD: 1->1, 1->2, 2->1, 1->3, 3->1)
+  const renderVerticalConnector = (
+    fromCount: number,
+    toCount: number,
+    label?: string,
+    key?: string
+  ) => {
+    const getCenters = (count: number) => {
+      if (count <= 1) return [300];
+      return Array.from({ length: count }, (_, i) => Math.round((600 * (2 * i + 1)) / (2 * count)));
+    };
+    const fromX = getCenters(fromCount);
+    const toX = getCenters(toCount);
+
+    const paths: string[] = [];
+    for (const x1 of fromX) {
+      for (const x2 of toX) {
+        if (x1 === x2) {
+          paths.push(`M ${x1} 5 L ${x2} 31`);
+        } else {
+          paths.push(`M ${x1} 5 L ${x1} 19 L ${x2} 19 L ${x2} 31`);
+        }
+      }
+    }
+
+    return (
+      <div key={key} className="cc-flow-td-connector">
+        {label && <span className="cc-flow-edge-pill is-td">{label}</span>}
+        <svg viewBox="0 0 600 38" className="cc-flow-td-svg" aria-hidden="true">
+          {paths.map((d, idx) => (
+            <path
+              key={idx}
+              d={d}
+              fill="none"
+              stroke="#c85a32"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))}
+          {fromX.map((x1, idx) => (
+            <circle key={`f-${idx}`} cx={x1} cy={5} r="3.5" fill="#c85a32" />
+          ))}
+          {toX.map((x2, idx) => (
+            <polygon
+              key={`t-${idx}`}
+              points={`${x2},36 ${x2 - 5.5},28 ${x2 + 5.5},28`}
+              fill="#c85a32"
+            />
+          ))}
+        </svg>
+      </div>
+    );
+  };
+
+  // 渲染子图容器 (Subgraph)
+  const renderSubgraphBox = (sgId: string) => {
+    const sg = ast.subgraphs.get(sgId);
+    if (!sg) return null;
+    const st = ast.styles.get(sgId) || {};
+    const fill = st.fill || '#f8fafc';
+    const stroke = st.stroke || '#cbd5e1';
+
+    const sgLayout = computeTopologicalLayers(sg.nodeIds, ast.edges, (x) => x);
+
+    return (
+      <div
+        key={sgId}
+        className="cc-flow-subgraph"
+        style={{
+          backgroundColor: fill,
+          borderColor: stroke
+        }}
+      >
+        <div className="cc-flow-subgraph-header" style={{ borderColor: stroke }}>
+          <span className="cc-flow-subgraph-dot" style={{ backgroundColor: stroke }} />
+          <span className="cc-flow-subgraph-title">{sg.title}</span>
+        </div>
+
+        {sg.direction === 'LR' && sgLayout.layers.length > 1 ? (
+          <div className="cc-flow-lr-pipeline">
+            {sgLayout.layers.map((layer, lIdx) => {
+              const nextLayer = sgLayout.layers[lIdx + 1];
+              const link = nextLayer
+                ? sgLayout.validLinks.find(
+                    (l) => layer.includes(l.from) && nextLayer.includes(l.to) && l.label
+                  )
+                : undefined;
+              return (
+                <React.Fragment key={lIdx}>
+                  <div className="cc-flow-lr-step">
+                    {layer.map((nId) => renderNodeCard(nId, sgLayout.layers.length >= 3))}
+                  </div>
+                  {nextLayer && renderHorizontalArrow(link?.label, `sg-arr-${lIdx}`)}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="cc-flow-td-stack">
+            {sgLayout.layers.map((layer, lIdx) => {
+              const nextLayer = sgLayout.layers[lIdx + 1];
+              const link = nextLayer
+                ? sgLayout.validLinks.find(
+                    (l) => layer.includes(l.from) && nextLayer.includes(l.to) && l.label
+                  )
+                : undefined;
+              return (
+                <React.Fragment key={lIdx}>
+                  <div
+                    className="cc-flow-td-grid"
+                    style={{
+                      gridTemplateColumns: `repeat(${layer.length}, minmax(0, 1fr))`
+                    }}
+                  >
+                    {layer.map((nId) => renderNodeCard(nId, layer.length >= 3))}
+                  </div>
+                  {nextLayer &&
+                    renderVerticalConnector(
+                      layer.length,
+                      nextLayer.length,
+                      link?.label,
+                      `sg-vc-${lIdx}`
+                    )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // 计算顶层布局
+  const topItemIds: string[] = [];
+  for (const sgId of ast.subgraphs.keys()) topItemIds.push(sgId);
+  for (const [nId, nObj] of ast.nodes.entries()) {
+    if (!nObj.subgraphId) topItemIds.push(nId);
+  }
+
+  const ownerFn = (id: string) => {
+    if (ast.subgraphs.has(id)) return id;
+    const n = ast.nodes.get(id);
+    return n && n.subgraphId ? n.subgraphId : id;
+  };
+
+  const topLayout = computeTopologicalLayers(topItemIds, ast.edges, ownerFn);
+  const isPureHorizontal = ast.rootDirection === 'LR' && ast.subgraphs.size === 0;
+
+  // 计算顶层某层的输入/输出视觉端口数
+  const getLayerVisualPorts = (layerIds: string[], isOutput: boolean): number => {
+    if (layerIds.length > 1) return layerIds.length;
+    const singleId = layerIds[0];
+    if (ast.subgraphs.has(singleId)) {
+      const sg = ast.subgraphs.get(singleId)!;
+      if (sg.direction === 'TD') {
+        const sgLayout = computeTopologicalLayers(sg.nodeIds, ast.edges, (x) => x);
+        if (sgLayout.layers.length > 0) {
+          const targetLayer = isOutput
+            ? sgLayout.layers[sgLayout.layers.length - 1]
+            : sgLayout.layers[0];
+          return targetLayer.length;
+        }
+      }
+    }
+    return 1;
   };
 
   return (
@@ -224,19 +663,74 @@ export function MermaidDiagram({
               <span>{copied ? '已复制' : '复制代码'}</span>
             </button>
           </div>
-          <pre><code>{chart.trim()}</code></pre>
+          <pre>
+            <code>{chart.trim()}</code>
+          </pre>
         </div>
       )}
 
-      <div className="cc-mermaid-canvas" ref={containerRef}>
-        {svgHtml ? (
-          <div className="cc-mermaid-svg-wrapper" dangerouslySetInnerHTML={{ __html: svgHtml }} />
-        ) : error ? (
-          <div className="cc-mermaid-error">
-            <pre><code>{chart}</code></pre>
+      <div className="cc-mermaid-canvas">
+        {isPureHorizontal ? (
+          <div className="cc-flow-lr-master">
+            <div className="cc-flow-lr-pipeline is-five-step">
+              {topLayout.layers.map((layer, lIdx) => {
+                const nextLayer = topLayout.layers[lIdx + 1];
+                const link = nextLayer
+                  ? topLayout.validLinks.find(
+                      (l) => layer.includes(l.from) && nextLayer.includes(l.to) && l.label
+                    )
+                  : undefined;
+                return (
+                  <React.Fragment key={lIdx}>
+                    <div className="cc-flow-lr-step">
+                      {layer.map((id) => renderNodeCard(id, true))}
+                    </div>
+                    {nextLayer && renderHorizontalArrow(link?.label, `top-lr-${lIdx}`)}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+            <div className="cc-flow-loop-footer">
+              <span>🔄 端到端数据安全与产值守恒闭环：安全建库 ➔ 人员与合同锚定 ➔ 防透支排期 ➔ 月底100%核验发布 ➔ 跨项目穿透汇总</span>
+            </div>
           </div>
         ) : (
-          <div className="cc-mermaid-loading">正在渲染高质量图表...</div>
+          <div className="cc-flow-td-stack is-root">
+            {topLayout.layers.map((layer, lIdx) => {
+              const nextLayer = topLayout.layers[lIdx + 1];
+              const link = nextLayer
+                ? topLayout.validLinks.find(
+                    (l) => layer.includes(l.from) && nextLayer.includes(l.to) && l.label
+                  )
+                : undefined;
+              const isSingleStandaloneNode =
+                layer.length === 1 &&
+                !ast.subgraphs.has(layer[0]) &&
+                ast.subgraphs.size === 0;
+
+              return (
+                <React.Fragment key={lIdx}>
+                  <div
+                    className={`cc-flow-td-grid ${isSingleStandaloneNode ? 'is-centered-node' : ''}`}
+                    style={{
+                      gridTemplateColumns: `repeat(${layer.length}, minmax(0, 1fr))`
+                    }}
+                  >
+                    {layer.map((id) =>
+                      ast.subgraphs.has(id) ? renderSubgraphBox(id) : renderNodeCard(id)
+                    )}
+                  </div>
+                  {nextLayer &&
+                    renderVerticalConnector(
+                      getLayerVisualPorts(layer, true),
+                      getLayerVisualPorts(nextLayer, false),
+                      link?.label,
+                      `top-vc-${lIdx}`
+                    )}
+                </React.Fragment>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
@@ -973,11 +1467,10 @@ export function DocArticleContent({
               title={isEn ? '5-Step Closed-Loop Business Workflow' : '🧭 衡绩系统 5 步核心业务闭环总览流程图'}
               subtitle={isEn ? 'End-to-End Workflow: Workspace ➔ Subjects ➔ Scheduling ➔ Matrix ➔ Rollup & Stars' : '端到端业务流：建库 ➔ 初始化 ➔ 排期 ➔ 月底考评 ➔ 归集与荣誉'}
               chart={`flowchart LR
-    S1["<b>STEP 1</b><br/>🏢 <b>新建安全工作区</b><br/>• .hengji 本地文件存储<br/>• AES-256 口令加密"] 
-    -->|第一步完成| S2["<b>STEP 2</b><br/>👥 <b>初始化业务主体</b><br/>• 导入部门员工花名册<br/>• 导入工程合同与工作令"]
-    -->|第二步完成| S3["<b>STEP 3</b><br/>📊 <b>顶层防透支排期</b><br/>• 全周期 100% 额度配比<br/>• 前低后高稳健交付锚定"]
-    -->|第三步完成| S4["<b>STEP 4</b><br/>⚡ <b>月底考评与发布</b><br/>• 全项目透视集中大表<br/>• 团队比例 100% 闭环核验<br/>• 🚀 一键批量数字签名发布"]
-    -->|第四步完成| S5["<b>STEP 5</b><br/>🏆 <b>财务报表与荣誉殿堂</b><br/>• 横向个人 · 纵向项目双向对齐<br/>• BigInt 分毫不差最大余数补差<br/>• 月度/季度/年度绩星榜"]
+    S1["<b>STEP 1</b><br/>🏢 <b>新建安全工作区</b><br/>• .hengji 本地文件存储<br/>• AES-256 口令加密"] -->|第一步完成| S2["<b>STEP 2</b><br/>👥 <b>初始化业务主体</b><br/>• 导入部门员工花名册<br/>• 导入工程合同与工作令"]
+    S2 -->|第二步完成| S3["<b>STEP 3</b><br/>📊 <b>顶层防透支排期</b><br/>• 全周期 100% 额度配比<br/>• 前低后高稳健交付锚定"]
+    S3 -->|第三步完成| S4["<b>STEP 4</b><br/>⚡ <b>月底考评与发布</b><br/>• 全项目透视集中大表<br/>• 团队比例 100% 闭环核验<br/>• 🚀 一键批量数字签名发布"]
+    S4 -->|第四步完成| S5["<b>STEP 5</b><br/>🏆 <b>财务报表与荣誉殿堂</b><br/>• 横向个人 · 纵向项目双向对齐<br/>• BigInt 分毫不差最大余数补差<br/>• 月度/季度/年度绩星榜"]
 
     style S1 fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#9a3412
     style S2 fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e40af
@@ -1106,9 +1599,8 @@ export function DocArticleContent({
                 chart={`flowchart LR
     subgraph Whole["🎯 工程项目全周期 100% 额度硬顶锁定 (1 绩点 ≡ 1 万元合同产值)"]
         direction LR
-        P1["<b>Phase 1: 前期立项与论证</b><br/>• 额度限高：<b>0% ~ 10%</b> (默认 5%)<br/>• <b>刚性红线约束</b><br/>• 彻底防止项目立项即瓜分透支"]
-        -->|前低递进| P2["<b>Phase 2: 主体研制与交付</b><br/>• 额度递增：锁定 <b>45%+ 核心大头</b><br/>• <b>交付成果强锚定</b><br/>• 重金激励出厂试验与发货攻坚"]
-        -->|保底闭环| P3["<b>Phase 3: 现场维保与验收</b><br/>• 额度保留：刚性锁定 <b>5%</b><br/>• <b>售后履约保障</b><br/>• 杜绝发货后人员撂挑子不管售后"]
+        P1["<b>Phase 1: 前期立项与论证</b><br/>• 额度限高：<b>0% ~ 10%</b> (默认 5%)<br/>• <b>刚性红线约束</b><br/>• 彻底防止项目立项即瓜分透支"] -->|前低递进| P2["<b>Phase 2: 主体研制与交付</b><br/>• 额度递增：锁定 <b>45%+ 核心大头</b><br/>• <b>交付成果强锚定</b><br/>• 重金激励出厂试验与发货攻坚"]
+        P2 -->|保底闭环| P3["<b>Phase 3: 现场维保与验收</b><br/>• 额度保留：刚性锁定 <b>5%</b><br/>• <b>售后履约保障</b><br/>• 杜绝发货后人员撂挑子不管售后"]
     end
 
     Whole --> Verify["⚖️ <b>全周期闭环校验</b>：所有月份额度百分比之和严格必须 ＝ 100.00%"]
