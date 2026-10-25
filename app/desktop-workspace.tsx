@@ -364,7 +364,42 @@ function BrandLogo({ size = 52 }: { size?: number }) {
     </div>
   );
 }
-const DualBrandLogo = BrandLogo;
+
+function DualBrandLogo({ size = 32 }: { size?: number }) {
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+      <img
+        src={brandHengSeal}
+        alt="衡"
+        width={size}
+        height={size}
+        style={{
+          width: size,
+          height: size,
+          objectFit: 'contain',
+          display: 'inline-block',
+          verticalAlign: 'middle',
+          flexShrink: 0,
+          filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.2))',
+        }}
+      />
+      <img
+        src={brandBurstFlower}
+        alt="衡绩"
+        width={size}
+        height={size}
+        style={{
+          width: size,
+          height: size,
+          objectFit: 'contain',
+          display: 'inline-block',
+          verticalAlign: 'middle',
+          flexShrink: 0,
+        }}
+      />
+    </div>
+  );
+}
 
 // -------------------------------------------------------------
 // 现代八彩花瓣品牌标 (Flower Brand Logo: 八彩花瓣图标)
@@ -4778,9 +4813,8 @@ function ManualModal({
 
             <div className="manual-sidebar-author">
               <div style={{ fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>衡绩考核系统团队</div>
-              <div><b>作者</b>: 邹富敦 (Phudon Zou)</div>
               <div><b>团队</b>: TOPFIRE 研发团队</div>
-              <div><b>支持</b>: zoufudun@163.com</div>
+              <div><b>支持</b>: phudoncou@outlook.com</div>
             </div>
           </div>
 
@@ -5169,8 +5203,8 @@ function ManualModal({
                   </div>
 
                   <div className="manual-callout-box">
-                    <div><b>手册制作</b>：邹富敦 (Phudon Zou) / TOPFIRE 研发团队</div>
-                    <div><b>技术支持邮箱</b>：zoufudun@163.com</div>
+                    <div><b>手册制作</b>：TOPFIRE 研发团队</div>
+                    <div><b>技术支持邮箱</b>：phudoncou@outlook.com</div>
                     <div style={{ fontSize: '11.5px', marginTop: '4px', opacity: 0.85 }}>如有任何需求变更或系统建议，欢迎通过技术支持邮箱随时联系我们。</div>
                   </div>
                 </div>

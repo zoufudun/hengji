@@ -2617,8 +2617,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
 }
 
 .cc-brand-flower {
-  width: 25px;
-  height: 25px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
   transition: transform 0.3s ease;
 }
@@ -3186,31 +3186,28 @@ button:disabled{opacity:.55;cursor:not-allowed}
 }
 
 .hj-real-dual-logo {
-  position: relative;
-  width: 32px;
-  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   flex-shrink: 0;
 }
 
 .hj-real-dual-logo .seal-img {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 4px;
 }
 
 .hj-real-dual-logo .flower-badge {
-  position: absolute;
-  right: -4px;
-  bottom: -4px;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: #e6dfd1;
-  padding: 1px;
-}
-
-.cc-parchment-root.cc-dark .hj-real-dual-logo .flower-badge {
-  background: #142822;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .hj-real-brand strong {

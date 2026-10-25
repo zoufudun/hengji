@@ -2531,10 +2531,10 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.7.9';
+export const APP_VERSION = '0.7.10';
 export const APP_BUILD = '20261025';
-export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
-export const APP_CONTACT = 'zoufudun@163.com';
+export const APP_AUTHOR = 'TOPFIRE 研发团队';
+export const APP_CONTACT = 'phudoncou@outlook.com';
 
 // 官方代码与发布仓库及 GitHub Pages
 export const GITHUB_REPO = 'zoufudun/hengji';
@@ -2694,6 +2694,18 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.7.10',
+    date: '2026-10-25',
+    tag: '重大更新',
+    title: '全页面支持英文无缝切换、双图标并排等大设计、更新官方联系与支持邮箱',
+    items: [
+      '【全页面中英文深度本地化无缝切换】官方主页全面支持多语言无缝切换：官网导航、首屏宣介、六大能力卡片、五步业务闭环、四格式客户端下载矩阵、交互式工作区预览窗口以及常见问答（FAQ）全要素 100% 深度英文本地化支持，点击右上角【EN / CN】按钮即可实时切换，语言偏好自动本地记忆。',
+      '【侧边栏与品牌徽标并排等大呈现】重构“衡”字古典金黄印章与“八彩花瓣”现代品牌标的双标展示形态，消除右上角遮挡角标，改为高雅美观的双图标并排等大（28px × 28px）平铺展示，视觉更匀称大气。',
+      '【规范开发团队与官方联系邮箱】更新系统开发团队标识为【TOPFIRE 研发团队】，官方技术支持与联系邮箱统一修改为 phudoncou@outlook.com。',
+      '【版本升级与分发矩阵全量同步】系统版本正式更新至 v0.7.10，GitHub Releases 与 GitHub Pages 在线演示矩阵全量同步更新发布。'
+    ]
+  },
   {
     version: 'v0.7.9',
     date: '2026-10-25',

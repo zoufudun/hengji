@@ -1,8 +1,8 @@
 {
   "name": "site-creator-vinext-starter",
-  "version": "0.7.9",
+  "version": "0.7.10",
   "description": "TOPFIRE 衡绩员工绩点考核系统 - 桌面离线版",
-  "author": "邹富敦 (Phudon Zou) / TOPFIRE 研发团队",
+  "author": "TOPFIRE 研发团队",
   "private": true,
   "main": "scripts/workspace-main.cjs",
   "engines": {
