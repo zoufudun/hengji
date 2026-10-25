@@ -2933,6 +2933,107 @@ button:disabled{opacity:.55;cursor:not-allowed}
   max-width: 390px;
 }
 
+.cc-hero-buttons-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  width: 100%;
+}
+
+.cc-btn-hero-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 22px;
+  border-radius: 10px;
+  background: #c85a32;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(200, 90, 50, 0.28);
+  transition: all 0.18s ease;
+  text-decoration: none;
+}
+
+.cc-btn-hero-primary:hover {
+  background: #b04822;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(200, 90, 50, 0.35);
+}
+
+.cc-parchment-root.cc-dark .cc-btn-hero-primary {
+  background: #10b981;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.cc-parchment-root.cc-dark .cc-btn-hero-primary:hover {
+  background: #059669;
+}
+
+.cc-btn-hero-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: 10px;
+  background: var(--cc-card);
+  color: var(--cc-text);
+  border: 1px solid var(--cc-border-strong);
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  text-decoration: none;
+}
+
+.cc-btn-hero-secondary:hover {
+  background: var(--cc-surface-hover);
+  border-color: var(--cc-terracotta);
+  color: var(--cc-terracotta);
+  transform: translateY(-2px);
+}
+
+.cc-btn-hero-docs {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: 10px;
+  background: var(--cc-card);
+  color: var(--cc-text-secondary);
+  border: 1px solid var(--cc-border-strong);
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  text-decoration: none;
+}
+
+.cc-btn-hero-docs:hover {
+  background: var(--cc-surface-hover);
+  border-color: var(--cc-border-strong);
+  color: var(--cc-text);
+  transform: translateY(-2px);
+}
+
+.cc-hero-env-note {
+  font-size: 12px;
+  color: var(--cc-text-muted);
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.02em;
+}
+
 .cc-btn-col {
   display: flex;
   flex-direction: column;

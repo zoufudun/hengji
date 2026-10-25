@@ -34,7 +34,7 @@ async function deploy() {
   execSync('git config user.email "zoufudun@163.com"', { cwd: tempDir, stdio: 'ignore' });
   execSync('git checkout -b gh-pages', { cwd: tempDir, stdio: 'ignore' });
   execSync('git add -A', { cwd: tempDir, stdio: 'ignore' });
-  execSync('git commit -m "deploy: update GitHub Pages with v0.7.9 fix"', { cwd: tempDir, stdio: 'ignore' });
+  execSync('git commit -m "deploy: update GitHub Pages with v0.7.10 (full english i18n & equal dual logos)"', { cwd: tempDir, stdio: 'ignore' });
   
   console.log('Pushing to gh-pages remote...');
   execSync(`git push --force "${repoUrl}" gh-pages`, { cwd: tempDir, stdio: 'inherit' });

@@ -457,68 +457,40 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                     : '统一管理你的工程项目与团队绩效考核工作流'}
                 </p>
 
-                <p className="cc-hero-subdesc">
-                  {isEn
-                    ? 'Tailored for multi-project, long-lifecycle, and cross-functional teams (General, Product, R&D). Seamlessly integrates total contract quota management, phased overdraft prevention, monthly merit allocation, offline cross-project data aggregation, and top performers recognition—delivering an auditable, end-to-end quantitative performance loop.'
-                    : '专为多项目、长周期、跨专业组（总体组 / 产品组 / 研发组）团队打造。将合同总额管控、全周期前低后高防透支规划、月底集中考评分配、跨项目数据包流转汇总与卓越绩星评选融为一体，告别繁琐易错的 Excel 手工台账，构建分毫不差的端到端量化考核闭环。'}
-                </p>
-
-                <div className="cc-hero-buttons">
+                <div className="cc-hero-buttons-row">
                   <button
                     type="button"
-                    className="cc-btn-terracotta"
-                    onClick={() => onLaunchDemo('dashboard', 'general')}
+                    className="cc-btn-hero-primary"
+                    onClick={() => navigatePage('download')}
                   >
-                    <Play size={16} fill="currentColor" />
-                    <div className="cc-btn-col">
-                      <strong>{isEn ? 'Try Online Now' : '立即在线体验软件'}</strong>
-                      <small>{isEn ? 'Zero install · Run full workspace in browser' : '免安装 · 浏览器直接运行完整工作台'}</small>
-                    </div>
+                    <Download size={16} />
+                    <span>{isEn ? 'Free Download' : '免费下载'}</span>
                   </button>
 
                   <button
                     type="button"
-                    className="cc-btn-outline"
-                    onClick={() => scrollToHomeSection('home-download-sec')}
+                    className="cc-btn-hero-secondary"
+                    onClick={() => onLaunchDemo('dashboard', 'general')}
                   >
-                    <Download size={16} />
-                    <div className="cc-btn-col">
-                      <strong>{isEn ? 'Download Windows App' : '下载 Windows 桌面离线版'}</strong>
-                      <small>{isEn ? `v${latestVer} · EXE / MSI / Portable / ZIP` : `v${latestVer} · 支持 EXE / MSI / 便携版 / ZIP`}</small>
-                    </div>
+                    <Play size={14} fill="currentColor" />
+                    <span>{isEn ? 'Live Demo' : '在线体验'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="cc-btn-hero-docs"
+                    onClick={() => navigatePage('docs')}
+                  >
+                    <span>{isEn ? 'Documentation →' : '查看文档 →'}</span>
                   </button>
                 </div>
 
-                {/* 左栏底部核心保障指标矩阵 */}
-                <div className="cc-hero-stats-grid">
-                  <div className="cc-hero-stat-card" onClick={() => setActivePreview('data_io')}>
-                    <div className="cc-stat-icon"><ShieldCheck size={16} /></div>
-                    <div>
-                      <strong>{isEn ? 'AES-256 Offline Encryption' : 'AES-256 离线加密'}</strong>
-                      <span>{isEn ? 'Non-system drive · Auto mirror backup' : '非系统盘存储 · 自动镜像备份'}</span>
-                    </div>
-                  </div>
-                  <div className="cc-hero-stat-card" onClick={() => setActivePreview('quota')}>
-                    <div className="cc-stat-icon"><Sliders size={16} /></div>
-                    <div>
-                      <strong>{isEn ? 'Phased Anti-Overdraft' : '前低后高防透支'}</strong>
-                      <span>{isEn ? '5% Inception · Major on Delivery · 5% Warranty' : '5% 争取 · 交付大头 · 5% 维保'}</span>
-                    </div>
-                  </div>
-                  <div className="cc-hero-stat-card" onClick={() => setActivePreview('reports')}>
-                    <div className="cc-stat-icon"><Table2 size={16} /></div>
-                    <div>
-                      <strong>{isEn ? '100% Closed-Loop Verification' : '100% 双向严密闭环'}</strong>
-                      <span>{isEn ? 'BigInt cents · Zero rounding error' : 'BigInt 精确到分 · 零浮点尾差'}</span>
-                    </div>
-                  </div>
-                  <div className="cc-hero-stat-card" onClick={() => setActivePreview('auditor')}>
-                    <div className="cc-stat-icon"><FolderArchive size={16} /></div>
-                    <div>
-                      <strong>{isEn ? 'Cross-Project Aggregation' : '跨项目数据包流转'}</strong>
-                      <span>{isEn ? 'General Admin & Auditor Dual Views' : '综合管理台 · 核算员汇总双视角'}</span>
-                    </div>
-                  </div>
+                <div className="cc-hero-env-note">
+                  <span>
+                    {isEn
+                      ? 'Supports Windows 10+ · Fully Offline · Non-System Drive Security'
+                      : '支持 Windows 10+ · 纯离线免云端 · 非系统盘安全存储'}
+                  </span>
                 </div>
               </div>
 
@@ -2037,13 +2009,14 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
               </div>
               <div className="cc-cl-ver-list">
                 {[
-                  { id: 0, title: isEn ? 'Quick Start & 5-Step Loop' : '快速入门与五步闭环' },
+                  { id: 0, title: isEn ? 'Quick Start & Introduction' : '快速入门与系统介绍' },
                   { id: 1, title: isEn ? '1. Create Encrypted Workspace' : '1. 新建安全加密工作区' },
                   { id: 2, title: isEn ? '2. Import Team & Contracts' : '2. 导入部门员工与合同' },
                   { id: 3, title: isEn ? '3. Phased Anti-Overdraft Schedule' : '3. 稳健交付防透支排期' },
                   { id: 4, title: isEn ? '4. Monthly Allocation & Release' : '4. 月底集中分配与发布' },
                   { id: 5, title: isEn ? '5. Auditor Package Routing' : '5. 核算员数据包流转' },
                   { id: 6, title: isEn ? 'Audit Standards & FAQs' : '考核口径与常见问题' },
+                  { id: 7, title: isEn ? 'Remote Push, Build & Deploy Guide' : '远程推送与发布部署教程' },
                 ].map(ch => (
                   <button
                     key={ch.id}
@@ -2062,13 +2035,13 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
               {docSection === 0 && (
                 <>
                   <div className="cc-cl-article-header">
-                    <h1>{isEn ? 'HengJi Quick Start & 5-Step Closed Loop' : '衡绩 (HengJi) 快速入门与五步闭环'}</h1>
+                    <h1>{isEn ? 'HengJi Quick Start & System Introduction' : '衡绩 (HengJi) 快速入门与系统介绍'}</h1>
                     <span className="cc-cl-date">{isEn ? `v${APP_VERSION} Official Manual` : `v${APP_VERSION} 官方手册`}</span>
                   </div>
                   <p className="cc-cl-summary">
                     {isEn
-                      ? 'HengJi is an offline-secure quantitative employee merit evaluation system built for multi-project, long-lifecycle, and cross-functional engineering and research teams. Run offline on Windows desktop or test directly in your browser sandbox.'
-                      : '衡绩是一套面向多项目、长周期、跨专业组（总体组 / 产品组 / 研发组）工程与科研团队的离线安全员工绩点量化考核系统。您既可以下载 Windows 桌面客户端在纯内网离线使用，也可以随时点击顶部【在线体验】在浏览器沙盒中直接操作。'}
+                      ? 'Tailored for multi-project, long-lifecycle, and cross-functional teams (General, Product, R&D). Seamlessly integrates total contract quota management, phased overdraft prevention, monthly merit allocation, offline cross-project data aggregation, and top performers recognition—delivering an auditable, end-to-end quantitative performance loop. You can download the Windows desktop client for offline intranet use or click [Live Demo] to experience it directly in your browser sandbox.'
+                      : '专为多项目、长周期、跨专业组（总体组 / 产品组 / 研发组）团队打造。将合同总额管控、全周期前低后高防透支规划、月底集中考评分配、跨项目数据包流转汇总与卓越绩星评选融为一体，告别繁琐易错的 Excel 手工台账，构建分毫不差的端到端量化考核闭环。您既可以下载 Windows 桌面客户端在纯内网离线使用，也可以随时点击顶部【在线体验】在浏览器沙盒中直接操作。'}
                   </p>
                   <hr className="cc-cl-divider" />
                   <section className="cc-cl-sec">
@@ -2279,6 +2252,75 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                         {isEn ? 'Project leader reference range: 10% – 30%.' : '项目负责人参考系数区间为 10% – 30%。'}
                       </li>
                     </ul>
+                  </section>
+                </>
+              )}
+
+              {docSection === 7 && (
+                <>
+                  <div className="cc-cl-article-header">
+                    <h1>{isEn ? 'Remote Push, Build & Deployment Guide' : '远程推送与发布部署教程'}</h1>
+                    <span className="cc-cl-date">{isEn ? 'Manual Command-Line Workflow' : '纯命令行手动操作标准流程'}</span>
+                  </div>
+                  <p className="cc-cl-summary">
+                    {isEn
+                      ? 'Detailed step-by-step instructions for manual terminal operations: Git commits, tagging, cross-packaging desktop installers (EXE/MSI/Portable/ZIP), GitHub Releases publication, and GitHub Pages deployment.'
+                      : '本教程专为纯命令行手动操作编写，详细拆解了如何一步一步使用标准命令完成代码提交、远程标签推送、桌面端四种安装格式编译打包、GitHub Releases 官方发布与 GitHub Pages 静态站点部署。'}
+                  </p>
+                  <hr className="cc-cl-divider" />
+
+                  <section className="cc-cl-sec">
+                    <h2>{isEn ? '1. Preparation: Versioning & Testing' : '1. 准备阶段：版本号统一与单元测试'}</h2>
+                    <p>{isEn ? 'Verify package.json and lib/core.ts version numbers, then execute the automated test suite:' : '在每次发布前，确保各个配置文件的版本号一致，并通过算法一致性测试：'}</p>
+                    <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
+                      <code>npm test</code>
+                    </pre>
+                    <small style={{ color: 'var(--cc-text-muted)' }}>
+                      {isEn ? '✔ Pass criteria: all 37 core unit tests and 9 auditor tests pass with green checks.' : '✔ 通过指标：37 项核心单测与 9 项核算员测试全部绿灯通过。'}
+                    </small>
+                  </section>
+
+                  <section className="cc-cl-sec">
+                    <h2>{isEn ? '2. Step 1: Push Code & Tags to GitHub' : '2. 步骤一：手动将代码与版本标签推送到 GitHub'}</h2>
+                    <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
+                      <code>{`git status\ngit add .\ngit commit -m "release: v${latestVer} - update and improvements"\ngit tag -a v${latestVer} -m "release v${latestVer}"\ngit push origin main\ngit push origin v${latestVer}`}</code>
+                    </pre>
+                  </section>
+
+                  <section className="cc-cl-sec">
+                    <h2>{isEn ? '3. Step 2: Build & Package Desktop Installers' : '3. 步骤二：手动编译与打包桌面端全套安装矩阵'}</h2>
+                    <p>
+                      {isEn
+                        ? 'HengJi provides 4 distribution formats: EXE (NSIS Wizard), MSI (Enterprise Installer), Portable (Single Exe), and ZIP (Green Archive).'
+                        : '衡绩系统提供 4 种独立的分发格式：EXE 安装向导版、MSI 企业级安装包、Portable 便携单文件与 ZIP 绿色解压版。'}
+                    </p>
+                    <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
+                      <code>{`# 1. 前端 Bundle 生产编译\nnpx vite build --config vite.desktop.config.ts\n\n# 2. 构建 EXE、MSI 与 Portable 单文件\nnpx electron-builder --win nsis msi portable\n\n# 3. 压缩打包 ZIP 绿色完整包\nnode scripts/build-zip.mjs`}</code>
+                    </pre>
+                  </section>
+
+                  <section className="cc-cl-sec">
+                    <h2>{isEn ? '4. Step 3: Publish to GitHub Releases' : '4. 步骤三：发布至 GitHub Releases 并上传安装包'}</h2>
+                    <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
+                      <code>node scripts/publish-release-github.mjs</code>
+                    </pre>
+                    <small style={{ color: 'var(--cc-text-muted)' }}>
+                      {isEn ? 'Auto-uploads 4 installer binaries to GitHub Release tag with download URLs.' : '脚本自动将 4 个分发文件上传至 GitHub Release 页面，无需手动在网页后台拖拽。'}
+                    </small>
+                  </section>
+
+                  <section className="cc-cl-sec">
+                    <h2>{isEn ? '5. Step 4: Deploy Static Website to GitHub Pages' : '5. 步骤四：部署静态网页至 GitHub Pages'}</h2>
+                    <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
+                      <code>{`# 1. 编译网页端静态资源\nnpm run pages:build\n\n# 2. 推送至 gh-pages 分支完成部署\nnode scripts/deploy-pages.mjs`}</code>
+                    </pre>
+                  </section>
+
+                  <section className="cc-cl-sec">
+                    <h2>{isEn ? '6. Full Release Terminal One-Liner' : '6. 💡 全流程一键连续执行速查'}</h2>
+                    <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
+                      <code>npm test &amp;&amp; npm run desktop:pack &amp;&amp; npm run pages:build &amp;&amp; node scripts/publish-release-github.mjs &amp;&amp; node scripts/deploy-pages.mjs</code>
+                    </pre>
                   </section>
                 </>
               )}
