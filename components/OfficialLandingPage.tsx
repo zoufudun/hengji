@@ -3,14 +3,19 @@ import React, { useState, useEffect } from 'react';
 import {
   Award,
   BarChart3,
+  BookOpen,
+  BookOpenCheck,
   BriefcaseBusiness,
   Calculator,
+  Calendar,
   CalendarRange,
   Check,
+  ChevronDown,
   ChevronRight,
   CircleGauge,
   Copy,
   Crown,
+  Database,
   Download,
   ExternalLink,
   FileSpreadsheet,
@@ -18,21 +23,22 @@ import {
   FolderKanban,
   Globe,
   HardDrive,
-  Lock,
+  Info,
   Moon,
   Package,
   Play,
+  Plus,
+  Save,
   ShieldCheck,
   Sliders,
   Sparkles,
   Sun,
   Table2,
   Tag,
+  TrendingUp,
   Trophy,
   Users,
-  ArrowRight,
-  BookOpen,
-  Calendar
+  ArrowRight
 } from 'lucide-react';
 import {
   APP_VERSION,
@@ -77,14 +83,14 @@ function categorizeVersionItems(ver: VersionUpdate) {
 
 export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) {
   const [pageView, setPageView] = useState<PageView>('home');
-  // 支持暖羊皮纸 (parchment) 与 图1~图5一致的初始暗色翡翠主题 (dark) 一键切换
+  // 支持暖羊皮纸 (parchment) 与 初始暗色翡翠主题 (dark) 一键切换
   const [theme, setTheme] = useState<'parchment' | 'dark'>('parchment');
   const [lang, setLang] = useState<'zh' | 'en'>('zh');
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
 
-  // 首屏右侧交互式软件预览窗口状态（对应图5的六大核心模块预览）
-  const [activePreview, setActivePreview] = useState<PreviewTabKey>('stars');
-  // 五步闭环高亮状态（对应图2）
+  // 首屏右侧交互式软件预览窗口状态（默认展示与真实界面一致的全景总览驾驶舱）
+  const [activePreview, setActivePreview] = useState<PreviewTabKey>('dashboard');
+  // 五步闭环高亮状态
   const [activeStep, setActiveStep] = useState<number>(0);
 
   // 更新日志页状态
@@ -143,14 +149,13 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
     }
   };
 
-  // 图5：六大实景交互模块配置
+  // 六大实景交互模块配置（单行紧凑排列）
   const previewModules: Array<{
     key: PreviewTabKey;
     label: string;
     badge: string;
     icon: React.ReactNode;
-    title: string;
-    subtitle: string;
+    topbarTitle: string;
     targetTab: string;
     workspace: 'general' | 'auditor';
   }> = [
@@ -158,9 +163,8 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
       key: 'dashboard',
       label: '全景驾驶舱',
       badge: '实时监控',
-      icon: <CircleGauge size={14} />,
-      title: '部门全局绩效驾驶舱与专业组效能对比',
-      subtitle: '实时聚合总体组、产品组、研发组三大编制维度，直观掌控合同总额、已核销绩点与剩余待分配池。',
+      icon: <CircleGauge size={13} />,
+      topbarTitle: '全景总览驾驶舱',
       targetTab: 'dashboard',
       workspace: 'general'
     },
@@ -168,9 +172,8 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
       key: 'quota',
       label: '稳健交付防透支',
       badge: '核心首创',
-      icon: <Sliders size={14} />,
-      title: '全周期“前低后高”稳健防透支额度排期引擎',
-      subtitle: '前期项目争取阶段限高 0%~10%（默认 5%），主体研制与成品发货锁定大头（45%+），末月强制保留 5% 售后维保额度。',
+      icon: <Sliders size={13} />,
+      topbarTitle: '项目全周期管理',
       targetTab: 'projects',
       workspace: 'general'
     },
@@ -178,9 +181,8 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
       key: 'plans',
       label: '月底集中大表',
       badge: '告别繁琐',
-      icon: <CalendarRange size={14} />,
-      title: '全项目当月集中透视分配与一键批量发布',
-      subtitle: '无需逐个点开几十个项目！月底所有在研项目集中呈现在同一张透视大表中，一键套用规划额度、100% 校验成员比例并批量发布。',
+      icon: <CalendarRange size={13} />,
+      topbarTitle: '月度绩效分配',
       targetTab: 'plans',
       workspace: 'general'
     },
@@ -188,9 +190,8 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
       key: 'auditor',
       label: '数据包流转汇总',
       badge: '离线协同',
-      icon: <FolderArchive size={14} />,
-      title: '项目负责人导出数据包 → 核算员一键拖拽汇总',
-      subtitle: '纯离线环境下的多角色协同方案：各项目经理导出名下项目绩点包（.json），核算员批量导入即可按唯一工号自动去重合并出表。',
+      icon: <FolderArchive size={13} />,
+      topbarTitle: '全员跨项目绩效总表',
       targetTab: 'auditor',
       workspace: 'auditor'
     },
@@ -198,9 +199,8 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
       key: 'reports',
       label: '双向闭环矩阵',
       badge: '分毫不差',
-      icon: <Table2 size={14} />,
-      title: '人员 × 项目二维透视矩阵（横向与纵向 100% 严密闭环）',
-      subtitle: '底层基于 BigInt 精确到分与最大余额补差法，彻底消除浮点数尾差；导出 CSV 直接兼容财务审计与工资核算。',
+      icon: <Table2 size={13} />,
+      topbarTitle: '多周期汇总报表',
       targetTab: 'reports',
       workspace: 'general'
     },
@@ -208,15 +208,14 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
       key: 'stars',
       label: '卓越绩星殿堂',
       badge: '荣誉激励',
-      icon: <Trophy size={14} />,
-      title: '月度 / 季度 / 年度 卓越绩星自动评选殿堂',
-      subtitle: '基于已发布的真实项目贡献绩点，自动生成冠亚季军荣耀金榜、月度领跑之星、季度卓越标兵与年度功勋领航之星，让实干者脱颖而出。',
+      icon: <Trophy size={13} />,
+      topbarTitle: '卓越绩星荣誉殿堂',
       targetTab: 'stars',
       workspace: 'general'
     }
   ];
 
-  // 图2：五步构建端到端量化绩效考核闭环
+  // 五步构建端到端量化绩效考核闭环
   const workflowSteps = [
     {
       step: 'STEP 01',
@@ -260,12 +259,30 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
     }
   ];
 
-  const currentModule = previewModules.find(m => m.key === activePreview) || previewModules[5];
+  const currentModule = previewModules.find(m => m.key === activePreview) || previewModules[0];
   const currentVersionObj = UPDATE_HISTORY[selectedVerIdx] || UPDATE_HISTORY[0];
   const currentCategorized = categorizeVersionItems(currentVersionObj);
 
   return (
     <div className={`cc-parchment-root ${theme === 'dark' ? 'cc-dark' : ''}`}>
+      {/* ==================== 网页最顶部通告条 (严格对齐图3) ==================== */}
+      <div className="hj-top-announcement">
+        <div className="hj-announcement-inner">
+          <span className="hj-announcement-tag">NEW v{latestVer}</span>
+          <span>
+            衡绩 (HengJi) 全新发布：支持 MSI/EXE/ZIP 四种无终端静默部署、非系统盘安全存储与全项目数据包流转汇总！
+          </span>
+          <button
+            type="button"
+            className="hj-announcement-link"
+            onClick={() => onLaunchDemo('dashboard', 'general')}
+          >
+            <span>立即进入在线工作台体验</span>
+            <ArrowRight size={13} />
+          </button>
+        </div>
+      </div>
+
       {/* ==================== 顶部导航栏 ==================== */}
       <header className="cc-header">
         <div className="cc-header-inner">
@@ -332,7 +349,7 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
               type="button"
               className="cc-theme-btn"
               onClick={() => setTheme(theme === 'parchment' ? 'dark' : 'parchment')}
-              title={theme === 'parchment' ? '切换至深色翡翠主题 (图1~5暗色风格)' : '切换至暖羊皮纸主题'}
+              title={theme === 'parchment' ? '切换至深色翡翠主题' : '切换至暖羊皮纸主题'}
             >
               {theme === 'parchment' ? <Moon size={16} /> : <Sun size={16} />}
             </button>
@@ -352,16 +369,16 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
         </div>
       </header>
 
-      {/* ==================== 视图 1：首页 (首屏左右分栏展示图5内容 + 向下滚动依次保留图1至图4) ==================== */}
+      {/* ==================== 视图 1：首页 ==================== */}
       {pageView === 'home' && (
         <main className="cc-home-scroll-container">
-          {/* 首屏：采用左右分栏布局，融入图5的核心文案、徽章、六大模块切换标签与实景交互窗口 */}
+          {/* 首屏：左右分栏布局 */}
           <section className="cc-hero-split-section">
             <div className="cc-hero-glow cc-glow-1" />
             <div className="cc-hero-glow cc-glow-2" />
 
             <div className="cc-hero-split">
-              {/* 左栏：品牌价值主张 + 图5核心标语 + 操作按钮 + 四大安全精度徽章 */}
+              {/* 左栏：品牌价值主张 + 核心标语 + 操作按钮 (已按要求删除图5的四枚底部小徽章) */}
               <div className="cc-hero-left">
                 <button
                   type="button"
@@ -408,7 +425,7 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                     <Play size={16} fill="currentColor" />
                     <div className="cc-btn-col">
                       <strong>{isEn ? 'Try Online Now' : '立即在线体验软件'}</strong>
-                      <small>免安装 · 浏览器直接运行完整交互工作台</small>
+                      <small>免安装 · 浏览器直接运行完整工作台</small>
                     </div>
                   </button>
 
@@ -433,28 +450,12 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                     <span>体验核算员汇总视角</span>
                   </button>
                 </div>
-
-                {/* 图5的四枚核心安全与精度徽章 */}
-                <div className="cc-hero-mini-badges">
-                  <span className="cc-mini-badge">
-                    <ShieldCheck size={13} /> AES-256-GCM 本地加密存储
-                  </span>
-                  <span className="cc-mini-badge">
-                    <HardDrive size={13} /> 默认非系统盘 (D/E盘) 零残留
-                  </span>
-                  <span className="cc-mini-badge">
-                    <Sliders size={13} /> 前低后高稳健排期 · 维保锁定 5%
-                  </span>
-                  <span className="cc-mini-badge">
-                    <Award size={13} /> BigInt 精确到分 · 行列双向 100% 闭环
-                  </span>
-                </div>
               </div>
 
-              {/* 右栏：图5的六大核心模块切换标签 + 高仿真桌面软件预览窗口 */}
+              {/* 右栏：图2单行六大模块切换栏 + 图1与实际软件界面 1:1 保持一致的窗口 */}
               <div className="cc-hero-right">
-                {/* 六大模块切换标签栏 (对应图5窗口上方的药丸切换器) */}
-                <div className="hj-preview-tabs-bar cc-hero-preview-tabs">
+                {/* 图2：单行紧凑排列的六大模块切换栏 */}
+                <div className="hj-preview-tabs-bar">
                   {previewModules.map(mod => (
                     <button
                       key={mod.key}
@@ -469,439 +470,565 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                   ))}
                 </div>
 
-                {/* 图5 高仿真软件窗口 */}
+                {/* 图1：与实际软件界面 (DesktopWorkspace) 100% 保持一致的真实界面窗口 */}
                 <div className="hj-mockup-window">
-                  <div className="hj-mockup-titlebar">
-                    <div className="hj-window-dots">
-                      <span className="dot red" />
-                      <span className="dot yellow" />
-                      <span className="dot green" />
-                    </div>
-                    <div className="hj-window-title">
-                      <img src={brandBurstFlower} alt="" width={15} height={15} />
-                      <span>衡绩 · 员工绩点考核系统 v{APP_VERSION} — {currentModule.title}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="hj-window-launch-btn"
-                      onClick={() => onLaunchDemo(currentModule.targetTab, currentModule.workspace)}
-                    >
-                      <span>全屏进入此模块真实操作</span>
-                      <ExternalLink size={12} />
-                    </button>
-                  </div>
-
                   <div className="hj-mockup-body">
-                    {/* 窗口左侧深色森林绿导航栏 */}
-                    <div className="hj-mockup-sidebar">
-                      <div className="hj-mock-brand">
-                        <img src={brandHengSeal} alt="" width={28} height={28} style={{ borderRadius: 6 }} />
-                        <div>
-                          <strong>衡绩考核</strong>
-                          <small>ENCRYPTED WORKSPACE</small>
+                    {/* 真实软件左侧深绿导航栏 (复刻 aside.sidebar) */}
+                    <div className="hj-real-sidebar">
+                      <div className="hj-real-brand">
+                        <div className="hj-real-dual-logo">
+                          <img src={brandHengSeal} alt="衡" className="seal-img" />
+                          <img src={brandBurstFlower} alt="" className="flower-badge" />
                         </div>
-                      </div>
-                      <div className="hj-mock-nav-group">核心业务矩阵</div>
-                      <div
-                        className={`hj-mock-nav-item ${activePreview === 'dashboard' ? 'active' : ''}`}
-                        onClick={() => setActivePreview('dashboard')}
-                      >
-                        <CircleGauge size={14} /> <span>全景总览驾驶舱</span>
-                      </div>
-                      <div
-                        className={`hj-mock-nav-item ${activePreview === 'quota' ? 'active' : ''}`}
-                        onClick={() => setActivePreview('quota')}
-                      >
-                        <BriefcaseBusiness size={14} /> <span>项目全周期管理</span>
-                      </div>
-                      <div
-                        className={`hj-mock-nav-item ${activePreview === 'plans' ? 'active' : ''}`}
-                        onClick={() => setActivePreview('plans')}
-                      >
-                        <CalendarRange size={14} /> <span>月度绩效分配</span>
-                      </div>
-                      <div className="hj-mock-nav-group">审计与荣誉殿堂</div>
-                      <div
-                        className={`hj-mock-nav-item ${activePreview === 'auditor' ? 'active' : ''}`}
-                        onClick={() => setActivePreview('auditor')}
-                      >
-                        <Calculator size={14} /> <span>全项目核算汇总</span>
-                      </div>
-                      <div
-                        className={`hj-mock-nav-item ${activePreview === 'reports' ? 'active' : ''}`}
-                        onClick={() => setActivePreview('reports')}
-                      >
-                        <FileSpreadsheet size={14} /> <span>多周期二维矩阵</span>
-                      </div>
-                      <div
-                        className={`hj-mock-nav-item ${activePreview === 'stars' ? 'active' : ''}`}
-                        onClick={() => setActivePreview('stars')}
-                      >
-                        <Trophy size={14} /> <span>卓越绩星荣誉殿堂</span>
+                        <strong>衡绩考核</strong>
                       </div>
 
-                      <div className="hj-mock-sidebar-foot">
-                        <div>📂 D:\衡绩工作区.hengji</div>
-                        <div>🔒 AES-256-GCM 离线受控</div>
-                      </div>
-                    </div>
-
-                    {/* 窗口右侧动态内容区 */}
-                    <div className="hj-mockup-content">
-                      <div className="hj-mockup-header-banner">
-                        <div>
-                          <div className="hj-mockup-eyebrow">LIVE INTERACTIVE MODULE PREVIEW</div>
-                          <h3>{currentModule.title}</h3>
-                          <p>{currentModule.subtitle}</p>
-                        </div>
+                      <div className="hj-real-sec-title">核心业务矩阵</div>
+                      <div className="hj-real-nav">
                         <button
                           type="button"
-                          className="hj-mockup-try-now"
-                          onClick={() => onLaunchDemo(currentModule.targetTab, currentModule.workspace)}
+                          className={activePreview === 'dashboard' ? 'active' : ''}
+                          onClick={() => setActivePreview('dashboard')}
                         >
-                          <Play size={14} fill="currentColor" />
-                          <span>立即在真实工作台中体验</span>
+                          <CircleGauge size={14} />
+                          <span>全景总览驾驶舱</span>
+                          <ChevronRight size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className={activePreview === 'quota' ? 'active' : ''}
+                          onClick={() => setActivePreview('quota')}
+                        >
+                          <BriefcaseBusiness size={14} />
+                          <span>项目全周期管理</span>
+                          <ChevronRight size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className={activePreview === 'plans' ? 'active' : ''}
+                          onClick={() => setActivePreview('plans')}
+                        >
+                          <CalendarRange size={14} />
+                          <span>月度绩效分配</span>
+                          <ChevronRight size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onLaunchDemo('groups', 'general')}
+                        >
+                          <FolderKanban size={14} />
+                          <span>常用项目组矩阵</span>
+                          <ChevronRight size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onLaunchDemo('employees', 'general')}
+                        >
+                          <Users size={14} />
+                          <span>团队编制花名册</span>
+                          <ChevronRight size={12} />
                         </button>
                       </div>
 
-                      {/* 1. 全景驾驶舱预览 */}
-                      {activePreview === 'dashboard' && (
-                        <div className="hj-mock-panel">
-                          <div className="hj-mock-kpi-grid">
-                            <div className="hj-mock-kpi-card emerald">
-                              <span>在研工程项目总数</span>
-                              <strong>12 <small>个核心项目</small></strong>
-                              <em>总体组 4 · 产品组 5 · 研发组 3</em>
-                            </div>
-                            <div className="hj-mock-kpi-card blue">
-                              <span>管控合同总金额</span>
-                              <strong>1,280.00 <small>万元</small></strong>
-                              <em>精确到分 (BigInt 无损核算)</em>
-                            </div>
-                            <div className="hj-mock-kpi-card amber">
-                              <span>累计已核销发放绩点</span>
-                              <strong>542.60 <small>万元</small></strong>
-                              <em>占合同总额 42.39% · 进度健康</em>
-                            </div>
-                            <div className="hj-mock-kpi-card purple">
-                              <span>待分配与售后维保池</span>
-                              <strong>737.40 <small>万元</small></strong>
-                              <em>含 5% 末月强制维保储备金</em>
-                            </div>
-                          </div>
+                      <div className="hj-real-sec-title">效能分析与荣誉殿堂</div>
+                      <div className="hj-real-nav">
+                        <button
+                          type="button"
+                          onClick={() => onLaunchDemo('rules', 'general')}
+                        >
+                          <BookOpenCheck size={14} />
+                          <span>绩效准则与规范</span>
+                          <ChevronRight size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className={activePreview === 'auditor' ? 'active' : ''}
+                          onClick={() => setActivePreview('auditor')}
+                        >
+                          <Calculator size={14} />
+                          <span>全员跨项目总表</span>
+                          <ChevronRight size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className={activePreview === 'stars' ? 'active' : ''}
+                          onClick={() => setActivePreview('stars')}
+                        >
+                          <Trophy size={14} />
+                          <span>卓越绩星荣誉殿堂</span>
+                          <ChevronRight size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className={activePreview === 'reports' ? 'active' : ''}
+                          onClick={() => setActivePreview('reports')}
+                        >
+                          <BarChart3 size={14} />
+                          <span>多周期汇总报表</span>
+                          <ChevronRight size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onLaunchDemo('data_io', 'general')}
+                        >
+                          <FileSpreadsheet size={14} />
+                          <span>数据资产与灾备中心</span>
+                          <ChevronRight size={12} />
+                        </button>
+                      </div>
 
-                          <div className="hj-mock-split-row">
-                            <div className="hj-mock-box">
-                              <div className="hj-mock-box-title">
-                                <span>📊 三大专业组月度绩点产出趋势 (万元)</span>
-                                <span className="hj-mock-tag">总体组 / 产品组 / 研发组</span>
+                      <div className="hj-real-sidebar-foot">
+                        <Database size={13} />
+                        <div>
+                          <span>在线交互演示工作区</span>
+                          <small>D:\衡绩工作区.hengji</small>
+                        </div>
+                      </div>
+                      <div className="hj-real-sidebar-ver">
+                        <span>v{APP_VERSION}</span>
+                        <div>
+                          <span><BookOpen size={10} /> 操作手册</span>
+                          <span><Info size={10} /> 关于</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 真实软件右侧主工作区 (复刻 header.topbar + div.page) */}
+                    <div className="hj-real-main">
+                      {/* 顶部操作栏 (复刻 header.topbar) */}
+                      <div className="hj-real-topbar">
+                        <div className="hj-real-topbar-left">
+                          <span className="eyebrow">MERIT EVALUATION SYSTEM</span>
+                          <strong>{currentModule.topbarTitle}</strong>
+                        </div>
+                        <div className="hj-real-topbar-right">
+                          <div className="hj-real-user-badge" onClick={() => onLaunchDemo(currentModule.targetTab, currentModule.workspace)}>
+                            <span className="avatar">任</span>
+                            <b>任海平</b>
+                            <span className="role-tag">👑 系统管理员</span>
+                            <ChevronDown size={10} />
+                          </div>
+                          <button type="button" className="hj-real-top-btn" onClick={() => onLaunchDemo(currentModule.targetTab, currentModule.workspace)}>
+                            <Save size={11} /> 另存为
+                          </button>
+                          <button type="button" className="hj-real-top-btn guide" onClick={() => onLaunchDemo(currentModule.targetTab, currentModule.workspace)}>
+                            <Sparkles size={11} /> 新手引导
+                          </button>
+                          <button
+                            type="button"
+                            className="hj-real-top-btn launch"
+                            onClick={() => onLaunchDemo(currentModule.targetTab, currentModule.workspace)}
+                          >
+                            <span>全屏进入真实操作</span>
+                            <ExternalLink size={11} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 真实软件页面画布 (复刻 div.page) */}
+                      <div className="hj-real-page">
+                        {/* 1. 全景总览驾驶舱 (与实际 DashboardView 1:1 完全一致) */}
+                        {activePreview === 'dashboard' && (
+                          <>
+                            <div className="hj-real-hero-card">
+                              <div className="hj-real-hero-left">
+                                <span className="eyebrow">EQUITY &amp; MERIT PERFORMANCE</span>
+                                <h3>衡绩绩点考核，<em>科学衡量每一份项目贡献。</em></h3>
+                                <p>从项目合同金额出发，支持多周期额度监控、月度/季度/年度之星评选、趋势图与柱状图分析、专业组分类及 CSV 数据导入导出。</p>
+                                <div className="hj-real-hero-btns">
+                                  <button type="button" className="primary" onClick={() => onLaunchDemo('projects', 'general')}>
+                                    <Plus size={12} /> 新建项目
+                                  </button>
+                                  <button type="button" className="secondary" onClick={() => onLaunchDemo('stars', 'general')}>
+                                    <Trophy size={12} /> 查看考核之星
+                                  </button>
+                                  <button type="button" className="secondary" onClick={() => onLaunchDemo('analytics', 'general')}>
+                                    <TrendingUp size={12} /> 趋势与柱状图
+                                  </button>
+                                </div>
                               </div>
-                              <div className="hj-mock-bars">
-                                {[
-                                  { m: '2026-01', v1: 38, v2: 45, v3: 32, total: '68.5万' },
-                                  { m: '2026-02', v1: 44, v2: 52, v3: 40, total: '82.0万' },
-                                  { m: '2026-03', v1: 52, v2: 64, v3: 48, total: '105.4万' },
-                                  { m: '2026-04', v1: 60, v2: 72, v3: 55, total: '124.8万' },
-                                  { m: '2026-05', v1: 75, v2: 86, v3: 68, total: '161.9万' }
-                                ].map(row => (
-                                  <div key={row.m} className="hj-mock-bar-col">
-                                    <div className="hj-mock-bar-stack">
-                                      <div style={{ height: `${row.v1}px`, background: '#10b981' }} />
-                                      <div style={{ height: `${row.v2}px`, background: '#0ea5e9' }} />
-                                      <div style={{ height: `${row.v3}px`, background: '#f59e0b' }} />
+                              <div className="hj-real-formula-card">
+                                <span>考核核心规则</span>
+                                <strong>月度预算 × 成员当月分配率</strong>
+                                <div><b>100%</b><small>项目各月额度比例最终合计</small></div>
+                                <div><b>100%</b><small>每月项目成员比例严格分配</small></div>
+                                <div><b>3 大组</b><small>总体组 · 产品组 · 研发组</small></div>
+                              </div>
+                            </div>
+
+                            <div className="hj-real-metrics-row">
+                              <div className="hj-real-metric-item">
+                                <span>执行中项目</span>
+                                <strong>8</strong>
+                                <small>项目库共 8 项</small>
+                              </div>
+                              <div className="hj-real-metric-item">
+                                <span>合同总额</span>
+                                <strong>1,280.00 <i>万元</i></strong>
+                                <small>全部项目含税总合同额</small>
+                              </div>
+                              <div className="hj-real-metric-item">
+                                <span>本月已发布绩点</span>
+                                <strong>102.00 <i>万元</i></strong>
+                                <small>3 个月度计划已生效</small>
+                              </div>
+                              <div className="hj-real-metric-item">
+                                <span>团队部门成员</span>
+                                <strong>18 <i>人</i></strong>
+                                <small>覆盖总体组、产品组与研发组</small>
+                              </div>
+                            </div>
+
+                            <div className="hj-real-split-row">
+                              <div className="hj-real-panel">
+                                <div className="hj-real-panel-head">
+                                  <div>
+                                    <span>HONOR &amp; STARS</span>
+                                    <h4>本月之星 🌟 与年度领跑</h4>
+                                  </div>
+                                  <button type="button" onClick={() => onLaunchDemo('stars', 'general')}>进入荣誉殿堂</button>
+                                </div>
+                                <div className="hj-real-star-cards">
+                                  <div className="hj-real-star-box yellow">
+                                    <span className="star-ico">🌟</span>
+                                    <div>
+                                      <small>本月之星 (2026-05)</small>
+                                      <b>王研</b>
+                                      <em>获得 24.80 万元绩点 · 研发组</em>
                                     </div>
-                                    <strong>{row.total}</strong>
-                                    <span>{row.m}</span>
                                   </div>
-                                ))}
+                                  <div className="hj-real-star-box slate">
+                                    <span className="star-ico">👑</span>
+                                    <div>
+                                      <small>年度之星领跑 (2026年)</small>
+                                      <b>任海平</b>
+                                      <em>累计 168.50 万元绩点 · 总体组</em>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="hj-real-panel">
+                                <div className="hj-real-panel-head">
+                                  <div>
+                                    <span>MONTHLY RANKING</span>
+                                    <h4>2026-05 个人绩点前五名</h4>
+                                  </div>
+                                  <button type="button" onClick={() => onLaunchDemo('reports', 'general')}>查看完整报表</button>
+                                </div>
+                                <div className="hj-real-rank-list">
+                                  {[
+                                    { rank: 1, name: '王研', grp: '研发组', pts: '24.80 万元', pct: 100 },
+                                    { rank: 2, name: '任海平', grp: '总体组', pts: '22.20 万元', pct: 90 },
+                                    { rank: 3, name: '陈韬', grp: '产品组', pts: '18.90 万元', pct: 76 },
+                                    { rank: 4, name: '赵总师', grp: '总体组', pts: '14.40 万元', pct: 58 },
+                                    { rank: 5, name: '孙主任', grp: '产品组', pts: '12.60 万元', pct: 51 },
+                                  ].map(r => (
+                                    <div key={r.rank} className="hj-real-rank-item">
+                                      <span className={`rk-num rk-${r.rank}`}>{r.rank}</span>
+                                      <b className="rk-name">{r.name}</b>
+                                      <span className="rk-grp">{r.grp}</span>
+                                      <div className="rk-bar-track">
+                                        <div className="rk-bar-fill" style={{ width: `${r.pct}%` }} />
+                                      </div>
+                                      <strong className="rk-val">{r.pts}</strong>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {/* 2. 稳健交付防透支排期预览 */}
+                        {activePreview === 'quota' && (
+                          <div className="hj-mock-panel">
+                            <div className="hj-mock-quota-curve">
+                              <div className="hj-quota-stage-card stage-bidding">
+                                <div className="stage-badge">阶段一：前期项目争取</div>
+                                <strong>首月 0% ~ 10% 可调（默认 5%）</strong>
+                                <p>严控立项初期过早透支额度，仅发放前期论证与竞标争取基础激励。</p>
+                              </div>
+                              <div className="hj-quota-arrow">→</div>
+                              <div className="hj-quota-stage-card stage-normal">
+                                <div className="stage-badge">阶段二：主体研制与成品发货</div>
+                                <strong>前低后高递增 · 交付大头 45%+</strong>
+                                <p>随初样、正样推进逐步爬坡，将核心绩效锁定在成品顺利发货与验收节点。</p>
+                              </div>
+                              <div className="hj-quota-arrow">→</div>
+                              <div className="hj-quota-stage-card stage-maint">
+                                <div className="stage-badge">阶段三：售后维保阶段</div>
+                                <strong>末月强制锁定保留 5%</strong>
+                                <p>质保期满无重大质量问题后予以核销，彻底杜绝“前期分光、后期无人维护”。</p>
                               </div>
                             </div>
 
-                            <div className="hj-mock-box">
-                              <div className="hj-mock-box-title">
-                                <span>🛡️ 重点工程合同健康度实时监控</span>
-                                <span className="hj-mock-tag green">0 透支风险</span>
+                            <div className="hj-mock-table-wrap">
+                              <table className="hj-mock-table">
+                                <thead>
+                                  <tr>
+                                    <th>考核月份</th>
+                                    <th>排期阶段属性</th>
+                                    <th>规划分配比例</th>
+                                    <th>当月规划额度 (万元)</th>
+                                    <th>实际核销状态</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    <td>2026-01</td>
+                                    <td><span className="hj-stage-tag bidding">前期争取阶段</span></td>
+                                    <td><strong>5.00%</strong> (上限 10%)</td>
+                                    <td>18.00 万元</td>
+                                    <td><span className="hj-status-pill ok">✓ 已核销发布</span></td>
+                                  </tr>
+                                  <tr>
+                                    <td>2026-02 ~ 04</td>
+                                    <td><span className="hj-stage-tag normal">正常研制阶段 (前低后高)</span></td>
+                                    <td><strong>10% → 12% → 13%</strong></td>
+                                    <td>126.00 万元</td>
+                                    <td><span className="hj-status-pill ok">✓ 稳健推进中</span></td>
+                                  </tr>
+                                  <tr>
+                                    <td>2026-05</td>
+                                    <td><span className="hj-stage-tag delivery">★ 成品发货与终验节点</span></td>
+                                    <td><strong>55.00% (核心大头)</strong></td>
+                                    <td>198.00 万元</td>
+                                    <td><span className="hj-status-pill blue">待验收发放</span></td>
+                                  </tr>
+                                  <tr>
+                                    <td>2026-06</td>
+                                    <td><span className="hj-stage-tag maint">售后维保储备期</span></td>
+                                    <td><strong>5.00% (强制保留)</strong></td>
+                                    <td>18.00 万元</td>
+                                    <td><span className="hj-status-pill warn">🔒 维保期锁定</span></td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 3. 月底集中大表预览 */}
+                        {activePreview === 'plans' && (
+                          <div className="hj-mock-panel">
+                            <div className="hj-mock-toolbar">
+                              <span>📅 当前考评月份：<strong>2026-05</strong>（全项目当月集中透视表）</span>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <span className="hj-mock-btn-chip">⚡ 一键套用当月规划比例</span>
+                                <span className="hj-mock-btn-chip primary">🚀 一键批量发布全部合格方案</span>
                               </div>
-                              <div className="hj-mock-list">
-                                <div className="hj-mock-list-item">
-                                  <div>
-                                    <b>某型综合光电探测系统研制 (GF-2026-01)</b>
-                                    <small>总额 360.00 万 · 负责人：任海平 · 阶段：正样交付</small>
-                                  </div>
-                                  <span className="hj-status-pill ok">已分配 45% · 剩余 198 万</span>
-                                </div>
-                                <div className="hj-mock-list-item">
-                                  <div>
-                                    <b>高精度伺服控制模块批产 (GF-2026-02)</b>
-                                    <small>总额 180.00 万 · 负责人：陈韬 · 阶段：联调测试</small>
-                                  </div>
-                                  <span className="hj-status-pill ok">已分配 30% · 剩余 126 万</span>
-                                </div>
-                                <div className="hj-mock-list-item">
-                                  <div>
-                                    <b>智能边缘计算载荷算法升级 (KY-2026-05)</b>
-                                    <small>总额 120.00 万 · 负责人：王研 · 阶段：前期立项</small>
-                                  </div>
-                                  <span className="hj-status-pill warn">首月争取 5% · 维保锁定 5%</span>
-                                </div>
+                            </div>
+                            <div className="hj-mock-table-wrap">
+                              <table className="hj-mock-table">
+                                <thead>
+                                  <tr>
+                                    <th>项目名称 / 工作令号</th>
+                                    <th>合同总额</th>
+                                    <th>当月项目分配率</th>
+                                    <th>当月可分池</th>
+                                    <th>项目成员配比校验 (合计必须=100%)</th>
+                                    <th>状态</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    <td><b>某型综合光电探测系统</b> (GF-2026-01)</td>
+                                    <td>360.00 万</td>
+                                    <td><strong>15.00%</strong></td>
+                                    <td><strong>54.00 万</strong></td>
+                                    <td>任海平 35% (18.90万) · 陈韬 25% (13.50万) · 王研等4人 40%</td>
+                                    <td><span className="hj-status-pill ok">100% 校验通过</span></td>
+                                  </tr>
+                                  <tr>
+                                    <td><b>高精度伺服控制模块</b> (GF-2026-02)</td>
+                                    <td>180.00 万</td>
+                                    <td><strong>20.00%</strong></td>
+                                    <td><strong>36.00 万</strong></td>
+                                    <td>陈韬 40% (14.40万) · 李工 35% (12.60万) · 赵工 25% (9.00万)</td>
+                                    <td><span className="hj-status-pill ok">100% 校验通过</span></td>
+                                  </tr>
+                                  <tr>
+                                    <td><b>边缘计算载荷算法升级</b> (KY-2026-05)</td>
+                                    <td>120.00 万</td>
+                                    <td><strong>10.00%</strong></td>
+                                    <td><strong>12.00 万</strong></td>
+                                    <td>王研 45% (5.40万) · 算法组3人 55% (6.60万)</td>
+                                    <td><span className="hj-status-pill ok">100% 校验通过</span></td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 4. 核算员数据包流转汇总预览 */}
+                        {activePreview === 'auditor' && (
+                          <div className="hj-mock-panel">
+                            <div className="hj-mock-toolbar">
+                              <span>📦 核算员跨项目数据包归集中心：已导入 <strong>3</strong> 位项目负责人提交的 <strong>8</strong> 个项目数据包</span>
+                              <span className="hj-mock-btn-chip primary">📊 导出全员跨项目汇总 CSV</span>
+                            </div>
+                            <div className="hj-mock-table-wrap">
+                              <table className="hj-mock-table">
+                                <thead>
+                                  <tr>
+                                    <th>工号 / 唯一标识</th>
+                                    <th>员工姓名</th>
+                                    <th>所属专业组</th>
+                                    <th>参评项目数</th>
+                                    <th>各项目绩点构成明细</th>
+                                    <th>个人累计总绩点</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    <td><code>EMP-001</code></td>
+                                    <td><b>任海平</b></td>
+                                    <td>总体组 (组长)</td>
+                                    <td>4 个项目</td>
+                                    <td>光电系统 18.90万 + 导航终端 8.40万 + 论证专项 4.20万...</td>
+                                    <td><strong style={{ color: '#059669' }}>34.50 万元</strong></td>
+                                  </tr>
+                                  <tr>
+                                    <td><code>EMP-005</code></td>
+                                    <td><b>陈韬</b></td>
+                                    <td>产品组 (骨干)</td>
+                                    <td>3 个项目</td>
+                                    <td>光电系统 13.50万 + 伺服模块 14.40万 + 批产保障 3.10万</td>
+                                    <td><strong style={{ color: '#059669' }}>31.00 万元</strong></td>
+                                  </tr>
+                                  <tr>
+                                    <td><code>EMP-012</code></td>
+                                    <td><b>王研</b></td>
+                                    <td>研发组 (主任设计师)</td>
+                                    <td>3 个项目</td>
+                                    <td>边缘算法 5.40万 + 光电系统 10.80万 + 预研课题 6.20万</td>
+                                    <td><strong style={{ color: '#059669' }}>22.40 万元</strong></td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 5. 双向闭环二维矩阵预览 */}
+                        {activePreview === 'reports' && (
+                          <div className="hj-mock-panel">
+                            <div className="hj-mock-toolbar">
+                              <span>📐 周期二维透视矩阵（横向【个人累加】与纵向【项目累加】双向 100% 严密闭环）</span>
+                              <span className="hj-mock-tag green">BigInt 精确到分 · 零尾差</span>
+                            </div>
+                            <div className="hj-mock-table-wrap">
+                              <table className="hj-mock-table">
+                                <thead>
+                                  <tr>
+                                    <th>序号</th>
+                                    <th>姓名</th>
+                                    <th>光电探测系统 (GF-01)</th>
+                                    <th>伺服控制模块 (GF-02)</th>
+                                    <th>边缘计算算法 (KY-05)</th>
+                                    <th>横向：个人累加 (万元)</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    <td>1</td>
+                                    <td><b>任海平</b></td>
+                                    <td>18.90</td>
+                                    <td>0.00</td>
+                                    <td>3.30</td>
+                                    <td><strong>22.20</strong></td>
+                                  </tr>
+                                  <tr>
+                                    <td>2</td>
+                                    <td><b>陈韬</b></td>
+                                    <td>13.50</td>
+                                    <td>14.40</td>
+                                    <td>0.00</td>
+                                    <td><strong>27.90</strong></td>
+                                  </tr>
+                                  <tr>
+                                    <td>3</td>
+                                    <td><b>王研</b></td>
+                                    <td>21.60</td>
+                                    <td>21.60</td>
+                                    <td>8.70</td>
+                                    <td><strong>51.90</strong></td>
+                                  </tr>
+                                  <tr style={{ background: 'rgba(16, 185, 129, 0.1)', fontWeight: 700 }}>
+                                    <td>—</td>
+                                    <td><b>纵向：项目累加</b></td>
+                                    <td><strong>54.00</strong></td>
+                                    <td><strong>36.00</strong></td>
+                                    <td><strong>12.00</strong></td>
+                                    <td><strong style={{ color: '#059669' }}>总计闭环：102.00 万</strong></td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 6. 卓越绩星殿堂预览 */}
+                        {activePreview === 'stars' && (
+                          <div className="hj-mock-panel">
+                            <div className="hj-mock-kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                              <div className="hj-mock-kpi-card amber">
+                                <span>👑 年度功勋领航之星 (TOP 1)</span>
+                                <strong>任海平 · 总体组</strong>
+                                <em>年度累计斩获 168.50 万绩点 · 领衔 5 项重大工程交付</em>
+                              </div>
+                              <div className="hj-mock-kpi-card emerald">
+                                <span>🏆 季度卓越攻坚标兵</span>
+                                <strong>陈韬 · 产品组</strong>
+                                <em>本季累计贡献 64.20 万绩点 · 核心型号批产按期交付</em>
+                              </div>
+                              <div className="hj-mock-kpi-card blue">
+                                <span>🌟 月度领跑之星</span>
+                                <strong>王研 · 研发组</strong>
+                                <em>当月斩获 24.80 万绩点 · 算法联调与外场试验突出贡献</em>
                               </div>
                             </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 2. 稳健交付防透支排期预览 */}
-                      {activePreview === 'quota' && (
-                        <div className="hj-mock-panel">
-                          <div className="hj-mock-quota-curve">
-                            <div className="hj-quota-stage-card stage-bidding">
-                              <div className="stage-badge">阶段一：前期项目争取</div>
-                              <strong>首月 0% ~ 10% 可调（默认 5%）</strong>
-                              <p>严控立项初期过早透支额度，仅发放前期论证与竞标争取基础激励。</p>
-                            </div>
-                            <div className="hj-quota-arrow">→</div>
-                            <div className="hj-quota-stage-card stage-normal">
-                              <div className="stage-badge">阶段二：主体研制与成品发货</div>
-                              <strong>前低后高递增 · 交付大头 45%+</strong>
-                              <p>随初样、正样推进逐步爬坡，将核心绩效锁定在成品顺利发货与验收节点。</p>
-                            </div>
-                            <div className="hj-quota-arrow">→</div>
-                            <div className="hj-quota-stage-card stage-maint">
-                              <div className="stage-badge">阶段三：售后维保阶段</div>
-                              <strong>末月强制锁定保留 5%</strong>
-                              <p>质保期满无重大质量问题后予以核销，彻底杜绝“前期分光、后期无人维护”。</p>
-                            </div>
-                          </div>
-
-                          <div className="hj-mock-table-wrap">
-                            <table className="hj-mock-table">
-                              <thead>
-                                <tr>
-                                  <th>考核月份</th>
-                                  <th>排期阶段属性</th>
-                                  <th>规划分配比例</th>
-                                  <th>当月规划额度 (万元)</th>
-                                  <th>实际核销状态</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr>
-                                  <td>2026-01</td>
-                                  <td><span className="hj-stage-tag bidding">前期争取阶段</span></td>
-                                  <td><strong>5.00%</strong> (上限 10%)</td>
-                                  <td>18.00 万元</td>
-                                  <td><span className="hj-status-pill ok">✓ 已核销发布</span></td>
-                                </tr>
-                                <tr>
-                                  <td>2026-02 ~ 04</td>
-                                  <td><span className="hj-stage-tag normal">正常研制阶段 (前低后高)</span></td>
-                                  <td><strong>10% → 12% → 13%</strong></td>
-                                  <td>126.00 万元</td>
-                                  <td><span className="hj-status-pill ok">✓ 稳健推进中</span></td>
-                                </tr>
-                                <tr>
-                                  <td>2026-05</td>
-                                  <td><span className="hj-stage-tag delivery">★ 成品发货与终验节点</span></td>
-                                  <td><strong>55.00% (核心大头)</strong></td>
-                                  <td>198.00 万元</td>
-                                  <td><span className="hj-status-pill blue">待验收发放</span></td>
-                                </tr>
-                                <tr>
-                                  <td>2026-06</td>
-                                  <td><span className="hj-stage-tag maint">售后维保储备期</span></td>
-                                  <td><strong>5.00% (强制保留)</strong></td>
-                                  <td>18.00 万元</td>
-                                  <td><span className="hj-status-pill warn">🔒 维保期锁定</span></td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 3. 月底集中大表预览 */}
-                      {activePreview === 'plans' && (
-                        <div className="hj-mock-panel">
-                          <div className="hj-mock-toolbar">
-                            <span>📅 当前考评月份：<strong>2026-05</strong>（全项目当月集中透视表）</span>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <span className="hj-mock-btn-chip">⚡ 一键套用当月规划比例</span>
-                              <span className="hj-mock-btn-chip primary">🚀 一键批量发布全部合格方案</span>
+                            <div className="hj-mock-table-wrap">
+                              <table className="hj-mock-table">
+                                <thead>
+                                  <tr>
+                                    <th>荣誉奖牌</th>
+                                    <th>获奖人</th>
+                                    <th>所属专业组</th>
+                                    <th>代表贡献项目</th>
+                                    <th>累计核定绩点</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    <td>🥇 冠军金奖</td>
+                                    <td><b>任海平</b></td>
+                                    <td>总体组</td>
+                                    <td>某型综合光电探测系统研制 (GF-2026-01)</td>
+                                    <td><strong style={{ color: '#d97706' }}>168.50 万元</strong></td>
+                                  </tr>
+                                  <tr>
+                                    <td>🥈 亚军银奖</td>
+                                    <td><b>陈韬</b></td>
+                                    <td>产品组</td>
+                                    <td>高精度伺服控制模块批产交付 (GF-2026-02)</td>
+                                    <td><strong style={{ color: '#059669' }}>142.30 万元</strong></td>
+                                  </tr>
+                                  <tr>
+                                    <td>🥉 季军铜奖</td>
+                                    <td><b>王研</b></td>
+                                    <td>研发组</td>
+                                    <td>智能边缘计算载荷算法软件升级 (KY-2026-05)</td>
+                                    <td><strong style={{ color: '#0284c7' }}>128.90 万元</strong></td>
+                                  </tr>
+                                </tbody>
+                              </table>
                             </div>
                           </div>
-                          <div className="hj-mock-table-wrap">
-                            <table className="hj-mock-table">
-                              <thead>
-                                <tr>
-                                  <th>项目名称 / 工作令号</th>
-                                  <th>合同总额</th>
-                                  <th>当月项目分配率</th>
-                                  <th>当月可分池</th>
-                                  <th>项目成员配比校验 (合计必须=100%)</th>
-                                  <th>状态</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr>
-                                  <td><b>某型综合光电探测系统</b> (GF-2026-01)</td>
-                                  <td>360.00 万</td>
-                                  <td><strong>15.00%</strong></td>
-                                  <td><strong>54.00 万</strong></td>
-                                  <td>任海平 35% (18.90万) · 陈韬 25% (13.50万) · 王研等4人 40%</td>
-                                  <td><span className="hj-status-pill ok">100% 校验通过</span></td>
-                                </tr>
-                                <tr>
-                                  <td><b>高精度伺服控制模块</b> (GF-2026-02)</td>
-                                  <td>180.00 万</td>
-                                  <td><strong>20.00%</strong></td>
-                                  <td><strong>36.00 万</strong></td>
-                                  <td>陈韬 40% (14.40万) · 李工 35% (12.60万) · 赵工 25% (9.00万)</td>
-                                  <td><span className="hj-status-pill ok">100% 校验通过</span></td>
-                                </tr>
-                                <tr>
-                                  <td><b>边缘计算载荷算法升级</b> (KY-2026-05)</td>
-                                  <td>120.00 万</td>
-                                  <td><strong>10.00%</strong></td>
-                                  <td><strong>12.00 万</strong></td>
-                                  <td>王研 45% (5.40万) · 算法组3人 55% (6.60万)</td>
-                                  <td><span className="hj-status-pill ok">100% 校验通过</span></td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 4. 核算员数据包流转汇总预览 */}
-                      {activePreview === 'auditor' && (
-                        <div className="hj-mock-panel">
-                          <div className="hj-mock-toolbar">
-                            <span>📦 核算员跨项目数据包归集中心：已导入 <strong>3</strong> 位项目负责人提交的 <strong>8</strong> 个项目数据包</span>
-                            <span className="hj-mock-btn-chip primary">📊 导出全员跨项目汇总 CSV</span>
-                          </div>
-                          <div className="hj-mock-table-wrap">
-                            <table className="hj-mock-table">
-                              <thead>
-                                <tr>
-                                  <th>工号 / 唯一标识</th>
-                                  <th>员工姓名</th>
-                                  <th>所属专业组</th>
-                                  <th>参评项目数</th>
-                                  <th>各项目绩点构成明细</th>
-                                  <th>个人累计总绩点</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr>
-                                  <td><code>EMP-001</code></td>
-                                  <td><b>任海平</b></td>
-                                  <td>总体组 (组长)</td>
-                                  <td>4 个项目</td>
-                                  <td>光电系统 18.90万 + 导航终端 8.40万 + 论证专项 4.20万...</td>
-                                  <td><strong style={{ color: '#059669' }}>34.50 万元</strong></td>
-                                </tr>
-                                <tr>
-                                  <td><code>EMP-005</code></td>
-                                  <td><b>陈韬</b></td>
-                                  <td>产品组 (骨干)</td>
-                                  <td>3 个项目</td>
-                                  <td>光电系统 13.50万 + 伺服模块 14.40万 + 批产保障 3.10万</td>
-                                  <td><strong style={{ color: '#059669' }}>31.00 万元</strong></td>
-                                </tr>
-                                <tr>
-                                  <td><code>EMP-012</code></td>
-                                  <td><b>王研</b></td>
-                                  <td>研发组 (主任设计师)</td>
-                                  <td>3 个项目</td>
-                                  <td>边缘算法 5.40万 + 光电系统 10.80万 + 预研课题 6.20万</td>
-                                  <td><strong style={{ color: '#059669' }}>22.40 万元</strong></td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 5. 双向闭环二维矩阵预览 */}
-                      {activePreview === 'reports' && (
-                        <div className="hj-mock-panel">
-                          <div className="hj-mock-toolbar">
-                            <span>📐 周期二维透视矩阵（横向【个人累加】与纵向【项目累加】双向 100% 严密闭环）</span>
-                            <span className="hj-mock-tag green">BigInt 精确到分 · 零尾差</span>
-                          </div>
-                          <div className="hj-mock-table-wrap">
-                            <table className="hj-mock-table">
-                              <thead>
-                                <tr>
-                                  <th>序号</th>
-                                  <th>姓名</th>
-                                  <th>光电探测系统 (GF-01)</th>
-                                  <th>伺服控制模块 (GF-02)</th>
-                                  <th>边缘计算算法 (KY-05)</th>
-                                  <th>横向：个人累加 (万元)</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr>
-                                  <td>1</td>
-                                  <td><b>任海平</b></td>
-                                  <td>18.90</td>
-                                  <td>0.00</td>
-                                  <td>3.30</td>
-                                  <td><strong>22.20</strong></td>
-                                </tr>
-                                <tr>
-                                  <td>2</td>
-                                  <td><b>陈韬</b></td>
-                                  <td>13.50</td>
-                                  <td>14.40</td>
-                                  <td>0.00</td>
-                                  <td><strong>27.90</strong></td>
-                                </tr>
-                                <tr>
-                                  <td>3</td>
-                                  <td><b>王研</b></td>
-                                  <td>21.60</td>
-                                  <td>21.60</td>
-                                  <td>8.70</td>
-                                  <td><strong>51.90</strong></td>
-                                </tr>
-                                <tr style={{ background: 'rgba(16, 185, 129, 0.1)', fontWeight: 700 }}>
-                                  <td>—</td>
-                                  <td><b>纵向：项目累加</b></td>
-                                  <td><strong>54.00</strong></td>
-                                  <td><strong>36.00</strong></td>
-                                  <td><strong>12.00</strong></td>
-                                  <td><strong style={{ color: '#059669' }}>总计閉环：102.00 万</strong></td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 6. 卓越绩星殿堂预览 (对应图5默认展示画面) */}
-                      {activePreview === 'stars' && (
-                        <div className="hj-mock-panel">
-                          <div className="hj-mock-kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-                            <div className="hj-mock-kpi-card amber">
-                              <span>👑 年度功勋领航之星 (TOP 1)</span>
-                              <strong>任海平 · 总体组</strong>
-                              <em>年度累计斩获 168.50 万绩点 · 领衔 5 项重大工程交付</em>
-                            </div>
-                            <div className="hj-mock-kpi-card emerald">
-                              <span>🏆 季度卓越攻坚标兵</span>
-                              <strong>陈韬 · 产品组</strong>
-                              <em>本季累计贡献 64.20 万绩点 · 核心型号批产按期交付</em>
-                            </div>
-                            <div className="hj-mock-kpi-card blue">
-                              <span>🌟 月度领跑之星</span>
-                              <strong>王研 · 研发组</strong>
-                              <em>当月斩获 24.80 万绩点 · 算法联调与外场试验突出贡献</em>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -909,7 +1036,7 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
             </div>
           </section>
 
-          {/* ==================== 滚动区块 1：图1 — 为什么工程与科研团队选择「衡绩」？ (CORE CAPABILITIES) ==================== */}
+          {/* ==================== 滚动区块 1：为什么工程与科研团队选择「衡绩」？ (CORE CAPABILITIES) ==================== */}
           <section id="home-features-sec" className="hj-features-section">
             <div className="hj-section-container">
               <div className="hj-section-header">
@@ -971,7 +1098,7 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
             </div>
           </section>
 
-          {/* ==================== 滚动区块 2：图2 — 五步构建端到端量化绩效考核闭环 (5-STEP WORKFLOW) ==================== */}
+          {/* ==================== 滚动区块 2：五步构建端到端量化绩效考核闭环 (5-STEP WORKFLOW) ==================== */}
           <section id="home-workflow-sec" className="hj-workflow-section">
             <div className="hj-section-container">
               <div className="hj-section-header">
@@ -1011,11 +1138,11 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
             </div>
           </section>
 
-          {/* ==================== 滚动区块 3：图3 — 下载衡绩桌面离线版客户端 (DOWNLOAD & DEPLOYMENT) ==================== */}
+          {/* ==================== 滚动区块 3：下载衡绩桌面离线版客户端 (DOWNLOAD & DEPLOYMENT) ==================== */}
           <section id="home-download-sec" className="hj-download-section">
             <div className="hj-section-container">
               <div className="hj-section-header">
-                <span className="hj-section-eyebrow">DOWNLOAD & DEPLOYMENT</span>
+                <span className="hj-section-eyebrow">DOWNLOAD &amp; DEPLOYMENT</span>
                 <h2>下载衡绩桌面离线版客户端 (v{latestVer})</h2>
                 <p>
                   提供四种 Windows 官方打包分发格式，全程原生 GUI 无终端弹窗，默认引导安装至非系统盘（D:\ / E:\），满足企业与涉密内网严苛部署要求
@@ -1140,7 +1267,7 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
             </div>
           </section>
 
-          {/* ==================== 滚动区块 4：图4 — 底部行动号召卡片与三栏页脚 ==================== */}
+          {/* ==================== 滚动区块 4：底部行动号召卡片与三栏页脚 ==================== */}
           <footer className="hj-footer">
             <div className="hj-footer-cta">
               <h2>准备好开启高效、透明、严谨的团队绩点考核了吗？</h2>
