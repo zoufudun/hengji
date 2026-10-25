@@ -732,6 +732,11 @@ export function MermaidDiagram({
             })}
           </div>
         )}
+        {(title?.includes('五步') || title?.includes('总览') || subtitle?.includes('端到端') || subtitle?.includes('闭环')) && (
+          <div className="cc-flow-loop-footer">
+            <span>🔄 端到端数据安全与产值守恒闭环：安全建库 ➔ 人员与合同锚定 ➔ 防透支排期 ➔ 月底100%核验发布 ➔ 跨项目穿透汇总</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1104,6 +1109,65 @@ export const DOC_BOOKS: DocBook[] = [
         ]
       }
     ]
+  },
+  {
+    id: 'tutorial',
+    icon: '🎨',
+    titleZh: '衡绩设计教程',
+    titleEn: 'HengJi Design & Implementation Tutorial',
+    chapters: [
+      {
+        id: 'tutorial-concept',
+        number: '4.1',
+        titleZh: '痛点拆解与商业架构（为什么做衡绩？）',
+        titleEn: 'Pain Points & Architectural Blueprint',
+        sections: [
+          { id: 'sec-tut-dilemma', titleZh: '十位大厨与五桌大席的考核困局（通俗类比）', titleEn: 'The Banquet Split Dilemma', level: 1 },
+          { id: 'sec-tut-solutions', titleZh: '衡绩三大工程解法与架构流程图', titleEn: 'Three Engineering Solutions & Diagram', level: 1 }
+        ]
+      },
+      {
+        id: 'tutorial-algo',
+        number: '4.2',
+        titleZh: '核心精算算法与安全基石（大数与离线加密）',
+        titleEn: 'Algorithms & Cryptographic Security',
+        sections: [
+          { id: 'sec-tut-bigint', titleZh: 'BigInt 整数分位与最大余数补差法精解', titleEn: 'BigInt & Largest Remainder Method', level: 1 },
+          { id: 'sec-tut-crypto', titleZh: 'PBKDF2 与 AES-256-GCM 军工级离线加密防线', titleEn: 'Offline Cryptographic Architecture', level: 1 }
+        ]
+      },
+      {
+        id: 'tutorial-desktop',
+        number: '4.3',
+        titleZh: '桌面端软件系统设计与实现（双工作区落地）',
+        titleEn: 'Desktop System & Dual Workspaces',
+        sections: [
+          { id: 'sec-tut-zerodb', titleZh: '极简无数据库（Zero-DB）状态机架构设计', titleEn: 'Zero-DB Architecture & State Machine', level: 1 },
+          { id: 'sec-tut-dualmode', titleZh: '综合管理与专职核算双工作区物理分离哲学', titleEn: 'Dual Workspace Physical Isolation', level: 1 },
+          { id: 'sec-tut-matrix', titleZh: '月度分配全项目一屏透视大表交互实现', titleEn: 'One-Screen Matrix Interaction Design', level: 2 }
+        ]
+      },
+      {
+        id: 'tutorial-website',
+        number: '4.4',
+        titleZh: '官方网站与视觉体验设计（羊皮纸美学）',
+        titleEn: 'Official Website & Parchment Aesthetic',
+        sections: [
+          { id: 'sec-tut-parchment', titleZh: '羊皮纸暖金与工业陶土红品牌色彩哲学', titleEn: 'Parchment & Industrial Terracotta Color System', level: 1 },
+          { id: 'sec-tut-funnel', titleZh: '官网五层心流转化漏斗与在线体验区实现', titleEn: 'Five-Layer Conversion Funnel & Live Demo', level: 1 }
+        ]
+      },
+      {
+        id: 'tutorial-release',
+        number: '4.5',
+        titleZh: '工程编译打包与自动化持续发布全景',
+        titleEn: 'Packaging & Automated CI/CD Pipeline',
+        sections: [
+          { id: 'sec-tut-packages', titleZh: '四大官方桌面安装包（MSI/EXE/Portable/ZIP）选型', titleEn: 'Four Distribution Formats Explained', level: 1 },
+          { id: 'sec-tut-cicd', titleZh: 'GitHub Releases 与 Pages 自动化流水线脚本', titleEn: 'Automated Build & Deployment Pipeline', level: 1 }
+        ]
+      }
+    ]
   }
 ];
 
@@ -1466,12 +1530,22 @@ export function DocArticleContent({
             <MermaidDiagram
               title={isEn ? '5-Step Closed-Loop Business Workflow' : '🧭 衡绩系统 5 步核心业务闭环总览流程图'}
               subtitle={isEn ? 'End-to-End Workflow: Workspace ➔ Subjects ➔ Scheduling ➔ Matrix ➔ Rollup & Stars' : '端到端业务流：建库 ➔ 初始化 ➔ 排期 ➔ 月底考评 ➔ 归集与荣誉'}
-              chart={`flowchart LR
-    S1["<b>STEP 1</b><br/>🏢 <b>新建安全工作区</b><br/>• .hengji 本地文件存储<br/>• AES-256 口令加密"] -->|第一步完成| S2["<b>STEP 2</b><br/>👥 <b>初始化业务主体</b><br/>• 导入部门员工花名册<br/>• 导入工程合同与工作令"]
-    S2 -->|第二步完成| S3["<b>STEP 3</b><br/>📊 <b>顶层防透支排期</b><br/>• 全周期 100% 额度配比<br/>• 前低后高稳健交付锚定"]
-    S3 -->|第三步完成| S4["<b>STEP 4</b><br/>⚡ <b>月底考评与发布</b><br/>• 全项目透视集中大表<br/>• 团队比例 100% 闭环核验<br/>• 🚀 一键批量数字签名发布"]
-    S4 -->|第四步完成| S5["<b>STEP 5</b><br/>🏆 <b>财务报表与荣誉殿堂</b><br/>• 横向个人 · 纵向项目双向对齐<br/>• BigInt 分毫不差最大余数补差<br/>• 月度/季度/年度绩星榜"]
+              chart={`flowchart TD
+    subgraph Stage1["阶段一：业务准备与初始化定盘（建库 · 录入 · 防透支排期）"]
+        direction LR
+        S1["<b>STEP 1</b><br/>🏢 <b>新建安全工作区</b><br/>• .hengji 离线文件存储<br/>• AES-256 口令强认证加密"] -->|第一步完成| S2["<b>STEP 2</b><br/>👥 <b>初始化业务主体</b><br/>• 导入部门员工花名册与专业组<br/>• 导入工程合同与项目工作令"]
+        S2 -->|第二步完成| S3["<b>STEP 3</b><br/>📊 <b>顶层防透支排期</b><br/>• 全周期 100% 额度硬顶锁定<br/>• 前低后高稳健交付锚定"]
+    end
 
+    subgraph Stage2["阶段二：月度考评执行与成果闭环（集中分配 · 发布 · 财务报表）"]
+        direction LR
+        S4["<b>STEP 4</b><br/>⚡ <b>月底考评与发布</b><br/>• 全项目透视集中大表一屏平铺<br/>• 团队比例 100% 闭环核验<br/>• 🚀 一键批量数字签名防篡改发布"] -->|第四步完成| S5["<b>STEP 5</b><br/>🏆 <b>财务报表与荣誉殿堂</b><br/>• 横向个人 · 纵向项目双向对齐<br/>• BigInt 分毫不差最大余数补差<br/>• 自动评选月度/季度/年度绩星榜"]
+    end
+
+    Stage1 -->|第三步就绪 ➔ 开启月底分配窗口| Stage2
+
+    style Stage1 fill:#fafaf9,stroke:#d6d3d1,stroke-width:1.5px
+    style Stage2 fill:#f0fdf4,stroke:#bbf7d0,stroke-width:1.5px
     style S1 fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#9a3412
     style S2 fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e40af
     style S3 fill:#fefce8,stroke:#ca8a04,stroke-width:2px,color:#854d0e
@@ -2303,6 +2377,502 @@ export function DocArticleContent({
                   : '解决办法：按下 Ctrl + F5（Mac 用户按 Cmd + Shift + R）强制刷新浏览器缓存，即可加载最新部署的网页。'}
               </p>
             </div>
+          </section>
+        </div>
+      );
+
+    // ==========================================
+    // 书卷 4：衡绩设计教程（针对新手的大白话实战指南）
+    // ==========================================
+    case 'tutorial-concept':
+      return (
+        <div>
+          <div className="cc-cl-article-header">
+            <h1>{isEn ? '4.1 Pain Points & Architectural Blueprint' : '4.1 痛点拆解与商业架构（为什么做衡绩？）'}</h1>
+            <span className="cc-cl-date">{isEn ? 'HengJi Design Masterclass · Chapter 1' : '衡绩设计教程 · 核心理念篇'}</span>
+          </div>
+
+          <p className="cc-cl-summary">
+            {isEn
+              ? 'Why did traditional KPI spreadsheets break down in engineering teams? Learn the core business motivation behind HengJi through vivid analogies and architectural flowcharts.'
+              : '写软件最关键的不是上来就敲代码，而是先搞清楚“到底要解决什么实际痛点”。本章用生活化大白话和生动比喻，拆解传统工程团队在绩效考评中遇到的各种扯皮乱象，并展示衡绩三位一体的顶层解法。'}
+          </p>
+
+          <hr className="cc-cl-divider" />
+
+          {/* 1. 痛点类比 */}
+          <section id="sec-tut-dilemma" className="cc-cl-sec">
+            <h2>{isEn ? '1. The Banquet Split Dilemma (Analogy)' : '1. 形象类比：十位大厨与五桌大席的分钱困局'}</h2>
+            <div className="cc-md-quote" style={{ margin: '14px 0', borderLeftColor: 'var(--cc-terracotta)' }}>
+              <b>💡 设身处地想象一下这个生活场景：</b>
+              <br />
+              你开了一家大型国宴餐厅，接了 5 桌长达半年才能吃完的顶级国宴（相当于 5 个长期研制的工程项目）。
+              <ul style={{ paddingLeft: '18px', margin: '6px 0 0', lineHeight: '1.7' }}>
+                <li><b>死穴一（蛋糕膨胀）</b>：凉菜、热炒、汤品的大厨各管各的，大家都觉得自己的功劳最大。月底上报业绩时，各组负责人上报的金额加起来，居然达到了总营收的 <b>130%</b>！老板如果照单全发，餐厅当月就直接破产。</li>
+                <li><b>死穴二（前紧后松与烂尾）</b>：刚开始买菜备料（立项）时，大厨们就把 80% 的服务费领走了。等到几个月后菜肴上桌、客人要洗碗擦桌（交付与质保维保）时，大家口袋里早已揣满了钱，根本没人愿意留在后厨干收尾的脏活累活！</li>
+                <li><b>死穴三（一人多领与算错账）</b>：张师傅既在“第一桌”切了土豆，又在“第三桌”炒了牛肉。两个桌子的领班互不通气，张师傅在两边都按全勤领钱，财务月底做总账时彻底崩溃。</li>
+              </ul>
+            </div>
+          </section>
+
+          {/* 2. 衡绩三大工程解法与架构流程图 */}
+          <section id="sec-tut-solutions" className="cc-cl-sec">
+            <h2>{isEn ? '2. Three Engineering Solutions & Architecture' : '2. 衡绩的三大工程解法与架构流程图'}</h2>
+            <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
+              针对上面的烂摊子，衡绩在顶层设计上提出了三条铁律，并用软件代码直接焊死：
+            </p>
+
+            <MermaidDiagram
+              title={isEn ? 'Traditional Pain Points vs HengJi Solutions' : '传统考核死穴与衡绩三大工程解法对照架构图'}
+              subtitle={isEn ? 'From Chaos to Precision: Hard Cap · Phased Delivery · Physical Isolation' : '从扯皮泥潭到严密守恒：合同硬顶 · 前低后高 · 唯一工号穿透'}
+              chart={`flowchart TD
+    subgraph Traditional["❌ 传统管理模式的三大死穴（为什么大家都在扯皮？）"]
+        direction TB
+        T1["<b>死穴 1：Excel 满天飞</b><br/>公式容易被改乱 · 版本多头混乱 · 无防篡改校验"]
+        T2["<b>死穴 2：前期立项分光光</b><br/>项目刚立项就分完奖金 · 后期试验维保没人愿意干"]
+        T3["<b>死穴 3：跨项目重复算</b><br/>多个项目经理各自打分 · 员工一人领两份钱造成预算超支"]
+    end
+
+    subgraph HengJiSolution["✅ 衡绩（HengJi）的三位一体工程解法"]
+        direction TB
+        S1["<b>解法 1：合同额度绝对硬顶</b><br/>1 绩点 ≡ 1 万元合同产值 · 蛋糕固定绝不允许凭空印钞"]
+        S2["<b>解法 2：前低后高防透支排期</b><br/>立项阶段限高 10% · 交付大头锁定 45%+ · 维保质保刚性留 5%"]
+        S3["<b>解法 3：工号物理隔离与穿透汇总</b><br/>去中心化加密交接包 · 核算员 1 秒汇总 50 个项目且同名不同号严格区分"]
+    end
+
+    Traditional -->|催生数字化变革| HengJiSolution
+
+    style Traditional fill:#fff1f2,stroke:#f43f5e,stroke-width:1.5px
+    style HengJiSolution fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px
+    style T1 fill:#ffffff,stroke:#f43f5e,stroke-width:1.5px,color:#9f1239
+    style T2 fill:#ffffff,stroke:#f43f5e,stroke-width:1.5px,color:#9f1239
+    style T3 fill:#ffffff,stroke:#f43f5e,stroke-width:1.5px,color:#9f1239
+    style S1 fill:#ffffff,stroke:#16a34a,stroke-width:1.5px,color:#166534
+    style S2 fill:#ffffff,stroke:#16a34a,stroke-width:1.5px,color:#166534
+    style S3 fill:#ffffff,stroke:#16a34a,stroke-width:1.5px,color:#166534`}
+            />
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginTop: '16px' }}>
+              <div className="cc-doc-step-card">
+                <span className="cc-doc-step-tag" style={{ background: '#ea580c' }}>铁律 1</span>
+                <h4 style={{ margin: '8px 0 4px', fontSize: '14px' }}>合同总额绝对硬顶</h4>
+                <p style={{ fontSize: '12px', color: 'var(--cc-text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                  项目合同是 100 万元，全生命周期可分配绩点就只能是 100 点。1 绩点 ≡ 1 万元产值，从源头杜绝超额虚标。
+                </p>
+              </div>
+
+              <div className="cc-doc-step-card">
+                <span className="cc-doc-step-tag" style={{ background: '#ca8a04' }}>铁律 2</span>
+                <h4 style={{ margin: '8px 0 4px', fontSize: '14px' }}>前低后高防透支排期</h4>
+                <p style={{ fontSize: '12px', color: 'var(--cc-text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                  首月立项限高 10%（默认 5%）；研制出厂交付月释放 45%+；末月固定保留 5% 维保金，杜绝领完钱撂挑子。
+                </p>
+              </div>
+
+              <div className="cc-doc-step-card">
+                <span className="cc-doc-step-tag" style={{ background: '#16a34a' }}>铁律 3</span>
+                <h4 style={{ margin: '8px 0 4px', fontSize: '14px' }}>唯一工号全局锚定</h4>
+                <p style={{ fontSize: '12px', color: 'var(--cc-text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                  跨项目汇总以员工唯一工号为唯一物理准绳。同名不同工号严格分列，同工号多项目自动累加，财务账目分毫不差。
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
+      );
+
+    case 'tutorial-algo':
+      return (
+        <div>
+          <div className="cc-cl-article-header">
+            <h1>{isEn ? '4.2 Mathematical Algorithms & Cryptography' : '4.2 核心精算算法与安全基石（大数与离线加密）'}</h1>
+            <span className="cc-cl-date">{isEn ? 'HengJi Design Masterclass · Chapter 2' : '衡绩设计教程 · 算法安全篇'}</span>
+          </div>
+
+          <p className="cc-cl-summary">
+            {isEn
+              ? 'Why is standard JavaScript math dangerous for financial software? Learn how BigInt and the Largest Remainder Method ensure 100% exact allocation, plus PBKDF2/AES-256 military-grade encryption.'
+              : '为什么千万不能用标准 JavaScript 浮点数算钱？如何用“分切披萨”的比喻搞懂最大余数补差算法？为什么涉密科研单位坚决不用 SaaS 云端？本章带你解密软件背后的数学与密码学底盘。'}
+          </p>
+
+          <hr className="cc-cl-divider" />
+
+          {/* 1. BigInt 与最大余数法 */}
+          <section id="sec-tut-bigint" className="cc-cl-sec">
+            <h2>{isEn ? '1. BigInt Cents Calculation & Largest Remainder Method' : '1. 浮点数灾难、BigInt 整数分位与最大余数补差'}</h2>
+            
+            <div className="cc-md-quote" style={{ margin: '14px 0', borderLeftColor: '#dc2626' }}>
+              <b>⚠️ 新手最容易踩的浮点数大坑：</b>
+              <br />
+              打开浏览器控制台，输入 <code>0.1 + 0.2</code>，你会发现它打印出 <code>0.30000000000000004</code>！
+              <br />
+              这就像去超市买肉，称上总会平白无故掉下几粒肉渣。如果不做处理，几百名员工的月度考评累加起来，总金额就会多出几分几角钱，在财务审计面前直接视为“做假账”！
+            </div>
+
+            <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
+              <b>解法一：全量换算为 BigInt 整数“分（Cents）”</b><br />
+              在衡绩底层，所有金额存入状态树时，一律乘以 1,000,000 换算为纯整数（1.25 万元 = 1,250,000 分），彻底摆脱 IEEE-754 浮点误差。
+            </p>
+
+            <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
+              <b>解法二：最大余数补差法（分披萨的生动比喻）</b><br />
+              3 个人平分 10 块钱：10 ÷ 3 = 每人 3.33 元，剩下最后的 0.01 元该给谁？
+            </p>
+
+            <MermaidDiagram
+              title={isEn ? 'Largest Remainder Method Sequence' : '最大余数法严密补差精算时序图'}
+              subtitle={isEn ? 'Exact Penny Balancing: Integer Shares ➔ Remainder Sorting ➔ 1-Cent Priority Fill' : '绝对闭环平账：整数分位 ➔ 余数降序排序 ➔ 1分钱优先补偿'}
+              chart={`flowchart TD
+    Start["💰 当月项目可用总额度: 10.00 万元 (换算为 1,000,000 分)"]
+    --> Split["➗ 3名成员均分 (理论比例各 33.3333...%)"]
+    
+    Split --> Floor["1. 计算各成员整数商: 每人各分得 3.33 万元 (共计 9.99 万元)"]
+    Floor --> Diff["2. 发现微观误差差额: 10.00 - 9.99 = 剩余 0.01 万元 (1 分钱余数)"]
+    
+    Diff --> Sort["3. 提取各成员除法截断的浮点余数，从大到小降序排列"]
+    Sort --> Patch["4. 将未分完的 1 分钱，精准补偿给排序第一的骨干成员 A"]
+    
+    Patch --> Done["✅ 最终分配落定：A=3.34 万, B=3.33 万, C=3.33 万<br/><b>校验合计：3.34 + 3.33 + 3.33 严格恒等于 10.00 万元 (100% 闭环 √)</b>"]
+
+    style Start fill:#f8fafc,stroke:#0284c7,stroke-width:1.5px
+    style Split fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px
+    style Floor fill:#ffffff,stroke:#64748b,stroke-width:1.5px
+    style Diff fill:#fefce8,stroke:#ca8a04,stroke-width:2px,color:#854d0e
+    style Sort fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px
+    style Patch fill:#fdf4ff,stroke:#a855f7,stroke-width:2px,color:#7e22ce
+    style Done fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#166534`}
+            />
+          </section>
+
+          {/* 2. 军工级离线加密 */}
+          <section id="sec-tut-crypto" className="cc-cl-sec">
+            <h2>{isEn ? '2. PBKDF2 & AES-256-GCM Military Cryptographic Shield' : '2. 为什么坚决不做云端 SaaS？PBKDF2 与 AES-256-GCM 离线加密防线'}</h2>
+            
+            <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
+              许多新手习惯把数据存到云端服务器，走账号登录和远程 API。但在国防雷达、航空航天、尖端芯片等科研团队，任何连接外部网络的行为都触碰涉密红线。
+              衡绩采用完全离线的 <b>.hengji</b> 独立数据库文件，并设计了军工级认证加密防线：
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', margin: '14px 0' }}>
+              <div className="cc-doc-step-card">
+                <span className="cc-doc-step-tag" style={{ background: '#2563eb' }}>钥匙发生器</span>
+                <h4 style={{ margin: '8px 0 4px', fontSize: '14px' }}>PBKDF2-SHA256（10万次加盐）</h4>
+                <p style={{ fontSize: '12px', color: 'var(--cc-text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                  好比银行金库的齿轮密码锁。普通锁转 1 圈就开了，而这个锁必须极度精确地转满 10 万圈！即使黑客用超级计算机暴力破解，也要算上一百万年。
+                </p>
+              </div>
+
+              <div className="cc-doc-step-card">
+                <span className="cc-doc-step-tag" style={{ background: '#16a34a' }}>数字蜡封</span>
+                <h4 style={{ margin: '8px 0 4px', fontSize: '14px' }}>AES-256-GCM 认证加密</h4>
+                <p style={{ fontSize: '12px', color: 'var(--cc-text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                  不仅对数据内容高强度加密，还在门缝处贴上了一张带有全息防伪的数字蜡封（Auth Tag）。若有人用十六进制编辑器暗中改动 1 个字符，蜡封粉碎，系统立刻拒载！
+                </p>
+              </div>
+
+              <div className="cc-doc-step-card">
+                <span className="cc-doc-step-tag" style={{ background: '#059669' }}>双重备份</span>
+                <h4 style={{ margin: '8px 0 4px', fontSize: '14px' }}>.hengji.backup 自动镜像</h4>
+                <p style={{ fontSize: '12px', color: 'var(--cc-text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                  每次保存的瞬间，系统自动在同目录下生成一份 `.backup` 副本。即使遇到突然停电或电脑死机，随时可以用镜像文件秒级恢复。
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
+      );
+
+    case 'tutorial-desktop':
+      return (
+        <div>
+          <div className="cc-cl-article-header">
+            <h1>{isEn ? '4.3 Desktop Software Architecture & Dual Workspaces' : '4.3 桌面端软件系统设计与实现（双工作区落地）'}</h1>
+            <span className="cc-cl-date">{isEn ? 'HengJi Design Masterclass · Chapter 3' : '衡绩设计教程 · 架构实战篇'}</span>
+          </div>
+
+          <p className="cc-cl-summary">
+            {isEn
+              ? 'Deep dive into the Electron + React 18 + Vite desktop architecture. Learn why a Zero-DB state machine outperforms local SQL, and how the Dual-Workspace model isolates managerial and auditing duties.'
+              : '从零设计一款成熟的工业级桌面软件，如何进行技术选型？为什么无数据库（Zero-DB）架构反而比传统本地 SQLite 更加稳固？为什么月度分配坚决不做弹窗、必须做一屏全景大表？本章带你剖析全套桌面架构。'}
+          </p>
+
+          <hr className="cc-cl-divider" />
+
+          {/* 1. 技术栈选型与 Zero-DB */}
+          <section id="sec-tut-zerodb" className="cc-cl-sec">
+            <h2>{isEn ? '1. Tech Stack Selection & Zero-DB State Machine' : '1. 技术选型哲学：为什么是 Electron + React + TypeScript + Zero-DB？'}</h2>
+            
+            <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
+              许多新手一提到桌面端就想用 C# WPF 或 C++ Qt，或者在本地装一个 SQLite。但这会带来几个致命痛点：跨操作系统迁移极其繁重、本地 SQL 驱动容易因 Windows 运行库缺失而报错崩溃。
+              衡绩采用 <b>Electron + React 18 + TypeScript + Vite + Zero-DB 单向状态机</b>：
+            </p>
+
+            <ul style={{ paddingLeft: '18px', fontSize: '13px', lineHeight: '1.7', margin: '8px 0' }}>
+              <li><b>前端生态降维打击</b>：React 组件化开发 UI 极其丝滑，配合 Lucide 图标与 CSS 变量，轻松做出远超传统工业软件的高颜值界面；</li>
+              <li><b>TypeScript 类型安全</b>：在编译期拦截 90% 以上的拼写错误、空指针异常与对象字段缺失；</li>
+              <li><b>内存单向状态机 + 原子写盘</b>：内存中只维护一个单一的事实来源（Single Source of Truth）<code>AppState</code>，所有的用户操作都是纯函数计算，点击保存时直接加密刷入磁盘，无任何数据库死锁或驱动崩溃风险！</li>
+            </ul>
+          </section>
+
+          {/* 2. 双工作区物理分离 */}
+          <section id="sec-tut-dualmode" className="cc-cl-sec">
+            <h2>{isEn ? '2. Dual-Workspace Architecture & Luggage Sorting Analogy' : '2. 双工作区物理分离哲学：综合管理 vs 专职核算'}</h2>
+
+            <div className="cc-md-quote" style={{ margin: '14px 0', borderLeftColor: '#2563eb' }}>
+              <b>🧳 形象类比：大型国际机场的行李分拣中心</b><br />
+              一架飞机（项目经理）降落，运来 100 件行李；另一架飞机也运来 80 件行李。
+              项目经理只负责把本项目的行李贴好标签装入货舱（导出项目数据包）；
+              而专职核算员是<b>行李分拣中心的主管</b>：他把 10~50 架飞机的行李全部倒在传输带上，扫码枪（唯一工号）自动识别每件行李的主人是谁，1 秒内把属于张三的所有行李稳稳送上张三的提取轮盘，绝不串道！
+            </div>
+
+            <MermaidDiagram
+              title={isEn ? 'Dual-Workspace Physical Separation Model' : '双工作区物理分离与数据包流转全景图'}
+              subtitle={isEn ? 'Decentralized Project Rating ➔ Encrypted Bundle ➔ Dedicated Auditor 1-Sec Rollup' : '各项目独立打分 ➔ 加密数据包交接 ➔ 核算员 1 秒汇总并交接财务'}
+              chart={`flowchart TD
+    subgraph ModeAdmin["🏢 综合管理工作区（面向项目经理与部门长）"]
+        direction TB
+        A1["👥 录入部门编制花名册与专业组"]
+        A2["📁 录入工程合同与工作令号"]
+        A3["📊 设置前低后高防透支排期"]
+        A4["⚡ 月底集中全景大表分配 (团队 100%)"]
+        A5["🚀 一键批量盖章发布 & 导出 .hengji 数据包"]
+        A1 --> A2 --> A3 --> A4 --> A5
+    end
+
+    subgraph Handoff["📦 安全离线交接环节"]
+        Pkg["📁 导出的独立项目数据包 (.hengji)<br/><i>(内网邮件或U盘交接，无法越权修改他人项目)</i>"]
+    end
+
+    subgraph ModeAuditor["📊 绩效核算工作区（面向专职核算员与财务审计）"]
+        direction TB
+        B1["📥 批量拖拽 10~50 个 .hengji 文件入虚线框"]
+        B2["🛡️ 三重防线：SHA256验签 + 工作令去重 + 工号隔离"]
+        B3["⚡ 1秒自动全量穿透：生成个人×项目二维矩阵"]
+        B4["🏆 自动评选月度/季度/年度绩星榜"]
+        B5["📤 导出标准 Excel/CSV 直接交接财务发钱"]
+        B1 --> B2 --> B3 --> B4 --> B5
+    end
+
+    A5 --> Pkg --> B1
+
+    style ModeAdmin fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px
+    style ModeAuditor fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px
+    style Handoff fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px
+    style Pkg fill:#ffffff,stroke:#16a34a,stroke-width:2px,color:#166534`}
+            />
+          </section>
+
+          {/* 3. 一屏大表交互细节 */}
+          <section id="sec-tut-matrix" className="cc-cl-sec">
+            <h2>{isEn ? '3. One-Screen Matrix Interaction Design' : '3. 为什么坚决不做弹窗？月度分配一屏全景大表的交互细节'}</h2>
+            
+            <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
+              在传统软件里，改一个项目的考评就弹出一个模态框（Modal），改完关掉再点下一个。如果部门有 15 个项目在研，管理员每月要开合 15 次弹窗，不仅头晕眼花，而且根本看不到所有项目的总人数、总额度分布。
+              衡绩采用了<b>一屏平铺全景大表</b>设计：
+            </p>
+
+            <ul style={{ paddingLeft: '18px', fontSize: '13px', lineHeight: '1.7', margin: '8px 0' }}>
+              <li><b>无缝纵向横向平铺</b>：所有的在研工程项目一屏展开，无需切换任何标签页；</li>
+              <li><b>点击【⚡ 套用当月规划】</b>：系统毫秒级拉取年初排期设定的可用额度与成员基准；</li>
+              <li><b>实时红黄绿三色闭环指示灯</b>：比例不足 100% 亮黄色警示，超过 100% 亮红色阻断保存，正好等于 100% 亮绿色对勾；</li>
+              <li><b>一键批量盖章发布</b>：审核完毕后，点击按钮同时给所有项目加盖不可逆的数字防篡改指纹，省时省力！</li>
+            </ul>
+          </section>
+        </div>
+      );
+
+    case 'tutorial-website':
+      return (
+        <div>
+          <div className="cc-cl-article-header">
+            <h1>{isEn ? '4.4 Official Website & Visual Experience Design' : '4.4 官方网站与视觉体验设计（羊皮纸美学）'}</h1>
+            <span className="cc-cl-date">{isEn ? 'HengJi Design Masterclass · Chapter 4' : '衡绩设计教程 · 视觉体验篇'}</span>
+          </div>
+
+          <p className="cc-cl-summary">
+            {isEn
+              ? 'Why did we reject the generic SaaS blue in favor of warm parchment and industrial terracotta? Discover the psychology of brand trust and the 5-layer psychological conversion funnel behind our landing page.'
+              : '很多程序员做出来的官网像冷冰冰的后台模板。衡绩面对的是严谨权威的工程团队与科研机构，官网如何通过“羊皮纸暖金”与“工业陶土红”传递厚重的契约与信任感？如何在浏览器里打造零门槛的在线试玩体验？本章带你领略全套视觉设计系统。'}
+          </p>
+
+          <hr className="cc-cl-divider" />
+
+          {/* 1. 羊皮纸配色哲学 */}
+          <section id="sec-tut-parchment" className="cc-cl-sec">
+            <h2>{isEn ? '1. Parchment & Industrial Terracotta Color Psychology' : '1. 品牌色彩哲学：为什么弃用科技蓝，选用羊皮纸暖金与工业陶土红？'}</h2>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', margin: '14px 0' }}>
+              <div className="cc-doc-step-card">
+                <span className="cc-doc-step-tag" style={{ background: '#78716c' }}>底盘基石</span>
+                <h4 style={{ margin: '8px 0 4px', fontSize: '14px' }}>羊皮纸暖金（#faf7f0）</h4>
+                <p style={{ fontSize: '12px', color: 'var(--cc-text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                  源自中世纪手稿与国家档案馆的羊皮纸典籍。色泽温润护眼，彻底摒弃纯白屏幕的刺眼感，传递出“历史厚重、严肃契约、不可磨灭”的庄严信誉。
+                </p>
+              </div>
+
+              <div className="cc-doc-step-card">
+                <span className="cc-doc-step-tag" style={{ background: '#c85a32' }}>品牌灵魂</span>
+                <h4 style={{ margin: '8px 0 4px', fontSize: '14px' }}>工业陶土红（#c85a32）</h4>
+                <p style={{ fontSize: '12px', color: 'var(--cc-text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                  源自工程锻造的烈火与中国传统的火漆印章。象征“刚性锁定、盖印生效、不可篡改”，每次点击按钮都像是在契约上盖下一方庄严的红印。
+                </p>
+              </div>
+
+              <div className="cc-doc-step-card">
+                <span className="cc-doc-step-tag" style={{ background: '#10b981' }}>审计绿与深蓝</span>
+                <h4 style={{ margin: '8px 0 4px', fontSize: '14px' }}>翡翠绿与总体蓝</h4>
+                <p style={{ fontSize: '12px', color: 'var(--cc-text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                  用于表示校验通过（绿色）和专业组别归类（蓝色），整体色调克制、典雅，形成高度一致的工业级视觉辨识度。
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* 2. 五层心流转化漏斗 */}
+          <section id="sec-tut-funnel" className="cc-cl-sec">
+            <h2>{isEn ? '2. Five-Layer Conversion Funnel & Live Interactive Demo' : '2. 官网主页五层心流转化漏斗与在线体验区实现'}</h2>
+
+            <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
+              一个优秀的官网，绝不仅仅是好看，更是对访客心理预期的层层引导与信任建立。衡绩主页采用了五层心流转化漏斗：
+            </p>
+
+            <MermaidDiagram
+              title={isEn ? 'Website 5-Layer Conversion Funnel' : '衡绩官网主页五层心流转化漏斗架构图'}
+              subtitle={isEn ? 'Hero Anchor ➔ Pain Resonance ➔ Cognitive Model ➔ Live Interactive Demo ➔ Tech Docs' : '视觉锚定 ➔ 痛点共鸣 ➔ 核心认知 ➔ 浏览器内免安装体验 ➔ 多卷本技术文档'}
+              chart={`flowchart TD
+    L1["<b>第一层：视觉锚定 (Hero 顶层区)</b><br/>羊皮纸色调 · 品牌火漆印章徽标 · 醒目标语 · 四大安装包极速下载"]
+    --> L2["<b>第二层：痛点共鸣 (传统痛点 vs 衡绩解法)</b><br/>对比卡片击碎客户心防：Excel崩盘/额度透支/跨项目重复算"]
+    --> L3["<b>第三层：核心认知 (双锚定工程产值模型)</b><br/>合同硬顶 × 交付排期 × 团队闭环，公式化图解直观明了"]
+    --> L4["<b>第四层：实操信任 (浏览器内嵌在线无缝体验)</b><br/>无需下载！直接在主页点击体验真实管理端与核算端操作"]
+    --> L5["<b>第五层：技术沉淀 (多卷本交互式在线文档中心)</b><br/>白皮书 · 5步新手手册 · 部署指南 · 架构教程，Mermaid 流程图矢量呈现"]
+
+    style L1 fill:#ffffff,stroke:#c85a32,stroke-width:2px,color:#9a3412
+    style L2 fill:#ffffff,stroke:#ea580c,stroke-width:1.5px,color:#c2410c
+    style L3 fill:#ffffff,stroke:#2563eb,stroke-width:1.5px,color:#1e40af
+    style L4 fill:#ffffff,stroke:#16a34a,stroke-width:2px,color:#166534
+    style L5 fill:#ffffff,stroke:#78716c,stroke-width:1.5px,color:#292524`}
+            />
+
+            <div className="cc-md-quote" style={{ margin: '14px 0', borderLeftColor: '#16a34a' }}>
+              <b>⚡ 免下载试玩区的设计秘诀：</b><br />
+              很多软件要求用户必须先下载几十兆的安装包才能看到界面，流失率高达 80%！
+              我们在官网主页中，通过 React 组件直接将客户端的核心工作区移植为只读/交互演示模式。访客无需下载任何文件，在手机或电脑浏览器里点一下，就能亲身感受雷达、芯片项目的分配大表，信任感瞬间拉满！
+            </div>
+          </section>
+        </div>
+      );
+
+    case 'tutorial-release':
+      return (
+        <div>
+          <div className="cc-cl-article-header">
+            <h1>{isEn ? '4.5 Packaging, Multi-Distribution & CI/CD Pipeline' : '4.5 工程编译打包与自动化持续发布全景'}</h1>
+            <span className="cc-cl-date">{isEn ? 'HengJi Design Masterclass · Chapter 5' : '衡绩设计教程 · 工程发布篇'}</span>
+          </div>
+
+          <p className="cc-cl-summary">
+            {isEn
+              ? 'From local source code to verified multi-format artifacts. Master the electron-builder matrix (MSI/EXE/Portable/ZIP), automated GitHub Releases with SHA-256 digests, and cache-busting GitHub Pages deployment.'
+              : '写完代码只是完成了软件工程的一半，如何把软件打包成企业需要的格式并全自动发布到全世界？为什么企业必须要有 MSI？静态网站部署如何彻底解决浏览器缓存旧代码的问题？本章带你打通全套工程化发布流水线。'}
+          </p>
+
+          <hr className="cc-cl-divider" />
+
+          {/* 1. 四大安装包选型 */}
+          <section id="sec-tut-packages" className="cc-cl-sec">
+            <h2>{isEn ? '1. Four Official Package Formats Explained' : '1. 四大官方桌面安装包（MSI/EXE/Portable/ZIP）选型指南'}</h2>
+            
+            <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
+              许多独立开发者只提供一个简单的 EXE 文件，但企业用户下载后往往抱怨连连。衡绩针对不同使用场景，通过 <code>electron-builder</code> 编译出四大官方分发格式：
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', margin: '14px 0' }}>
+              <div className="cc-doc-step-card">
+                <span className="cc-doc-step-tag" style={{ background: '#10b981' }}>MSI 企业级</span>
+                <h4 style={{ margin: '8px 0 4px', fontSize: '14px' }}>hengji.msi (约 75MB)</h4>
+                <p style={{ fontSize: '12px', color: 'var(--cc-text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                  大型企业网管的最爱。通过 Windows Server 的 Active Directory 域策略（GPO）或 <code>msiexec /qn</code> 命令，一键静默推送到几百台办公电脑，员工开机即用。
+                </p>
+              </div>
+
+              <div className="cc-doc-step-card">
+                <span className="cc-doc-step-tag" style={{ background: '#0284c7' }}>EXE 向导版</span>
+                <h4 style={{ margin: '8px 0 4px', fontSize: '14px' }}>hengji.exe (约 75MB)</h4>
+                <p style={{ fontSize: '12px', color: 'var(--cc-text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                  经典图形向导版。支持自主选择安装盘符，自动创建开始菜单和桌面快捷方式，并提供完善的安全卸载器。
+                </p>
+              </div>
+
+              <div className="cc-doc-step-card">
+                <span className="cc-doc-step-tag" style={{ background: '#f59e0b' }}>Portable 便携</span>
+                <h4 style={{ margin: '8px 0 4px', fontSize: '14px' }}>hengji-portable.exe (约 75MB)</h4>
+                <p style={{ fontSize: '12px', color: 'var(--cc-text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                  单文件绿色版。无需任何管理员（Admin）提权，非常适合在受限电脑上运行，或存放在 U 盘里即插即用，拔掉即走不留痕迹。
+                </p>
+              </div>
+
+              <div className="cc-doc-step-card">
+                <span className="cc-doc-step-tag" style={{ background: '#8b5cf6' }}>ZIP 绿色包</span>
+                <h4 style={{ margin: '8px 0 4px', fontSize: '14px' }}>hengji.zip (约 85MB)</h4>
+                <p style={{ fontSize: '12px', color: 'var(--cc-text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                  纯文件夹压缩包。解压到非系统盘（D盘或E盘）即可双击运行，绝不修改 Windows 系统注册表，适合内网批量归档。
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* 2. 自动化发布流水线 */}
+          <section id="sec-tut-cicd" className="cc-cl-sec">
+            <h2>{isEn ? '2. Automated Build & Deployment Pipeline' : '2. 命令行自动化构建与持续发布流水线全景图'}</h2>
+
+            <p style={{ fontSize: '13.5px', color: 'var(--cc-text-secondary)', lineHeight: '1.6' }}>
+              衡绩将全套编译、打包、测试与部署整合为自动化的 Node.js 脚本：
+            </p>
+
+            <MermaidDiagram
+              title={isEn ? 'End-to-End Build & Deployment Flow' : '端到端全自动编译与持续发布流水线架构图'}
+              subtitle={isEn ? 'Git Source ➔ 46 Unit Tests ➔ Vite Bundle ➔ Electron Builder ➔ Releases & Pages' : '源码暂存 ➔ 46项测试 ➔ 网页构建 ➔ 四格式桌面编译 ➔ GitHub 双发布'}
+              chart={`flowchart LR
+    Code["💻 本地 Git 源码 (main)"]
+    --> Test["🧪 全自动单元测试 (npm test)<br/><i>(46项精算与安全测试 100% 通过)</i>"]
+    --> BuildWeb["📦 前端 Bundle 生产构建 (Vite)"]
+    
+    BuildWeb --> ElectronBuild["🔨 electron-builder 多格式编译"]
+    BuildWeb --> PagesBuild["🌐 官网静态站构建 (带防缓存哈希)"]
+
+    subgraph Packages["四大官方桌面安装包"]
+        P1["hengji.msi (企业域静默安装)"]
+        P2["hengji.exe (经典安装向导)"]
+        P3["hengji-portable.exe (单文件便携版)"]
+        P4["hengji.zip (免安装绿色包)"]
+    end
+
+    ElectronBuild --> Packages
+    Packages --> GHReleases["🚀 发布至 GitHub Releases (带 SHA-256 校验和)"]
+    PagesBuild --> GHPages["🌍 部署至 GitHub Pages 静态网站"]
+
+    style Code fill:#f8fafc,stroke:#64748b,stroke-width:1.5px
+    style Test fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#1e40af
+    style BuildWeb fill:#fefce8,stroke:#ca8a04,stroke-width:1.5px,color:#854d0e
+    style ElectronBuild fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#9a3412
+    style PagesBuild fill:#fdf4ff,stroke:#a855f7,stroke-width:1.5px,color:#7e22ce
+    style Packages fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px
+    style GHReleases fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#15803d
+    style GHPages fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1d4ed8`}
+            />
+
+            <div className="cc-md-quote" style={{ margin: '14px 0', borderLeftColor: '#0284c7' }}>
+              <b>💡 终极全自动连击流水线：</b><br />
+              只需在终端运行以下单行命令，就能在 3 分钟内全自动跑完单元测试、编译三大安装包、压缩 ZIP、编译官网并发布上线：
+            </div>
+
+            <MarkdownCodeCard
+              lang="POWERSHELL"
+              code={`# 纯命令行全自动全流程连击流水线\nnpm test && npx vite build --config vite.desktop.config.ts && npx electron-builder --win nsis msi portable --x64 && node scripts/build-zip.mjs && npm run pages:build && node scripts/publish-release-github.mjs && node scripts/deploy-pages.mjs`}
+              copyKey="tut-cmd-oneliner"
+              onCopyText={onCopyText}
+              copiedKey={copiedKey}
+            />
           </section>
         </div>
       );

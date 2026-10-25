@@ -6602,7 +6602,10 @@ button:disabled{opacity:.55;cursor:not-allowed}
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 7px 14px;
+  padding: 8px 14px;
+  margin-top: 14px;
+  width: 100%;
+  box-sizing: border-box;
   background: linear-gradient(90deg, #fff7ed 0%, #f0fdf4 50%, #eff6ff 100%);
   border: 1px dashed #cbd5e1;
   border-radius: 8px;
