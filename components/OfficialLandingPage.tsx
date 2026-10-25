@@ -38,7 +38,8 @@ import {
   TrendingUp,
   Trophy,
   Users,
-  ArrowRight
+  ArrowRight,
+  Search
 } from 'lucide-react';
 import {
   APP_VERSION,
@@ -55,6 +56,7 @@ import {
 } from '../lib/core';
 import brandHengSeal from '../app/brand-heng-seal.png';
 import brandBurstFlower from '../app/brand-burst-flower.png';
+import { DOC_BOOKS, DocArticleContent } from './OfficialDocsData';
 
 export interface OfficialLandingPageProps {
   onLaunchDemo: (initialTab?: string, workspaceType?: 'general' | 'auditor') => void;
@@ -105,8 +107,15 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
   const [selectedVerIdx, setSelectedVerIdx] = useState<number>(0);
   // 复制反馈状态
   const [copiedKey, setCopiedKey] = useState<string>('');
-  // 文档页状态
-  const [docSection, setDocSection] = useState<number>(0);
+  // 文档中心大文章与章节状态
+  const [activeBookId, setActiveBookId] = useState<string>('intro');
+  const [activeChapterId, setActiveChapterId] = useState<string>('intro-system');
+  const [expandedBooks, setExpandedBooks] = useState<{ [id: string]: boolean }>({
+    intro: true,
+    manual: true,
+    deploy: true,
+  });
+  const [docSearchQuery, setDocSearchQuery] = useState<string>('');
 
   const latestVer = updateInfo?.latestVersion || APP_VERSION;
   const latestDate = UPDATE_HISTORY[0]?.date || '2026-10-25';
@@ -428,34 +437,36 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                   </span>
                 </button>
 
-                <div className="cc-hero-brand-row">
-                  <div className="cc-hero-dual-logos" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                    <img src={brandHengSeal} alt="衡" className="cc-hero-seal" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }} />
-                    <img src={brandBurstFlower} alt="衡绩" className="cc-hero-logo" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'contain' }} />
+                <div className="cc-hero-title-group">
+                  <div className="cc-hero-brand-row">
+                    <div className="cc-hero-dual-logos" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                      <img src={brandHengSeal} alt="衡" className="cc-hero-seal" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }} />
+                      <img src={brandBurstFlower} alt="衡绩" className="cc-hero-logo" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'contain' }} />
+                    </div>
+                    <div>
+                      <h1>{isEn ? 'HengJi' : '衡绩'}</h1>
+                      <span className="cc-hero-en-sub">Engineering & R&D Merit Evaluation Platform</span>
+                    </div>
                   </div>
-                  <div>
-                    <h1>{isEn ? 'HengJi' : '衡绩'}</h1>
-                    <span className="cc-hero-en-sub">Engineering & R&D Merit Evaluation Platform</span>
-                  </div>
+
+                  <h2 className="cc-hero-slogan">
+                    {isEn ? (
+                      <>
+                        Measure every project contribution <span className="cc-gradient-accent">with precision and equity</span>
+                      </>
+                    ) : (
+                      <>
+                        让每一份项目贡献，<span className="cc-gradient-accent">都有据可衡</span>
+                      </>
+                    )}
+                  </h2>
+
+                  <p className="cc-hero-tagline">
+                    {isEn
+                      ? 'Unify and manage your engineering project and team merit evaluation workflow.'
+                      : '统一管理你的工程项目与团队绩效考核工作流'}
+                  </p>
                 </div>
-
-                <h2 className="cc-hero-slogan">
-                  {isEn ? (
-                    <>
-                      Measure every project contribution <span className="cc-gradient-accent">with precision and equity</span>
-                    </>
-                  ) : (
-                    <>
-                      让每一份项目贡献，<span className="cc-gradient-accent">都有据可衡</span>
-                    </>
-                  )}
-                </h2>
-
-                <p className="cc-hero-tagline">
-                  {isEn
-                    ? 'Unify and manage your engineering project and team merit evaluation workflow.'
-                    : '统一管理你的工程项目与团队绩效考核工作流'}
-                </p>
 
                 <div className="cc-hero-buttons-row">
                   <button
@@ -1998,370 +2009,197 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
         </main>
       )}
 
-      {/* ==================== 视图 4：文档页面 ==================== */}
-      {pageView === 'docs' && (
-        <main className="cc-changelog-page">
-          <div className="cc-cl-layout">
-            <aside className="cc-cl-sidebar">
-              <div className="cc-cl-sidebar-header">
-                <BookOpen size={15} />
-                <strong>{isEn ? 'Documentation Guide' : '使用文档目录'}</strong>
-              </div>
-              <div className="cc-cl-ver-list">
-                {[
-                  { id: 0, title: isEn ? 'Quick Start & Introduction' : '快速入门与系统介绍' },
-                  { id: 1, title: isEn ? '1. Create Encrypted Workspace' : '1. 新建安全加密工作区' },
-                  { id: 2, title: isEn ? '2. Import Team & Contracts' : '2. 导入部门员工与合同' },
-                  { id: 3, title: isEn ? '3. Phased Anti-Overdraft Schedule' : '3. 稳健交付防透支排期' },
-                  { id: 4, title: isEn ? '4. Monthly Allocation & Release' : '4. 月底集中分配与发布' },
-                  { id: 5, title: isEn ? '5. Auditor Package Routing' : '5. 核算员数据包流转' },
-                  { id: 6, title: isEn ? 'Audit Standards & FAQs' : '考核口径与常见问题' },
-                  { id: 7, title: isEn ? 'Remote Push, Build & Deploy Guide' : '远程推送与发布部署教程' },
-                ].map(ch => (
-                  <button
-                    key={ch.id}
-                    type="button"
-                    className={`cc-cl-ver-item ${docSection === ch.id ? 'active' : ''}`}
-                    onClick={() => setDocSection(ch.id)}
+      {/* ==================== 视图 4：文档页面（全新按图3、图4现代三栏架构） ==================== */}
+      {pageView === 'docs' && (() => {
+        const currentBook = DOC_BOOKS.find(b => b.id === activeBookId) || DOC_BOOKS[0];
+        const currentChapter =
+          currentBook.chapters.find(c => c.id === activeChapterId) ||
+          DOC_BOOKS.flatMap(b => b.chapters).find(c => c.id === activeChapterId) ||
+          currentBook.chapters[0];
+
+        const query = docSearchQuery.trim().toLowerCase();
+        const displayBooks = DOC_BOOKS.map(book => {
+          if (!query) return book;
+          const matchBook = (isEn ? book.titleEn : book.titleZh).toLowerCase().includes(query);
+          const matchingChapters = book.chapters.filter(ch => {
+            const matchChap = (isEn ? ch.titleEn : ch.titleZh).toLowerCase().includes(query);
+            const matchSec = ch.sections.some(s => (isEn ? s.titleEn : s.titleZh).toLowerCase().includes(query));
+            return matchChap || matchSec;
+          });
+          if (matchBook) return book;
+          return matchingChapters.length > 0 ? { ...book, chapters: matchingChapters } : null;
+        }).filter(Boolean) as typeof DOC_BOOKS;
+
+        return (
+          <main className="cc-changelog-page">
+            <div className="cc-cl-layout" style={{ gridTemplateColumns: '270px 1fr 220px', gap: '30px' }}>
+              {/* 左侧栏：按图3设计（顶部搜索框 + 文章大题目点击展开章节） */}
+              <aside className="cc-cl-sidebar">
+                {/* 搜索框：图3顶部带 ⌘K */}
+                <div className="cc-doc-search-box">
+                  <Search size={14} style={{ color: 'var(--cc-text-muted)', flexShrink: 0 }} />
+                  <input
+                    type="text"
+                    value={docSearchQuery}
+                    onChange={e => setDocSearchQuery(e.target.value)}
+                    placeholder={isEn ? 'Search docs...' : '搜索文档...'}
+                  />
+                  <kbd>⌘K</kbd>
+                </div>
+
+                {/* 文档题目列表：按图3设计，带图标与箭头，展开每个章节 */}
+                <nav className="cc-doc-books-nav">
+                  {displayBooks.map(book => {
+                    const isSelected = activeBookId === book.id;
+                    const isExpanded = !!expandedBooks[book.id];
+                    return (
+                      <div key={book.id} className="cc-doc-book-group">
+                        <button
+                          type="button"
+                          className={`cc-doc-book-header ${isSelected ? 'active' : ''}`}
+                          onClick={() => {
+                            setExpandedBooks(prev => ({
+                              ...prev,
+                              [book.id]: !prev[book.id]
+                            }));
+                            setActiveBookId(book.id);
+                            if (book.chapters.length > 0 && !book.chapters.some(c => c.id === activeChapterId)) {
+                              setActiveChapterId(book.chapters[0].id);
+                            }
+                          }}
+                        >
+                          <div className="cc-doc-book-title">
+                            <span style={{ fontSize: '15px' }}>{book.icon}</span>
+                            <span style={{ fontSize: '13.5px' }}>{isEn ? book.titleEn : book.titleZh}</span>
+                          </div>
+                          <ChevronRight
+                            size={14}
+                            className="cc-doc-book-chevron"
+                            style={{
+                              transform: isExpanded ? 'rotate(90deg)' : 'none',
+                              transition: 'transform 0.18s ease'
+                            }}
+                          />
+                        </button>
+
+                        {/* 展开的章节列表 */}
+                        {isExpanded && (
+                          <div className="cc-doc-chapters-list">
+                            {book.chapters.map(chap => {
+                              const isChapActive = activeChapterId === chap.id;
+                              return (
+                                <button
+                                  key={chap.id}
+                                  type="button"
+                                  className={`cc-doc-chapter-link ${isChapActive ? 'active' : ''}`}
+                                  onClick={() => {
+                                    setActiveBookId(book.id);
+                                    setActiveChapterId(chap.id);
+                                    window.scrollTo({ top: 120, behavior: 'smooth' });
+                                  }}
+                                >
+                                  <span style={{ color: 'var(--cc-text-muted)', fontSize: '12px', fontWeight: '700' }}>
+                                    {chap.number}
+                                  </span>
+                                  <span>{isEn ? chap.titleEn : chap.titleZh}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </nav>
+              </aside>
+
+              {/* 中间栏：正文内容展示 */}
+              <article className="cc-cl-article">
+                <DocArticleContent
+                  chapterId={activeChapterId}
+                  isEn={isEn}
+                  onLaunchDemo={onLaunchDemo}
+                  onNavigateDownload={() => navigatePage('download')}
+                  onCopyText={handleCopyText}
+                  copiedKey={copiedKey}
+                />
+
+                <div
+                  style={{
+                    marginTop: '36px',
+                    paddingTop: '22px',
+                    borderTop: '1px solid var(--cc-border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px'
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button
+                      type="button"
+                      className="cc-btn-terracotta"
+                      onClick={() => onLaunchDemo('dashboard', 'general')}
+                    >
+                      <Play size={14} fill="currentColor" />
+                      <span>{isEn ? 'Launch Live Demo Online' : '立即进入在线工作台实操体验'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="cc-btn-outline"
+                      onClick={() => navigatePage('download')}
+                    >
+                      <Download size={14} />
+                      <span>{isEn ? 'Go to Download Page' : '前往下载桌面客户端'}</span>
+                    </button>
+                  </div>
+
+                  <span style={{ fontSize: '12px', color: 'var(--cc-text-muted)' }}>
+                    {isEn ? `HengJi Documentation · v${latestVer}` : `衡绩官方技术文档 · v${latestVer}`}
+                  </span>
+                </div>
+              </article>
+
+              {/* 右侧栏：按图4设计（本页内容 / On this page 提纲，点击平滑滚动） */}
+              <aside className="cc-doc-page-toc">
+                <div className="cc-doc-page-toc-title">{isEn ? 'On this page' : '本页内容'}</div>
+                <div className="cc-doc-page-toc-list">
+                  {/* 当前章节大标 */}
+                  <div
+                    style={{
+                      color: 'var(--cc-terracotta)',
+                      fontWeight: '700',
+                      fontSize: '13px',
+                      marginBottom: '6px'
+                    }}
                   >
-                    <span className="ver-arrow">{docSection === ch.id ? '⌄' : '›'}</span>
-                    <span>{ch.title}</span>
-                  </button>
-                ))}
-              </div>
-            </aside>
-
-            <article className="cc-cl-article">
-              {docSection === 0 && (
-                <>
-                  <div className="cc-cl-article-header">
-                    <h1>{isEn ? 'HengJi Quick Start & System Introduction' : '衡绩 (HengJi) 快速入门与系统介绍'}</h1>
-                    <span className="cc-cl-date">{isEn ? `v${APP_VERSION} Official Manual` : `v${APP_VERSION} 官方手册`}</span>
+                    {currentChapter?.number} {isEn ? currentChapter?.titleEn : currentChapter?.titleZh}
                   </div>
-                  <p className="cc-cl-summary">
-                    {isEn
-                      ? 'Tailored for multi-project, long-lifecycle, and cross-functional teams (General, Product, R&D). Seamlessly integrates total contract quota management, phased overdraft prevention, monthly merit allocation, offline cross-project data aggregation, and top performers recognition—delivering an auditable, end-to-end quantitative performance loop. You can download the Windows desktop client for offline intranet use or click [Live Demo] to experience it directly in your browser sandbox.'
-                      : '专为多项目、长周期、跨专业组（总体组 / 产品组 / 研发组）团队打造。将合同总额管控、全周期前低后高防透支规划、月底集中考评分配、跨项目数据包流转汇总与卓越绩星评选融为一体，告别繁琐易错的 Excel 手工台账，构建分毫不差的端到端量化考核闭环。您既可以下载 Windows 桌面客户端在纯内网离线使用，也可以随时点击顶部【在线体验】在浏览器沙盒中直接操作。'}
-                  </p>
-                  <hr className="cc-cl-divider" />
-                  <section className="cc-cl-sec">
-                    <h2>{isEn ? '5 Standardized Operating Steps' : '五步标准作业流程'}</h2>
-                    <ul>
-                      <li>
-                        <b>{isEn ? 'Step 1: Create Secure Workspace' : '第一步：新建安全工作区'}</b> —{' '}
-                        {isEn
-                          ? 'Choose General Admin or Auditor Workspace. Save .hengji files to non-system drive (D:\\ or E:\\).'
-                          : '选择“综合管理工作区”或“绩效核算工作区”，将 .hengji 加密文件保存在非系统盘（D:\\ / E:\\ 盘）。'}
-                      </li>
-                      <li>
-                        <b>{isEn ? 'Step 2: Initialize Roster & Contracts' : '第二步：初始化员工与项目'}</b> —{' '}
-                        {isEn
-                          ? 'Batch import or initialize General, Product, and R&D groups, contracts, and rosters.'
-                          : '批量导入或一键初始化总体组、产品组、研发组员工花名册与工程合同清单（支持千分位与多位小数自动清洗）。'}
-                      </li>
-                      <li>
-                        <b>{isEn ? 'Step 3: Anti-Overdraft Quota Planning' : '第三步：全周期额度防透支规划'}</b> —{' '}
-                        {isEn
-                          ? 'Use robust phased scheduling: 5% initial cap, 45%+ delivery anchor, 5% warranty retention.'
-                          : '使用“🎯 稳健交付型（前低后高）”排期，前期争取阶段限高 0~10%（默认 5%），发货交付锁定 45%+ 大头，末月维保强制保留 5%。'}
-                      </li>
-                      <li>
-                        <b>{isEn ? 'Step 4: Monthly Allocation & Release' : '第四步：月底集中分配与发布'}</b> —{' '}
-                        {isEn
-                          ? 'In the unified monthly sheet, apply planned budgets and configure ratios (strictly 100%).'
-                          : '在全项目当月集中大表中一键套用规划额度，配置团队成员比例（合计严格等于 100%），一键批量发布生效。'}
-                      </li>
-                      <li>
-                        <b>{isEn ? 'Step 5: Multi-Cycle Reports & Honors' : '第五步：多维报表透视与荣誉评选'}</b> —{' '}
-                        {isEn
-                          ? 'Inspect 2D member-by-project closed matrices down to cents, revealing merit stars.'
-                          : '查验横向个人×纵向项目二维闭环矩阵（精确到分），自动生成月度/季度/年度卓越绩星金榜。'}
-                      </li>
-                    </ul>
-                  </section>
-                </>
-              )}
 
-              {docSection === 1 && (
-                <>
-                  <div className="cc-cl-article-header">
-                    <h1>{isEn ? 'Step 1: Create Encrypted Workspace' : '第一步：新建安全加密工作区'}</h1>
-                  </div>
-                  <p className="cc-cl-summary">
-                    {isEn
-                      ? 'Never hide sensitive business data inside hidden system directories. All HengJi data is secured via PBKDF2-SHA256 (100K iterations) and AES-256-GCM authenticated encryption.'
-                      : '彻底告别把业务数据偷偷藏在 C 盘用户目录的隐患。衡绩所有数据均通过 PBKDF2-SHA256 (10万次迭代) 与 AES-256-GCM 加密保存在您指定的本地文件中。'}
-                  </p>
-                  <hr className="cc-cl-divider" />
-                  <section className="cc-cl-sec">
-                    <h2>{isEn ? 'Dual Role Workspaces' : '双工作区角色模式'}</h2>
-                    <ul>
-                      <li>
-                        <b>{isEn ? '🏢 General Admin Workspace (Recommended)' : '🏢 综合管理工作区（推荐）'}</b>：
-                        {isEn ? 'Covers project setup, quota scheduling, monthly allocations, and team rosters.' : '适合超级管理员、部门主任或项目负责人，涵盖项目立项、额度排期、月度考评分配与团队编制全套功能。'}
-                      </li>
-                      <li>
-                        <b>{isEn ? '📊 Auditor Workspace' : '📊 绩效核算工作区'}</b>：
-                        {isEn ? 'Specialized for receiving and aggregating .json packages from project managers.' : '适合专职绩效核算员，专门用于批量接收并拖拽导入各项目负责人发来的 .json 项目分配数据包，自动跨项目合并出表。'}
-                      </li>
-                      <li>
-                        <b>{isEn ? 'Automated Mirror Backup' : '自动镜像灾备'}</b>：
-                        {isEn ? 'Every save generates a .hengji.backup mirror file in the same directory for fail-safe recovery.' : '每次点击保存，系统自动在同目录生成 .hengji.backup 备份文件，双重保障数据安全。'}
-                      </li>
-                    </ul>
-                  </section>
-                </>
-              )}
-
-              {docSection === 2 && (
-                <>
-                  <div className="cc-cl-article-header">
-                    <h1>{isEn ? 'Step 2: Import Team Members & Contracts' : '第二步：导入部门员工与工程合同'}</h1>
-                  </div>
-                  <p className="cc-cl-summary">
-                    {isEn
-                      ? 'Fully compatible with Excel / CSV ledgers from finance and ERP systems. Binds employees via unique ID and supports multi-subcontracts under one order ID.'
-                      : '全面兼容财务与 OA 导出的 Excel / CSV 台账，支持按唯一工号精准绑定员工，支持同一工作令号下挂靠多个独立子合同。'}
-                  </p>
-                  <hr className="cc-cl-divider" />
-                  <section className="cc-cl-sec">
-                    <h2>{isEn ? 'Fault-Tolerant Financial Parser' : '财务格式高容错解析'}</h2>
-                    <ul>
-                      <li>
-                        <b>{isEn ? 'Automatic Amount Cleansing' : '自动清洗金额'}</b>：
-                        {isEn ? 'Strips thousand-separator commas, currency signs, and rounds decimals to integer cents.' : '自动剥离千分位逗号（如 1,309,000.00）、货币符号（¥、$、元、万元），超长浮点小数自动四舍五入到“分”。'}
-                      </li>
-                      <li>
-                        <b>{isEn ? 'Functional Group Linkage' : '专业组联动'}</b>：
-                        {isEn ? 'Supports General, Product, and R&D groups with automated roster mapping and star awards.' : '支持总体组、产品组、研发组划分，后续团队勾选、趋势对比与荣誉评选全自动联动。'}
-                      </li>
-                    </ul>
-                  </section>
-                </>
-              )}
-
-              {docSection === 3 && (
-                <>
-                  <div className="cc-cl-article-header">
-                    <h1>{isEn ? 'Step 3: Phased Anti-Overdraft Quota Schedule' : '第三步：稳健交付防透支排期'}</h1>
-                  </div>
-                  <p className="cc-cl-summary">
-                    {isEn
-                      ? 'Prevents premature budget exhaustion in early project phases, securing motivation for final delivery and acceptance.'
-                      : '严防“项目刚立项就把绩效分光，后期进入成品发货与试验终验时有活无钱可分”。'}
-                  </p>
-                  <hr className="cc-cl-divider" />
-                  <section className="cc-cl-sec">
-                    <h2>{isEn ? 'Three-Phase Anti-Overdraft Rules' : '三段式防透支配比法则'}</h2>
-                    <ul>
-                      <li>
-                        <b>{isEn ? 'Inception Phase (Month 1: 0% ~ 10%, default 5%)' : '前期项目争取阶段（首月 0% ~ 10% 可调，默认 5%）'}</b>：
-                        {isEn ? 'Used for bidding and feasibility with a strict hard cap.' : '用于立项论证与商务争取，设立硬上限。'}
-                      </li>
-                      <li>
-                        <b>{isEn ? 'Core R&D & Delivery Phase (Progressive, 45%+ major)' : '主体研制与成品交付阶段（前低后高，大头 45%+）'}</b>：
-                        {isEn ? 'Scales as development advances, anchoring incentives to final delivery.' : '随着初样、正样联调推进逐步递增，重头激励锁定在成品发货与终检验收。'}
-                      </li>
-                      <li>
-                        <b>{isEn ? 'Warranty Phase (Mandatory 5% retention)' : '售后维保阶段（末月固定保留 5%）'}</b>：
-                        {isEn ? 'Safeguards 5% quota until warranty period finishes.' : '在项目周期最后一个月稳固锁定 5% 额度，保障售后技术支持激励。'}
-                      </li>
-                    </ul>
-                  </section>
-                </>
-              )}
-
-              {docSection === 4 && (
-                <>
-                  <div className="cc-cl-article-header">
-                    <h1>{isEn ? 'Step 4: Monthly Allocation & Batch Release' : '第四步：月底集中分配与批量发布'}</h1>
-                  </div>
-                  <p className="cc-cl-summary">
-                    {isEn
-                      ? 'Review all ongoing projects in one unified sheet each month without opening separate windows.'
-                      : '当月所有在研项目集中呈现在同一张透视大表中，无需逐个点开项目弹窗。'}
-                  </p>
-                  <hr className="cc-cl-divider" />
-                  <section className="cc-cl-sec">
-                    <h2>{isEn ? 'Core Formulas & Exact Verification' : '核心计算公式与校验'}</h2>
-                    <ul>
-                      <li>
-                        <b>{isEn ? 'Employee Monthly Points' : '员工当月绩点（万元）'}</b> ={' '}
-                        {isEn ? 'Contract Total × Monthly Project Ratio × Member Share' : '项目合同总额（万元） × 当月项目分配比例（%） × 员工当月分配率（%）'}。
-                      </li>
-                      <li>
-                        <b>{isEn ? 'Strict 100% Closure' : '100% 严密守恒'}</b>：
-                        {isEn ? 'All member ratios must sum to exactly 100%, backed by BigInt largest remainder adjustment.' : '当月项目内所有参评成员的分配比例之和必须精确等于 100%，底层采用 BigInt 与最大余数补差法，确保分毫不差。'}
-                      </li>
-                    </ul>
-                  </section>
-                </>
-              )}
-
-              {docSection === 5 && (
-                <>
-                  <div className="cc-cl-article-header">
-                    <h1>{isEn ? 'Step 5: Auditor Package Routing & Rollup' : '第五步：核算员数据包流转与汇总'}</h1>
-                  </div>
-                  <p className="cc-cl-summary">
-                    {isEn
-                      ? 'Multi-role collaborative mechanism designed specifically for secure, serverless intranet setups.'
-                      : '专为纯内网无服务器环境打造的多角色协同机制。'}
-                  </p>
-                  <hr className="cc-cl-divider" />
-                  <section className="cc-cl-sec">
-                    <h2>{isEn ? 'Package Export & Unified Rollup' : '数据包导出与一键归集'}</h2>
-                    <ul>
-                      <li>
-                        <b>{isEn ? 'Project Manager Export' : '负责人端导出'}</b>：
-                        {isEn ? 'Export individual project packages or multi-project bundles (.json) with one click.' : '在【项目库】或【数据资产中心】点击导出单个项目数据包或名下全部项目合包（.json）。'}
-                      </li>
-                      <li>
-                        <b>{isEn ? 'Auditor Import' : '核算员端导入'}</b>：
-                        {isEn ? 'Drag and drop packages into the Auditor Workspace to roll up all personnel across projects.' : '在核算工作区【数据包导入中心】直接拖拽多个数据包，系统基于员工唯一工号/ID 自动合并跨项目绩点，生成全员总表。'}
-                      </li>
-                    </ul>
-                  </section>
-                </>
-              )}
-
-              {docSection === 6 && (
-                <>
-                  <div className="cc-cl-article-header">
-                    <h1>{isEn ? 'Business Standards & Project Leader Reference Ranges' : '已确认的业务口径与负责人参考系数'}</h1>
-                  </div>
-                  <p className="cc-cl-summary">
-                    {isEn
-                      ? 'Built-in flexible guidance ranges for project leader allocation percentages.'
-                      : '系统内置项目负责人参考系数区间引导（柔性提示，不强制阻断保存）。'}
-                  </p>
-                  <hr className="cc-cl-divider" />
-                  <section className="cc-cl-sec">
-                    <h2>{isEn ? 'Contract Values & Recommended Leader Ratios' : '合同金额与负责人参考占比'}</h2>
-                    <ul>
-                      <li>
-                        <b>{isEn ? '0 < Contract Value < ¥500K' : '0 < 合同金额 < 50 万元'}</b>：
-                        {isEn ? 'Project leader reference range: 60% – 90%.' : '项目负责人参考系数区间为 60% – 90%。'}
-                      </li>
-                      <li>
-                        <b>{isEn ? '¥500K ≤ Contract Value < ¥5M' : '50 ≤ 合同金额 < 500 万元'}</b>：
-                        {isEn ? 'Project leader reference range: 30% – 60%.' : '项目负责人参考系数区间为 30% – 60%。'}
-                      </li>
-                      <li>
-                        <b>{isEn ? 'Contract Value ≥ ¥5M' : '合同金额 ≥ 500 万元'}</b>：
-                        {isEn ? 'Project leader reference range: 10% – 30%.' : '项目负责人参考系数区间为 10% – 30%。'}
-                      </li>
-                    </ul>
-                  </section>
-                </>
-              )}
-
-              {docSection === 7 && (
-                <>
-                  <div className="cc-cl-article-header">
-                    <h1>{isEn ? 'Remote Push, Build & Deployment Guide' : '远程推送与发布部署教程'}</h1>
-                    <span className="cc-cl-date">{isEn ? 'Manual Command-Line Workflow' : '纯命令行手动操作标准流程'}</span>
-                  </div>
-                  <p className="cc-cl-summary">
-                    {isEn
-                      ? 'Detailed step-by-step instructions for manual terminal operations: Git commits, tagging, cross-packaging desktop installers (EXE/MSI/Portable/ZIP), GitHub Releases publication, and GitHub Pages deployment.'
-                      : '本教程专为纯命令行手动操作编写，详细拆解了如何一步一步使用标准命令完成代码提交、远程标签推送、桌面端四种安装格式编译打包、GitHub Releases 官方发布与 GitHub Pages 静态站点部署。'}
-                  </p>
-                  <hr className="cc-cl-divider" />
-
-                  <section className="cc-cl-sec">
-                    <h2>{isEn ? '1. Preparation: Versioning & Testing' : '1. 准备阶段：版本号统一与单元测试'}</h2>
-                    <p>{isEn ? 'Verify package.json and lib/core.ts version numbers, then execute the automated test suite:' : '在每次发布前，确保各个配置文件的版本号一致，并通过算法一致性测试：'}</p>
-                    <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-                      <code>npm test</code>
-                    </pre>
-                    <small style={{ color: 'var(--cc-text-muted)' }}>
-                      {isEn ? '✔ Pass criteria: all 37 core unit tests and 9 auditor tests pass with green checks.' : '✔ 通过指标：37 项核心单测与 9 项核算员测试全部绿灯通过。'}
-                    </small>
-                  </section>
-
-                  <section className="cc-cl-sec">
-                    <h2>{isEn ? '2. Step 1: Push Code & Tags to GitHub' : '2. 步骤一：手动将代码与版本标签推送到 GitHub'}</h2>
-                    <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-                      <code>{`git status\ngit add .\ngit commit -m "release: v${latestVer} - update and improvements"\ngit tag -a v${latestVer} -m "release v${latestVer}"\ngit push origin main\ngit push origin v${latestVer}`}</code>
-                    </pre>
-                  </section>
-
-                  <section className="cc-cl-sec">
-                    <h2>{isEn ? '3. Step 2: Build & Package Desktop Installers' : '3. 步骤二：手动编译与打包桌面端全套安装矩阵'}</h2>
-                    <p>
-                      {isEn
-                        ? 'HengJi provides 4 distribution formats: EXE (NSIS Wizard), MSI (Enterprise Installer), Portable (Single Exe), and ZIP (Green Archive).'
-                        : '衡绩系统提供 4 种独立的分发格式：EXE 安装向导版、MSI 企业级安装包、Portable 便携单文件与 ZIP 绿色解压版。'}
-                    </p>
-                    <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-                      <code>{`# 1. 前端 Bundle 生产编译\nnpx vite build --config vite.desktop.config.ts\n\n# 2. 构建 EXE、MSI 与 Portable 单文件\nnpx electron-builder --win nsis msi portable\n\n# 3. 压缩打包 ZIP 绿色完整包\nnode scripts/build-zip.mjs`}</code>
-                    </pre>
-                  </section>
-
-                  <section className="cc-cl-sec">
-                    <h2>{isEn ? '4. Step 3: Publish to GitHub Releases' : '4. 步骤三：发布至 GitHub Releases 并上传安装包'}</h2>
-                    <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-                      <code>node scripts/publish-release-github.mjs</code>
-                    </pre>
-                    <small style={{ color: 'var(--cc-text-muted)' }}>
-                      {isEn ? 'Auto-uploads 4 installer binaries to GitHub Release tag with download URLs.' : '脚本自动将 4 个分发文件上传至 GitHub Release 页面，无需手动在网页后台拖拽。'}
-                    </small>
-                  </section>
-
-                  <section className="cc-cl-sec">
-                    <h2>{isEn ? '5. Step 4: Deploy Static Website to GitHub Pages' : '5. 步骤四：部署静态网页至 GitHub Pages'}</h2>
-                    <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-                      <code>{`# 1. 编译网页端静态资源\nnpm run pages:build\n\n# 2. 推送至 gh-pages 分支完成部署\nnode scripts/deploy-pages.mjs`}</code>
-                    </pre>
-                  </section>
-
-                  <section className="cc-cl-sec">
-                    <h2>{isEn ? '6. Full Release Terminal One-Liner' : '6. 💡 全流程一键连续执行速查'}</h2>
-                    <pre style={{ background: 'var(--cc-surface-hover)', padding: '12px 16px', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }}>
-                      <code>npm test &amp;&amp; npm run desktop:pack &amp;&amp; npm run pages:build &amp;&amp; node scripts/publish-release-github.mjs &amp;&amp; node scripts/deploy-pages.mjs</code>
-                    </pre>
-                  </section>
-                </>
-              )}
-
-              <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--cc-border)', display: 'flex', gap: '12px' }}>
-                <button
-                  type="button"
-                  className="cc-btn-terracotta"
-                  onClick={() => onLaunchDemo('dashboard', 'general')}
-                >
-                  <Play size={14} fill="currentColor" />
-                  <span>{isEn ? 'Launch Live Demo Online' : '立即进入在线工作台实操体验'}</span>
-                </button>
-                <button
-                  type="button"
-                  className="cc-btn-outline"
-                  onClick={() => navigatePage('download')}
-                >
-                  <Download size={14} />
-                  <span>{isEn ? 'Go to Download Page' : '前往下载桌面客户端'}</span>
-                </button>
-              </div>
-            </article>
-
-            <aside className="cc-cl-toc">
-              <div className="cc-cl-toc-title">{isEn ? 'Quick Jumps' : '快捷跳转'}</div>
-              <nav>
-                <a href="#try" onClick={e => { e.preventDefault(); onLaunchDemo('dashboard', 'general'); }}>
-                  {isEn ? 'Launch Admin Workspace ↗' : '进入综合工作台 ↗'}
-                </a>
-                <a href="#aud" onClick={e => { e.preventDefault(); onLaunchDemo('auditor', 'auditor'); }}>
-                  {isEn ? 'Launch Auditor Workspace ↗' : '进入核算员视角 ↗'}
-                </a>
-                <a href="#dl" onClick={e => { e.preventDefault(); navigatePage('download'); }}>
-                  {isEn ? 'Download Client ↗' : '客户端下载 ↗'}
-                </a>
-              </nav>
-            </aside>
-          </div>
-        </main>
-      )}
+                  {/* 小节列表 */}
+                  {currentChapter?.sections.map(sec => (
+                    <a
+                      key={sec.id}
+                      href={`#${sec.id}`}
+                      className={`cc-doc-page-toc-item level-${sec.level}`}
+                      onClick={e => {
+                        e.preventDefault();
+                        const el = document.getElementById(sec.id);
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }}
+                    >
+                      {isEn ? sec.titleEn : sec.titleZh}
+                    </a>
+                  ))}
+                </div>
+              </aside>
+            </div>
+          </main>
+        );
+      })()}
     </div>
   );
 }

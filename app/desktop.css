@@ -2800,7 +2800,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 12px;
 }
 
 .cc-release-badge {
@@ -2815,7 +2816,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  margin-bottom: 18px;
+  margin-bottom: 4px;
   transition: all 0.15s ease;
   flex-wrap: wrap;
 }
@@ -2842,11 +2843,18 @@ button:disabled{opacity:.55;cursor:not-allowed}
   color: #fcd34d;
 }
 
+.cc-hero-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px; /* 三行极紧凑，类似图1 */
+  margin: 0;
+}
+
 .cc-hero-brand-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: 12px;
+  margin-bottom: 0;
 }
 
 .cc-hero-dual-logos {
@@ -2856,26 +2864,26 @@ button:disabled{opacity:.55;cursor:not-allowed}
 }
 
 .cc-hero-seal {
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
   object-fit: contain;
-  filter: drop-shadow(0 5px 12px rgba(60, 45, 30, 0.16));
+  filter: drop-shadow(0 4px 10px rgba(60, 45, 30, 0.16));
 }
 
 .cc-hero-logo {
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   object-fit: contain;
-  filter: drop-shadow(0 4px 10px rgba(60, 45, 30, 0.12));
+  filter: drop-shadow(0 4px 8px rgba(60, 45, 30, 0.12));
 }
 
 .cc-hero-brand-row h1 {
-  font-size: 44px;
+  font-size: 38px;
   font-weight: 900;
   letter-spacing: -0.02em;
   color: var(--cc-text);
   margin: 0;
-  line-height: 1.05;
+  line-height: 1.08;
 }
 
 .cc-hero-en-sub {
@@ -2883,14 +2891,16 @@ button:disabled{opacity:.55;cursor:not-allowed}
   color: var(--cc-text-muted);
   font-weight: 600;
   letter-spacing: 0.04em;
+  display: block;
+  margin-top: 1px;
 }
 
 .cc-hero-slogan {
-  font-size: 28px;
+  font-size: 27px;
   font-weight: 900;
   color: var(--cc-text);
-  margin: 0 0 10px;
-  line-height: 1.25;
+  margin: 0;
+  line-height: 1.22;
 }
 
 .cc-gradient-accent {
@@ -2906,22 +2916,11 @@ button:disabled{opacity:.55;cursor:not-allowed}
 }
 
 .cc-hero-tagline {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--cc-text-secondary);
-  margin: 0 0 10px;
-  line-height: 1.45;
-}
-
-.cc-hero-subdesc {
-  font-size: 13.5px;
-  color: var(--cc-text-muted);
-  margin: 0 0 22px;
-  line-height: 1.7;
-}
-
-.cc-hero-subdesc strong {
-  color: var(--cc-text-secondary);
+  margin: 0;
+  line-height: 1.35;
 }
 
 .cc-hero-buttons {
@@ -5478,4 +5477,242 @@ button:disabled{opacity:.55;cursor:not-allowed}
   .cc-cl-sidebar {
     position: static;
   }
+}
+
+/* ==================== 现代文档中心布局 (对齐图3与图4设计) ==================== */
+.cc-doc-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--cc-card);
+  border: 1px solid var(--cc-border-strong);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.cc-doc-search-box input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  color: var(--cc-text);
+  width: 100%;
+}
+
+.cc-doc-search-box input::placeholder {
+  color: var(--cc-text-muted);
+}
+
+.cc-doc-search-box kbd {
+  background: var(--cc-surface-hover);
+  border: 1px solid var(--cc-border);
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: 10.5px;
+  font-family: inherit;
+  color: var(--cc-text-muted);
+}
+
+.cc-doc-books-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cc-doc-book-group {
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.cc-doc-book-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cc-text);
+  cursor: pointer;
+  transition: all 0.16s ease;
+  text-align: left;
+}
+
+.cc-doc-book-header:hover {
+  background: var(--cc-surface);
+  color: var(--cc-terracotta);
+}
+
+.cc-doc-book-header.active {
+  background: #faeedf;
+  color: #c85a32;
+  font-weight: 700;
+}
+
+.cc-parchment-root.cc-dark .cc-doc-book-header.active {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+}
+
+.cc-doc-book-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+}
+
+.cc-doc-book-chevron {
+  font-size: 13px;
+  color: var(--cc-text-muted);
+  transition: transform 0.18s ease;
+}
+
+.cc-doc-book-header.active .cc-doc-book-chevron {
+  color: var(--cc-terracotta);
+}
+
+.cc-parchment-root.cc-dark .cc-doc-book-header.active .cc-doc-book-chevron {
+  color: #34d399;
+}
+
+.cc-doc-chapters-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0 6px 16px;
+  margin-top: 2px;
+  border-left: 2px solid var(--cc-border);
+  margin-left: 18px;
+}
+
+.cc-doc-chapter-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--cc-text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.14s ease;
+}
+
+.cc-doc-chapter-link:hover {
+  color: var(--cc-terracotta);
+  background: var(--cc-surface);
+}
+
+.cc-doc-chapter-link.active {
+  color: var(--cc-terracotta);
+  font-weight: 600;
+  background: var(--cc-surface-hover);
+}
+
+.cc-parchment-root.cc-dark .cc-doc-chapter-link.active {
+  color: #34d399;
+}
+
+.cc-doc-page-toc {
+  position: sticky;
+  top: 96px;
+  padding-left: 14px;
+  border-left: 1px solid var(--cc-border);
+}
+
+.cc-doc-page-toc-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cc-text);
+  margin-bottom: 12px;
+}
+
+.cc-doc-page-toc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cc-doc-page-toc-item {
+  font-size: 12.5px;
+  color: var(--cc-text-muted);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.45;
+  display: block;
+}
+
+.cc-doc-page-toc-item:hover {
+  color: var(--cc-terracotta);
+}
+
+.cc-doc-page-toc-item.level-1 {
+  font-weight: 600;
+  color: var(--cc-text-secondary);
+}
+
+.cc-doc-page-toc-item.level-1.active,
+.cc-doc-page-toc-item.active {
+  color: var(--cc-terracotta);
+  font-weight: 700;
+}
+
+.cc-parchment-root.cc-dark .cc-doc-page-toc-item.active {
+  color: #34d399;
+}
+
+.cc-doc-page-toc-item.level-2 {
+  padding-left: 12px;
+}
+
+.cc-doc-callout {
+  border-left: 4px solid var(--cc-terracotta);
+  background: #fdfaf6;
+  border-radius: 0 10px 10px 0;
+  padding: 14px 18px;
+  margin: 18px 0;
+}
+
+.cc-parchment-root.cc-dark .cc-doc-callout {
+  background: rgba(16, 185, 129, 0.08);
+  border-left-color: #10b981;
+}
+
+.cc-doc-step-card {
+  background: var(--cc-card);
+  border: 1px solid var(--cc-border-strong);
+  border-radius: 12px;
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+
+.cc-doc-step-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.cc-doc-step-tag {
+  background: #c85a32;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 5px;
+  letter-spacing: 0.03em;
+}
+
+.cc-parchment-root.cc-dark .cc-doc-step-tag {
+  background: #10b981;
 }
