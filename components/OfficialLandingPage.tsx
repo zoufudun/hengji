@@ -289,7 +289,10 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
           {/* 左侧：彩瓣图标 + 品牌名称 + 导航菜单 */}
           <div className="cc-header-left">
             <div className="cc-brand" onClick={() => navigatePage('home')}>
-              <img src={brandBurstFlower} alt="衡绩" className="cc-brand-flower" />
+              <div className="cc-brand-logos">
+                <img src={brandHengSeal} alt="衡" className="cc-brand-seal" />
+                <img src={brandBurstFlower} alt="衡绩" className="cc-brand-flower" />
+              </div>
               <span className="cc-brand-text">{isEn ? 'HengJi' : '衡绩 HengJi'}</span>
             </div>
 
@@ -393,7 +396,10 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                 </button>
 
                 <div className="cc-hero-brand-row">
-                  <img src={brandBurstFlower} alt="衡绩" className="cc-hero-logo" />
+                  <div className="cc-hero-dual-logos">
+                    <img src={brandHengSeal} alt="衡" className="cc-hero-seal" />
+                    <img src={brandBurstFlower} alt="衡绩" className="cc-hero-logo" />
+                  </div>
                   <div>
                     <h1>{isEn ? 'HengJi' : '衡绩'}</h1>
                     <span className="cc-hero-en-sub">Engineering & R&D Merit Evaluation Platform</span>
@@ -440,15 +446,6 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                       <small>v{latestVer} · 支持 EXE / MSI / 便携版 / ZIP</small>
                     </div>
                   </button>
-
-                  <button
-                    type="button"
-                    className="cc-btn-auditor-pill"
-                    onClick={() => onLaunchDemo('auditor', 'auditor')}
-                  >
-                    <Calculator size={15} />
-                    <span>体验核算员汇总视角</span>
-                  </button>
                 </div>
               </div>
 
@@ -481,6 +478,25 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                           <img src={brandBurstFlower} alt="" className="flower-badge" />
                         </div>
                         <strong>衡绩考核</strong>
+                      </div>
+
+                      <div className="hj-real-mode-switch">
+                        <button
+                          type="button"
+                          className={activePreview !== 'auditor' ? 'active' : ''}
+                          onClick={() => setActivePreview('dashboard')}
+                        >
+                          <BriefcaseBusiness size={11} />
+                          <span>综合管理台</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={activePreview === 'auditor' ? 'active auditor' : ''}
+                          onClick={() => setActivePreview('auditor')}
+                        >
+                          <Calculator size={11} />
+                          <span>核算员汇总</span>
+                        </button>
                       </div>
 
                       <div className="hj-real-sec-title">核心业务矩阵</div>
@@ -613,6 +629,13 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                           </button>
                           <button type="button" className="hj-real-top-btn guide" onClick={() => onLaunchDemo(currentModule.targetTab, currentModule.workspace)}>
                             <Sparkles size={11} /> 新手引导
+                          </button>
+                          <button
+                            type="button"
+                            className="hj-real-top-btn auditor-switch"
+                            onClick={() => onLaunchDemo('auditor', 'auditor')}
+                          >
+                            <Calculator size={11} /> 切换核算员汇总
                           </button>
                           <button
                             type="button"
@@ -888,7 +911,7 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                                     <td>总体组 (组长)</td>
                                     <td>4 个项目</td>
                                     <td>光电系统 18.90万 + 导航终端 8.40万 + 论证专项 4.20万...</td>
-                                    <td><strong style={{ color: '#059669' }}>34.50 万元</strong></td>
+                                    <td><strong className="hj-accent-pts">34.50 万元</strong></td>
                                   </tr>
                                   <tr>
                                     <td><code>EMP-005</code></td>
@@ -896,7 +919,7 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                                     <td>产品组 (骨干)</td>
                                     <td>3 个项目</td>
                                     <td>光电系统 13.50万 + 伺服模块 14.40万 + 批产保障 3.10万</td>
-                                    <td><strong style={{ color: '#059669' }}>31.00 万元</strong></td>
+                                    <td><strong className="hj-accent-pts">31.00 万元</strong></td>
                                   </tr>
                                   <tr>
                                     <td><code>EMP-012</code></td>
@@ -904,7 +927,7 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                                     <td>研发组 (主任设计师)</td>
                                     <td>3 个项目</td>
                                     <td>边缘算法 5.40万 + 光电系统 10.80万 + 预研课题 6.20万</td>
-                                    <td><strong style={{ color: '#059669' }}>22.40 万元</strong></td>
+                                    <td><strong className="hj-accent-pts">22.40 万元</strong></td>
                                   </tr>
                                 </tbody>
                               </table>
@@ -956,13 +979,13 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                                     <td>8.70</td>
                                     <td><strong>51.90</strong></td>
                                   </tr>
-                                  <tr style={{ background: 'rgba(16, 185, 129, 0.1)', fontWeight: 700 }}>
+                                  <tr className="hj-mock-sum-row">
                                     <td>—</td>
                                     <td><b>纵向：项目累加</b></td>
                                     <td><strong>54.00</strong></td>
                                     <td><strong>36.00</strong></td>
                                     <td><strong>12.00</strong></td>
-                                    <td><strong style={{ color: '#059669' }}>总计闭环：102.00 万</strong></td>
+                                    <td><strong className="hj-accent-pts">总计闭环：102.00 万</strong></td>
                                   </tr>
                                 </tbody>
                               </table>
@@ -1007,21 +1030,21 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                                     <td><b>任海平</b></td>
                                     <td>总体组</td>
                                     <td>某型综合光电探测系统研制 (GF-2026-01)</td>
-                                    <td><strong style={{ color: '#d97706' }}>168.50 万元</strong></td>
+                                    <td><strong className="hj-accent-pts">168.50 万元</strong></td>
                                   </tr>
                                   <tr>
                                     <td>🥈 亚军银奖</td>
                                     <td><b>陈韬</b></td>
                                     <td>产品组</td>
                                     <td>高精度伺服控制模块批产交付 (GF-2026-02)</td>
-                                    <td><strong style={{ color: '#059669' }}>142.30 万元</strong></td>
+                                    <td><strong className="hj-accent-pts">142.30 万元</strong></td>
                                   </tr>
                                   <tr>
                                     <td>🥉 季军铜奖</td>
                                     <td><b>王研</b></td>
                                     <td>研发组</td>
                                     <td>智能边缘计算载荷算法软件升级 (KY-2026-05)</td>
-                                    <td><strong style={{ color: '#0284c7' }}>128.90 万元</strong></td>
+                                    <td><strong className="hj-accent-pts">128.90 万元</strong></td>
                                   </tr>
                                 </tbody>
                               </table>
@@ -1297,7 +1320,8 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
             <div className="hj-footer-bottom">
               <div className="hj-footer-brand">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                  <img src={brandHengSeal} alt="衡绩" width={28} height={28} style={{ borderRadius: 6 }} />
+                  <img src={brandHengSeal} alt="衡" width={28} height={28} style={{ borderRadius: 6 }} />
+                  <img src={brandBurstFlower} alt="衡绩" width={26} height={26} />
                   <strong style={{ fontSize: '16px' }}>衡绩 · 员工绩点考核系统 (HengJi)</strong>
                 </div>
                 <p>让每一份项目贡献，都有据可衡。面向工程与科研团队的离线安全量化绩效管理平台。</p>

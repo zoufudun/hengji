@@ -1509,6 +1509,76 @@ export default function DesktopWorkspace() {
           </div>
         </div>
 
+        {/* 在线体验与快速视角切换栏：一键在综合管理工作台与核算员汇总界面间切换 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', padding: '4px', background: 'rgba(0, 0, 0, 0.22)', borderRadius: '10px', marginBottom: '14px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+          <button
+            type="button"
+            style={{
+              border: 'none',
+              padding: '7px 6px',
+              borderRadius: '7px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '5px',
+              background: workspaceType !== 'auditor' ? '#10b981' : 'transparent',
+              color: workspaceType !== 'auditor' ? '#022c22' : '#cbd5e1',
+              transition: 'all 0.18s',
+            }}
+            onClick={() => {
+              setWorkspaceType('general');
+              setTab('dashboard');
+            }}
+            title="切换至综合管理工作台（立项排期 / 月度绩效分配 / 团队编制）"
+          >
+            <BriefcaseBusiness size={13} />
+            <span>综合管理台</span>
+          </button>
+          <button
+            type="button"
+            style={{
+              border: 'none',
+              padding: '7px 6px',
+              borderRadius: '7px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '5px',
+              background: workspaceType === 'auditor' ? '#f59e0b' : 'transparent',
+              color: workspaceType === 'auditor' ? '#451a03' : '#cbd5e1',
+              transition: 'all 0.18s',
+            }}
+            onClick={() => {
+              if (state && (!auditorPackages || auditorPackages.length === 0)) {
+                const sysPkgs: ProjectMeritPackage[] = [];
+                const emps = state.employees || [];
+                state.projects.forEach(prj => {
+                  const pls = state.plans.filter(p => p.projectId === prj.id && p.status === 'published');
+                  if (!pls.length) return;
+                  const pkg = exportProjectMeritPackage(prj, pls, [], emps, 'admin', '管理员');
+                  sysPkgs.push(pkg);
+                });
+                if (sysPkgs.length > 0) {
+                  setAuditorPackages(sysPkgs);
+                }
+              }
+              setWorkspaceType('auditor');
+              setTab('auditor');
+              setAuditorSubTab('employees');
+            }}
+            title="切换至绩效核算员汇总界面（全员跨项目总表 / 合同矩阵 / 二维透视）"
+          >
+            <Calculator size={13} />
+            <span>核算员汇总</span>
+          </button>
+        </div>
+
         {workspaceType === 'auditor' ? (
           <>
             <div className="sidebar-section-title">全景驾驶与考核准则</div>
@@ -1772,6 +1842,54 @@ export default function DesktopWorkspace() {
               title="新手五步快速上手向导与业务闭环指南"
             >
               <Sparkles size={14} style={{ color: '#16a34a' }} />新手引导
+            </button>
+            <button
+              className="secondary"
+              style={{
+                padding: '6px 12px',
+                fontSize: '12.5px',
+                gap: '5px',
+                background: workspaceType === 'auditor' ? '#eff6ff' : '#fffbeb',
+                borderColor: workspaceType === 'auditor' ? '#93c5fd' : '#fcd34d',
+                color: workspaceType === 'auditor' ? '#1d4ed8' : '#b45309',
+                fontWeight: 700,
+              }}
+              onClick={() => {
+                if (workspaceType === 'auditor') {
+                  setWorkspaceType('general');
+                  setTab('dashboard');
+                  setNotice('已切换至：综合管理工作台（立项排期与月度绩效分配）');
+                } else {
+                  if (state && (!auditorPackages || auditorPackages.length === 0)) {
+                    const sysPkgs: ProjectMeritPackage[] = [];
+                    const emps = state.employees || [];
+                    state.projects.forEach(prj => {
+                      const pls = state.plans.filter(p => p.projectId === prj.id && p.status === 'published');
+                      if (!pls.length) return;
+                      const pkg = exportProjectMeritPackage(prj, pls, [], emps, 'admin', '管理员');
+                      sysPkgs.push(pkg);
+                    });
+                    if (sysPkgs.length > 0) {
+                      setAuditorPackages(sysPkgs);
+                    }
+                  }
+                  setWorkspaceType('auditor');
+                  setTab('auditor');
+                  setAuditorSubTab('employees');
+                  setNotice('已切换至：绩效核算员汇总界面（跨项目全员总表与审计大盘）');
+                }
+              }}
+              title={workspaceType === 'auditor' ? '点击切换回综合管理工作台' : '点击切换到绩效核算员汇总界面'}
+            >
+              {workspaceType === 'auditor' ? (
+                <>
+                  <BriefcaseBusiness size={14} />切换综合管理界面
+                </>
+              ) : (
+                <>
+                  <Calculator size={14} />切换核算员汇总界面
+                </>
+              )}
             </button>
             {typeof window !== 'undefined' && !window.meritDesktop?.status && (
               <button
