@@ -1017,6 +1017,7 @@ export default function DesktopWorkspace() {
       } catch {
         setState(sanitizeState(demoState()));
       }
+      setWorkspaceReady(true);
     }
   }, []);
 
@@ -1676,20 +1677,28 @@ export default function DesktopWorkspace() {
             </div>
             <button className="secondary" style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }} onClick={async () => {
               if (!state) return;
-              const saved = await window.meritDesktop.saveAs({
-                name: workspaceName,
-                revision,
-                actorId,
-                workspaceType,
-                ownerEmployeeId,
-                ownerEmployeeName,
-                state,
-                projectGroups,
-              });
-              if (saved) { setRevision(saved.revision); setDataFile(saved.filePath); setNotice('工作区已另存为新文件'); }
+              if (window.meritDesktop?.saveAs) {
+                const saved = await window.meritDesktop.saveAs({
+                  name: workspaceName,
+                  revision,
+                  actorId,
+                  workspaceType,
+                  ownerEmployeeId,
+                  ownerEmployeeName,
+                  state,
+                  projectGroups,
+                });
+                if (saved) { setRevision(saved.revision); setDataFile(saved.filePath); setNotice('工作区已另存为新文件'); }
+              } else {
+                setNotice('网页演示版暂不支持另存为本地文件，可点击右上方备份功能下载数据');
+              }
             }}><Save size={14}/>工作区另存为</button>
             <button className="secondary" style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }} onClick={async () => {
-              if (await window.meritDesktop.exportBase({ state, projectGroups })) setNotice('共享基础库已导出：不包含项目、工作内容和绩点');
+              if (window.meritDesktop?.exportBase) {
+                if (await window.meritDesktop.exportBase({ state, projectGroups })) setNotice('共享基础库已导出：不包含项目、工作内容和绩点');
+              } else {
+                setNotice('网页演示版暂不支持直接导出基础库，可使用项目组管理进行维护');
+              }
             }}><Users size={14}/>导出共享基础库</button>
             <button
               className="secondary guide-nav-btn"
@@ -1703,7 +1712,8 @@ export default function DesktopWorkspace() {
               <Sparkles size={14} style={{ color: '#16a34a' }} />新手引导
             </button>
             <button className="secondary" style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }} onClick={async () => {
-              await window.meritDesktop.lock(); setState(null); setWorkspaceName(''); setDataFile(''); setProjectGroups([]); setNotice('工作区已锁定');
+              if (window.meritDesktop?.lock) await window.meritDesktop.lock();
+              setState(null); setWorkspaceName(''); setDataFile(''); setProjectGroups([]); setNotice('工作区已锁定');
             }}><LogOut size={14}/>锁定</button>
           </div>
         </header>
@@ -2712,13 +2722,11 @@ function UpdateModal({
                 <Loader2 size={16} className="spin-icon" />
                 {installing ? `${installStepText} (${progressPercent}%)` : `${updateStepText} (${progressPercent}%)`}
               </button>
-            ) : (
+            ) : result?.hasUpdate ? (
               <button
                 type="button"
                 style={{
-                  background: result?.hasUpdate
-                    ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)'
-                    : 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)',
+                  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '8px',
@@ -2728,21 +2736,17 @@ function UpdateModal({
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
-                  boxShadow: result?.hasUpdate
-                    ? '0 4px 12px rgba(37, 99, 235, 0.35)'
-                    : '0 4px 12px rgba(13, 148, 136, 0.25)',
+                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)',
                   cursor: 'pointer',
                   transition: 'transform 0.15s, box-shadow 0.15s',
                 }}
                 onClick={() => setShowInstallChooser(true)}
-                title="点击弹出四种安装方式选择窗口（EXE安装版、MSI安装包、便携单文件、ZIP绿色版）"
+                title={`检测到新版本 v${result.latestVersion}，点击弹出选择安装方式进行更新`}
               >
                 <Download size={16} />
-                {result?.hasUpdate
-                  ? `下载新版 / 选择安装方式 (v${result.latestVersion})`
-                  : `选择安装方式 / 重新安装 (v${result?.latestVersion || APP_VERSION})`}
+                更新到 v{result.latestVersion}
               </button>
-            )}
+            ) : null}
 
             <button
               type="button"
@@ -2791,7 +2795,7 @@ function UpdateModal({
                 : updateSuccess
                 ? `🎉 更新包已成功下载就绪！(v${result?.latestVersion || APP_VERSION}) 请选择安装方式完成部署`
                 : result?.hasUpdate
-                ? `🚀 检测到新版本: v${result.latestVersion} — 请点击右上角“下载新版 / 选择安装方式”或下方四种安装方式`
+                ? `🚀 检测到新版本: v${result.latestVersion} — 请点击右上角“更新到 v${result.latestVersion}”或下方选择安装方式`
                 : result?.error
                 ? `检测提示: ${result.error}`
                 : `检测到新版本: 无 (当前已是官方最新版本 v${APP_VERSION})`}
@@ -2836,16 +2840,17 @@ function UpdateModal({
           )}
         </div>
 
-        {/* 安装版本发布格式矩阵卡片：EXE安装版、MSI安装包、便携单文件版、ZIP绿色版 */}
-        <div
-          style={{
-            margin: '16px 28px 0',
-            padding: '16px 20px',
-            background: result?.hasUpdate ? '#f0f7ff' : '#f8fafc',
-            border: `1px solid ${result?.hasUpdate ? '#bfdbfe' : '#e2e8f0'}`,
-            borderRadius: '12px',
-          }}
-        >
+        {/* 安装版本发布格式矩阵卡片：EXE安装版、MSI安装包、便携单文件版、ZIP绿色版（有新版本时才显示） */}
+        {result?.hasUpdate && (
+          <div
+            style={{
+              margin: '16px 28px 0',
+              padding: '16px 20px',
+              background: '#f0f7ff',
+              border: '1px solid #bfdbfe',
+              borderRadius: '12px',
+            }}
+          >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -3278,6 +3283,7 @@ function UpdateModal({
             </div>
           </div>
         </div>
+        )}
 
         {/* 点击下载后弹出的“选择哪种方式安装（四种方式）”弹窗 */}
         {showInstallChooser && (

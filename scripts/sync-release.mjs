@@ -3,12 +3,73 @@ import path from 'path';
 import { execSync } from 'child_process';
 
 async function getGitHubToken() {
-  const creds = execSync('git credential fill', { input: 'protocol=https\nhost=github.com\n' }).toString();
-  let token = '';
-  for (const line of creds.split('\n')) {
-    if (line.startsWith('password=')) token = line.replace('password=', '').trim();
-  }
-  return token;
+  if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN.trim();
+  if (process.env.GH_TOKEN) return process.env.GH_TOKEN.trim();
+
+  // 1. Try Windows Advapi32 CredRead for "GitHub - https://api.github.com/zoufudun"
+  try {
+    const psScript = [
+      'Add-Type -TypeDefinition @"',
+      'using System;',
+      'using System.Runtime.InteropServices;',
+      'using System.Text;',
+      'public class CredMgr {',
+      '    [DllImport("Advapi32.dll", SetLastError = true, EntryPoint = "CredReadW", CharSet = CharSet.Unicode)]',
+      '    public static extern bool CredRead(string target, int type, int reservedFlag, out IntPtr credentialPtr);',
+      '    [DllImport("Advapi32.dll", SetLastError = true, EntryPoint = "CredFree")]',
+      '    public static extern void CredFree(IntPtr cred);',
+      '    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]',
+      '    public struct CREDENTIAL {',
+      '        public int Flags; public int Type; public string TargetName; public string Comment;',
+      '        public long LastWritten; public int CredentialBlobSize; public IntPtr CredentialBlob;',
+      '        public int Persist; public int AttributeCount; public IntPtr Attributes;',
+      '        public string TargetAlias; public string UserName;',
+      '    }',
+      '    public static string GetPassword(string target) {',
+      '        IntPtr credPtr;',
+      '        if (CredRead(target, 1, 0, out credPtr)) {',
+      '            try {',
+      '                CREDENTIAL cred = (CREDENTIAL)Marshal.PtrToStructure(credPtr, typeof(CREDENTIAL));',
+      '                if (cred.CredentialBlob != IntPtr.Zero && cred.CredentialBlobSize > 0) {',
+      '                    byte[] blob = new byte[cred.CredentialBlobSize];',
+      '                    Marshal.Copy(cred.CredentialBlob, blob, 0, cred.CredentialBlobSize);',
+      '                    return Encoding.UTF8.GetString(blob);',
+      '                }',
+      '            } finally { CredFree(credPtr); }',
+      '        }',
+      '        return null;',
+      '    }',
+      '}',
+      '"@',
+      '[CredMgr]::GetPassword("GitHub - https://api.github.com/zoufudun")'
+    ].join('\r\n');
+
+    const tempPs = path.resolve('.temp_read_cred.ps1');
+    fs.writeFileSync(tempPs, psScript, 'utf8');
+    try {
+      const out = execSync('pwsh -NoProfile -ExecutionPolicy Bypass -File .temp_read_cred.ps1', { timeout: 8000 }).toString().trim();
+      if (out && out.length >= 20) {
+        return out;
+      }
+    } finally {
+      if (fs.existsSync(tempPs)) fs.unlinkSync(tempPs);
+    }
+  } catch (e) {}
+
+  // 2. Fallback to git credential fill
+  try {
+    const creds = execSync('git credential fill', {
+      input: 'protocol=https\nhost=github.com\n\n',
+      timeout: 5000
+    }).toString();
+    for (const line of creds.split('\n')) {
+      if (line.startsWith('password=')) {
+        return line.replace('password=', '').trim();
+      }
+    }
+  } catch (e) {}
+
+  throw new Error('Could not find GitHub token from git credentials');
 }
 
 async function main() {
