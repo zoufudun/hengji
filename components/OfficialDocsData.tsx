@@ -162,11 +162,191 @@ export function MarkdownDiagram({ diagram, title }: { diagram: string; title?: s
   );
 }
 
+/**
+ * 形象直观的【双锚定工程产值量化模型】可视化图表组件（支持 Mermaid 架构查看）
+ */
+export function DualAnchorVisualModel({ isEn }: { isEn?: boolean }) {
+  const [showMermaid, setShowMermaid] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+
+  const mermaidCode = `flowchart LR
+    A["🛡️ 工程合同基石\\n<b>项目工作令合同总额</b>\\n1 绩点 ≡ 1 万元"] -->|✖ 乘以| B["⏳ 全周期防透支\\n<b>当月排期释放比例</b>\\n前低后高交付锚定"]
+    B -->|✖ 乘以| C["👥 个人实干贡献\\n<b>员工当月分配占比</b>\\n团队闭环 100%"]
+    C -->|⬇ 闭环精算| D["🎯 <b>员工当月实得绩点</b>\\nBigInt 最大余数补差 · 行列双向闭环"]
+    
+    style A fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#9a3412
+    style B fill:#fefce8,stroke:#ca8a04,stroke-width:2px,color:#854d0e
+    style C fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#166534
+    style D fill:#f8fafc,stroke:#0284c7,stroke-width:2px,color:#0f172a`;
+
+  const handleCopyMermaid = () => {
+    navigator.clipboard.writeText(mermaidCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="cc-da-visual-container">
+      {/* 顶部主横幅 */}
+      <div className="cc-da-banner">
+        <div className="cc-da-banner-left">
+          <Sparkles size={16} className="cc-da-spark" />
+          <span className="cc-da-banner-title">
+            {isEn ? 'Dual-Anchor Merit Output Quantification Architecture' : '衡绩核心：双锚定工程产值量化模型'}
+          </span>
+        </div>
+        <div className="cc-da-banner-sub">
+          {isEn ? 'Contract Ceiling · Delivery Phased · 100% Closed Loop' : '工程合同硬顶 · 阶段交付防透支 · 团队贡献 100% 闭环'}
+        </div>
+      </div>
+
+      {/* 三大基石连乘流程 */}
+      <div className="cc-da-pipeline">
+        {/* 卡片 1：工程合同基石 */}
+        <div className="cc-da-card pillar-contract">
+          <div className="cc-da-tag terracotta">
+            <Lock size={12} />
+            <span>{isEn ? 'Contract Cap' : '工程合同基石'}</span>
+          </div>
+          <h4 className="cc-da-card-title">{isEn ? 'Project Contract Value' : '项目工作令合同总额'}</h4>
+          <div className="cc-da-rule-badge terracotta">
+            {isEn ? '1 Merit Point ≡ ¥10,000' : '1 绩点 ≡ 1 万元产值'}
+          </div>
+          <p className="cc-da-card-desc">
+            {isEn ? 'Hard legal cap locked to contract value, preventing arbitrary budget inflation.' : '法务合同刚性锁定，杜绝虚列预算与凭空造假'}
+          </p>
+        </div>
+
+        {/* 乘号运算连接符 1 */}
+        <div className="cc-da-connector">
+          <div className="cc-da-arrow-line"></div>
+          <div className="cc-da-op-badge" title={isEn ? 'Multiply' : '连乘计算'}>
+            <span className="cc-da-op-symbol">✖</span>
+            <span className="cc-da-op-label">{isEn ? 'Multiply' : '乘以'}</span>
+          </div>
+          <div className="cc-da-arrow-line"></div>
+        </div>
+
+        {/* 卡片 2：全周期防透支 */}
+        <div className="cc-da-card pillar-schedule">
+          <div className="cc-da-tag amber">
+            <CalendarRange size={12} />
+            <span>{isEn ? 'Phased Release' : '全周期防透支'}</span>
+          </div>
+          <h4 className="cc-da-card-title">{isEn ? 'Monthly Release Ratio' : '当月排期释放比例'}</h4>
+          <div className="cc-da-rule-badge amber">
+            {isEn ? 'Delivery-Anchored Milestones' : '前低后高动态排期'}
+          </div>
+          <p className="cc-da-card-desc">
+            {isEn ? 'Inception capped at 5%, primary delivery 45%+, mandatory 5% warranty holdback.' : '前期争取限高5% · 发货锁定45%+ · 维保留5%'}
+          </p>
+        </div>
+
+        {/* 乘号运算连接符 2 */}
+        <div className="cc-da-connector">
+          <div className="cc-da-arrow-line"></div>
+          <div className="cc-da-op-badge" title={isEn ? 'Multiply' : '连乘计算'}>
+            <span className="cc-da-op-symbol">✖</span>
+            <span className="cc-da-op-label">{isEn ? 'Multiply' : '乘以'}</span>
+          </div>
+          <div className="cc-da-arrow-line"></div>
+        </div>
+
+        {/* 卡片 3：个人实干贡献 */}
+        <div className="cc-da-card pillar-member">
+          <div className="cc-da-tag emerald">
+            <Users size={12} />
+            <span>{isEn ? 'Team Allocation' : '个人实干贡献'}</span>
+          </div>
+          <h4 className="cc-da-card-title">{isEn ? 'Member Allocation Share' : '员工当月分配占比'}</h4>
+          <div className="cc-da-rule-badge emerald">
+            {isEn ? 'Team Sum = Strict 100%' : '团队分配闭环 100%'}
+          </div>
+          <p className="cc-da-card-desc">
+            {isEn ? 'Allocated by leader to team members based on actual deliverables, sum equals 100%.' : '项目组员按当月成果实绩分配，总和严密闭环'}
+          </p>
+        </div>
+      </div>
+
+      {/* 向下归集连线 */}
+      <div className="cc-da-flow-down">
+        <div className="cc-da-down-line"></div>
+        <div className="cc-da-down-badge">
+          <span>{isEn ? '⬇ Precise Rollup Calculation' : '⬇ 连乘精算与最大余数闭环'}</span>
+        </div>
+        <div className="cc-da-down-line"></div>
+      </div>
+
+      {/* 产出结果卡片 */}
+      <div className="cc-da-result-card">
+        <div className="cc-da-result-header">
+          <div className="cc-da-result-title-box">
+            <div className="cc-da-result-pill">{isEn ? 'CALCULATED OUTPUT' : '最终核算成果'}</div>
+            <h3 className="cc-da-result-title">{isEn ? 'Personal Monthly Awarded Merit' : '员工当月实得量化绩点'}</h3>
+          </div>
+          <div className="cc-da-tech-tags">
+            <span className="cc-da-tech-tag">⚡ BigInt 整数分精算</span>
+            <span className="cc-da-tech-tag">⚖️ 最大余数法补差</span>
+            <span className="cc-da-tech-tag">🔒 行列双向 100% 闭环</span>
+          </div>
+        </div>
+
+        <div className="cc-da-formula-box">
+          <div className="cc-da-formula-label">{isEn ? 'Core Formula' : '核心量化公式'}</div>
+          <div className="cc-da-formula-content">
+            <code>实得绩点 (万元) = 项目工作令合同额 × 当月排期释放比例 × 员工当月分配占比</code>
+          </div>
+        </div>
+
+        <div className="cc-da-example-box">
+          <div className="cc-da-example-badge">{isEn ? 'EXAMPLE' : '直观算例'}</div>
+          <div className="cc-da-example-text">
+            {isEn
+              ? 'e.g. ¥10,000,000 Contract × 10% Delivery Release (¥1,000,000) × 25% Member Share = 25.00 Merit Points (¥250,000 Output Value).'
+              : '例如：1000 万元工程合同，当月完成阶段交付释放 10%（100 万元额度），骨干员工贡献占比 25% ➔ 1000 万 × 10% × 25% = 25.00 绩点（实得 25 万元考核产值）。'}
+          </div>
+        </div>
+      </div>
+
+      {/* Mermaid 切换展示面板 */}
+      <div className="cc-da-mermaid-footer">
+        <button
+          type="button"
+          className="cc-da-mermaid-toggle"
+          onClick={() => setShowMermaid(!showMermaid)}
+        >
+          <FileCode size={13} />
+          <span>{showMermaid ? (isEn ? 'Hide Mermaid Source Code' : '收起 Mermaid 架构源码') : (isEn ? 'View Mermaid Architecture Source' : '查看 / 复制 Mermaid 架构源码')}</span>
+        </button>
+
+        {showMermaid && (
+          <div className="cc-da-mermaid-code-box">
+            <div className="cc-da-mermaid-code-bar">
+              <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--cc-text-muted)' }}>MERMAID.JS</span>
+              <button
+                type="button"
+                className="cc-md-code-copy-btn"
+                onClick={handleCopyMermaid}
+              >
+                {copied ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
+                <span>{copied ? (isEn ? 'Copied!' : '已复制') : (isEn ? 'Copy' : '复制')}</span>
+              </button>
+            </div>
+            <pre style={{ margin: 0, fontSize: '12px', lineHeight: '1.5', overflowX: 'auto', color: 'var(--cc-text)' }}>
+              <code>{mermaidCode}</code>
+            </pre>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export const DOC_BOOKS: DocBook[] = [
   {
     id: 'intro',
     icon: '🚀',
-    titleZh: '详细的衡绩软件介绍',
+    titleZh: '衡绩软件介绍',
     titleEn: 'Platform Overview & Architecture',
     chapters: [
       {
@@ -221,7 +401,7 @@ export const DOC_BOOKS: DocBook[] = [
   {
     id: 'manual',
     icon: '👥',
-    titleZh: '详细的衡绩软件新手操作手册',
+    titleZh: '衡绩软件新手操作手册',
     titleEn: 'Step-by-Step Practical User Manual',
     chapters: [
       {
@@ -266,7 +446,7 @@ export const DOC_BOOKS: DocBook[] = [
   {
     id: 'deploy',
     icon: '💻',
-    titleZh: '《远程推送与发布部署教程》',
+    titleZh: '远程推送与发布部署教程',
     titleEn: 'Remote Git Push, Build & Deployment Guide',
     chapters: [
       {
@@ -359,7 +539,7 @@ export function DocArticleContent({
       return (
         <div>
           <div className="cc-cl-article-header">
-            <h1>{isEn ? '1.1 System Positioning & Design Philosophy' : '1.1 系统定位与设计初衷'}</h1>
+            <h1>{isEn ? 'System Positioning & Design Philosophy' : '系统定位与设计初衷'}</h1>
             <span className="cc-cl-date">{isEn ? 'HengJi Official Whitepaper' : '衡绩平台官方技术白皮书'}</span>
           </div>
 
@@ -380,22 +560,7 @@ export function DocArticleContent({
                 : '在现代工程制造、国防军工、高端装备、科研院所以及复杂软硬件研发领域，项目周期通常跨越 6 至 36 个月，单个项目合同金额从数十万到数千万元不等。一个技术骨干往往同时承担 3~5 个在研项目的不同研发任务。通用的人事考核软件（如各类基于固定工资折算的在线 SaaS 系统）由于无法理解“工程工作令号”、“合同额度刚性锁定”、“多阶段交付里程碑”以及“一人跨多项目绩点分摊”等严苛工业场景，根本无法落地。'}
             </p>
 
-            <MarkdownDiagram
-              title={isEn ? 'Dual-Anchor Merit Calculation Architecture' : '衡绩核心：双锚定工程产值考核模型'}
-              diagram={`┌─────────────────────────────────────────────────────────────────────────────┐
-│                       衡绩双锚定工程产值量化模型                            │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-  【工程合同基石】                    【全周期防透支】                 【个人实干贡献】
-┌──────────────────┐               ┌──────────────────┐             ┌──────────────────┐
-│ 项目工作令合同额 │ ──── 乘以 ───▶│ 当月排期释放比例 │ ── 乘以 ──▶│ 员工当月分配占比 │
-│ (1绩点 = 1万元)  │               │ (前低后高交付锚定)│             │ (团队成员闭环100%)│
-└──────────────────┘               └──────────────────┘             └──────────────────┘
-                                                                             │
-                                                                             ▼
-                                                                    【员工当月所得绩点】
-                                                                    (BigInt最大余数补差)`}
-            />
+            <DualAnchorVisualModel isEn={isEn} />
 
             <div className="cc-doc-step-card" style={{ marginTop: '16px' }}>
               <div className="cc-doc-step-header">
@@ -473,7 +638,7 @@ export function DocArticleContent({
       return (
         <div>
           <div className="cc-cl-article-header">
-            <h1>{isEn ? '1.2 Six Core Functional Pillars' : '1.2 六大核心功能深度解析'}</h1>
+            <h1>{isEn ? 'Six Core Functional Pillars' : '六大核心功能深度解析'}</h1>
             <span className="cc-cl-date">{isEn ? 'Architecture Breakdown' : '系统架构核心支柱'}</span>
           </div>
 
@@ -565,7 +730,7 @@ export function DocArticleContent({
       return (
         <div>
           <div className="cc-cl-article-header">
-            <h1>{isEn ? '1.3 Technical Architecture & Cryptographic Security' : '1.3 技术架构与数据安全机制'}</h1>
+            <h1>{isEn ? 'Technical Architecture & Cryptographic Security' : '技术架构与数据安全机制'}</h1>
             <span className="cc-cl-date">{isEn ? 'Zero-Cloud & High Reliability' : '纯离线无外网依赖安全体系'}</span>
           </div>
 
@@ -632,7 +797,7 @@ export function DocArticleContent({
       return (
         <div>
           <div className="cc-cl-article-header">
-            <h1>{isEn ? '1.4 Supported Environments & Package Formats' : '1.4 支持的应用与分发格式'}</h1>
+            <h1>{isEn ? 'Supported Environments & Package Formats' : '支持的应用与分发格式'}</h1>
             <span className="cc-cl-date">{isEn ? 'Multi-Package Matrix' : '全格式发布矩阵'}</span>
           </div>
 
@@ -690,7 +855,7 @@ export function DocArticleContent({
       return (
         <div>
           <div className="cc-cl-article-header">
-            <h1>{isEn ? '2.1 General Admin 5-Step Practical Guide' : '2.1 综合管理员新手实操指南（5步上手）'}</h1>
+            <h1>{isEn ? 'General Admin 5-Step Practical Guide' : '综合管理员新手实操指南（5步上手）'}</h1>
             <span className="cc-cl-date">{isEn ? 'Role: Department Head & Project Manager' : '适用角色：部门负责人 / 综合管理员 / 项目经理'}</span>
           </div>
 
@@ -908,7 +1073,7 @@ export function DocArticleContent({
       return (
         <div>
           <div className="cc-cl-article-header">
-            <h1>{isEn ? '2.2 Dedicated Auditor 5-Step Cross-Project Rollup Guide' : '2.2 专职核算员新手实操指南（5步汇总）'}</h1>
+            <h1>{isEn ? 'Dedicated Auditor 5-Step Cross-Project Rollup Guide' : '专职核算员新手实操指南（5步汇总）'}</h1>
             <span className="cc-cl-date">{isEn ? 'Role: Financial Auditor & Cross-Project Specialist' : '适用角色：专职核算员 / 绩效审核员 / 财务薪酬主管'}</span>
           </div>
 
@@ -1021,7 +1186,7 @@ SHA-256 数字校验和比对                                     防止同一�
       return (
         <div>
           <div className="cc-cl-article-header">
-            <h1>{isEn ? '2.3 Business Standards & Guidance Ranges' : '2.3 业务口径与负责人参考系数规范'}</h1>
+            <h1>{isEn ? 'Business Standards & Guidance Ranges' : '业务口径与负责人参考系数规范'}</h1>
             <span className="cc-cl-date">{isEn ? 'Operational Standards & FAQs' : '业务考核标准与常见疑问解答'}</span>
           </div>
 
@@ -1095,7 +1260,7 @@ SHA-256 数字校验和比对                                     防止同一�
       return (
         <div>
           <div className="cc-cl-article-header">
-            <h1>{isEn ? '3.1 Prerequisites, Versioning & Unit Testing' : '3.1 准备工作与版本一致性检查'}</h1>
+            <h1>{isEn ? 'Prerequisites, Versioning & Unit Testing' : '准备工作与版本一致性检查'}</h1>
             <span className="cc-cl-date">{isEn ? 'Step-by-Step Command Line Manual' : '纯命令行操作标准手册'}</span>
           </div>
 
@@ -1167,7 +1332,7 @@ SHA-256 数字校验和比对                                     防止同一�
       return (
         <div>
           <div className="cc-cl-article-header">
-            <h1>{isEn ? '3.2 Git Staging, Commit & Remote Tag Push' : '3.2 Git 本地库远程推送与版本标签'}</h1>
+            <h1>{isEn ? 'Git Staging, Commit & Remote Tag Push' : 'Git 本地库远程推送与版本标签'}</h1>
             <span className="cc-cl-date">{isEn ? 'Terminal Step 1' : '纯命令行第一步'}</span>
           </div>
 
@@ -1222,7 +1387,7 @@ SHA-256 数字校验和比对                                     防止同一�
       return (
         <div>
           <div className="cc-cl-article-header">
-            <h1>{isEn ? '3.3 Local Packaging Matrix: MSI, NSIS, Portable & ZIP' : '3.3 桌面端本地打包构建全套矩阵'}</h1>
+            <h1>{isEn ? 'Local Packaging Matrix: MSI, NSIS, Portable & ZIP' : '桌面端本地打包构建全套矩阵'}</h1>
             <span className="cc-cl-date">{isEn ? 'Terminal Step 2' : '纯命令行第二步'}</span>
           </div>
 
@@ -1293,7 +1458,7 @@ SHA-256 数字校验和比对                                     防止同一�
       return (
         <div>
           <div className="cc-cl-article-header">
-            <h1>{isEn ? '3.4 Automated Publication to GitHub Releases' : '3.4 GitHub Releases 命令行自动化发布'}</h1>
+            <h1>{isEn ? 'Automated Publication to GitHub Releases' : 'GitHub Releases 命令行自动化发布'}</h1>
             <span className="cc-cl-date">{isEn ? 'Terminal Step 3' : '纯命令行第三步'}</span>
           </div>
 
@@ -1343,7 +1508,7 @@ SHA-256 数字校验和比对                                     防止同一�
       return (
         <div>
           <div className="cc-cl-article-header">
-            <h1>{isEn ? '3.5 Deploying Static Website to GitHub Pages' : '3.5 GitHub Pages 静态站点命令行部署'}</h1>
+            <h1>{isEn ? 'Deploying Static Website to GitHub Pages' : 'GitHub Pages 静态站点命令行部署'}</h1>
             <span className="cc-cl-date">{isEn ? 'Terminal Step 4' : '纯命令行第四步'}</span>
           </div>
 
@@ -1404,7 +1569,7 @@ SHA-256 数字校验和比对                                     防止同一�
       return (
         <div>
           <div className="cc-cl-article-header">
-            <h1>{isEn ? '3.6 Full-Pipeline One-Liner & Troubleshooting' : '3.6 全流程一键连续执行速查与排错指南'}</h1>
+            <h1>{isEn ? 'Full-Pipeline One-Liner & Troubleshooting' : '全流程一键连续执行速查与排错指南'}</h1>
             <span className="cc-cl-date">{isEn ? 'Cheatsheet & Common Errors' : '全流程一键速查与排错指南'}</span>
           </div>
 

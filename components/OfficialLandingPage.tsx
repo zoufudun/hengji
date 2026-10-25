@@ -94,7 +94,16 @@ function categorizeVersionItems(ver: VersionUpdate) {
 }
 
 export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) {
-  const [pageView, setPageView] = useState<PageView>('home');
+  const [pageView, setPageView] = useState<PageView>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.replace(/^#\/?/, '');
+      if (['home', 'docs', 'download', 'changelog'].includes(hash)) return hash as PageView;
+      const urlParams = new URLSearchParams(window.location.search);
+      const p = urlParams.get('page');
+      if (p && ['home', 'docs', 'download', 'changelog'].includes(p)) return p as PageView;
+    }
+    return 'home';
+  });
   const [theme, setTheme] = useState<'parchment' | 'dark'>('parchment');
   const [lang, setLang] = useState<'zh' | 'en'>('zh');
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
@@ -1308,8 +1317,10 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
 
               <div className="hj-features-grid">
                 <div className="hj-feature-card">
-                  <div className="hj-feature-icon emerald"><ShieldCheck size={22} /></div>
-                  <h3>{isEn ? 'Local Offline Encryption · Non-System Drive' : '纯本地离线加密 · 默认非系统盘'}</h3>
+                  <div className="hj-feature-card-header">
+                    <div className="hj-feature-icon emerald"><ShieldCheck size={20} /></div>
+                    <h3>{isEn ? 'Local Offline Encryption · Non-System Drive' : '纯本地离线加密 · 默认非系统盘'}</h3>
+                  </div>
                   <p>
                     {isEn ? (
                       <>
@@ -1326,8 +1337,10 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                 </div>
 
                 <div className="hj-feature-card">
-                  <div className="hj-feature-icon amber"><Sliders size={22} /></div>
-                  <h3>{isEn ? 'Anti-Overdraft Phasing · Delivery-Focused' : '前低后高稳健排期 · 防前期透支'}</h3>
+                  <div className="hj-feature-card-header">
+                    <div className="hj-feature-icon amber"><Sliders size={20} /></div>
+                    <h3>{isEn ? 'Anti-Overdraft Phasing · Delivery-Focused' : '前低后高稳健排期 · 防前期透支'}</h3>
+                  </div>
                   <p>
                     {isEn
                       ? 'Innovative 3-phase lifecycle model: Initial bidding phase capped at 0~10% (default 5%), primary delivery phase locking 45%+ major incentive, and final warranty phase mandatory 5% retention.'
@@ -1336,8 +1349,10 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                 </div>
 
                 <div className="hj-feature-card">
-                  <div className="hj-feature-icon blue"><CalendarRange size={22} /></div>
-                  <h3>{isEn ? 'Unified Monthly Grid · Batch Publish' : '全项目当月集中大表 · 批量发布'}</h3>
+                  <div className="hj-feature-card-header">
+                    <div className="hj-feature-icon blue"><CalendarRange size={20} /></div>
+                    <h3>{isEn ? 'Unified Monthly Grid · Batch Publish' : '全项目当月集中大表 · 批量发布'}</h3>
+                  </div>
                   <p>
                     {isEn
                       ? 'Say goodbye to clicking through dozens of individual project dialogs. At month-end review, all ongoing projects are displayed in one unified sheet with 100% ratio verification and one-click batch release.'
@@ -1346,8 +1361,10 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                 </div>
 
                 <div className="hj-feature-card">
-                  <div className="hj-feature-icon purple"><Calculator size={22} /></div>
-                  <h3>{isEn ? 'Offline Package Routing · Auditor Rollup' : '离线数据包流转 · 专职核算员大盘'}</h3>
+                  <div className="hj-feature-card-header">
+                    <div className="hj-feature-icon purple"><Calculator size={20} /></div>
+                    <h3>{isEn ? 'Offline Package Routing · Auditor Rollup' : '离线数据包流转 · 专职核算员大盘'}</h3>
+                  </div>
                   <p>
                     {isEn
                       ? 'Built-in dual workspaces (General Admin & Performance Auditor). Project leaders export project packages or unified bundles; auditors simply drag-and-drop to roll up all personnel cross-project allocations.'
@@ -1356,8 +1373,10 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                 </div>
 
                 <div className="hj-feature-card">
-                  <div className="hj-feature-icon cyan"><Table2 size={22} /></div>
-                  <h3>{isEn ? 'BigInt Cents · 100% Closed-Loop Audit' : 'BigInt 精确到分 · 行列双向 100% 闭环'}</h3>
+                  <div className="hj-feature-card-header">
+                    <div className="hj-feature-icon cyan"><Table2 size={20} /></div>
+                    <h3>{isEn ? 'BigInt Cents · 100% Closed-Loop Audit' : 'BigInt 精确到分 · 行列双向 100% 闭环'}</h3>
+                  </div>
                   <p>
                     {isEn ? (
                       <>
@@ -1373,8 +1392,10 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                 </div>
 
                 <div className="hj-feature-card">
-                  <div className="hj-feature-icon rose"><Trophy size={22} /></div>
-                  <h3>{isEn ? 'Functional Matrix · Hall of Merit Stars' : '专业组协同矩阵 · 卓越绩星荣誉殿堂'}</h3>
+                  <div className="hj-feature-card-header">
+                    <div className="hj-feature-icon rose"><Trophy size={20} /></div>
+                    <h3>{isEn ? 'Functional Matrix · Hall of Merit Stars' : '专业组协同矩阵 · 卓越绩星荣誉殿堂'}</h3>
+                  </div>
                   <p>
                     {isEn
                       ? 'Deep alignment with General, Product, and R&D matrix structures with reusable team ratio templates. Automatically selects monthly stars, quarterly pacesetters, and annual navigators with medal rankings.'
@@ -2104,9 +2125,6 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                                     window.scrollTo({ top: 120, behavior: 'smooth' });
                                   }}
                                 >
-                                  <span style={{ color: 'var(--cc-text-muted)', fontSize: '12px', fontWeight: '700' }}>
-                                    {chap.number}
-                                  </span>
                                   <span>{isEn ? chap.titleEn : chap.titleZh}</span>
                                 </button>
                               );
@@ -2180,7 +2198,7 @@ export function OfficialLandingPage({ onLaunchDemo }: OfficialLandingPageProps) 
                       marginBottom: '6px'
                     }}
                   >
-                    {currentChapter?.number} {isEn ? currentChapter?.titleEn : currentChapter?.titleZh}
+                    {isEn ? currentChapter?.titleEn : currentChapter?.titleZh}
                   </div>
 
                   {/* 小节列表 */}
