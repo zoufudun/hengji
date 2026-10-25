@@ -188,6 +188,7 @@ import {
   type ProjectMeritPackage,
 } from '../lib/core';
 import { AuditorSummaryView, type AuditorTab } from '../components/AuditorSummaryView';
+import { OfficialLandingPage } from '../components/OfficialLandingPage';
 import brandHengSeal from './brand-heng-seal.png';
 import brandBurstFlower from './brand-burst-flower.png';
 
@@ -947,6 +948,17 @@ export default function DesktopWorkspace() {
   const [onboardingStep, setOnboardingStep] = useState(1);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualChapter, setManualChapter] = useState(0);
+  const [showOfficialHome, setShowOfficialHome] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && !window.meritDesktop?.status) {
+      const params = new URLSearchParams(window.location.search);
+      const hash = window.location.hash;
+      if (params.get('demo') === '1' || hash === '#demo' || hash === '#app') {
+        return false;
+      }
+      return true;
+    }
+    return false;
+  });
 
   // 启动后自动异步检测更新，存在新版本时采用热门的矩形框动态光圈提示新版本
   useEffect(() => {
@@ -968,7 +980,7 @@ export default function DesktopWorkspace() {
 
   // 第一次进入工作区自动展示新手 5 步向导
   useEffect(() => {
-    if (state && typeof window !== 'undefined') {
+    if (state && !showOfficialHome && typeof window !== 'undefined') {
       try {
         const viewed = localStorage.getItem('hengji_onboarding_viewed_v062');
         if (!viewed) {
@@ -977,7 +989,7 @@ export default function DesktopWorkspace() {
         }
       } catch {}
     }
-  }, [Boolean(state)]);
+  }, [Boolean(state), showOfficialHome]);
 
   const saveProjectGroups = async (next: ProjectGroup[]) => {
     setProjectGroups(next);
@@ -1359,6 +1371,47 @@ export default function DesktopWorkspace() {
   };
 
   if (!workspaceReady) return <div className="loading"><div className="spinner" />正在初始化安全工作区…</div>;
+  if (showOfficialHome && typeof window !== 'undefined' && !window.meritDesktop?.status) {
+    return (
+      <OfficialLandingPage
+        onLaunchDemo={(initialTab, targetWsType) => {
+          let currentState = state;
+          if (!currentState) {
+            const init = sanitizeState(demoState());
+            currentState = init;
+            setState(init);
+            setRevision(1);
+            setActorId('admin');
+          }
+          if (targetWsType) {
+            setWorkspaceType(targetWsType);
+            if (targetWsType === 'auditor' && currentState && (!auditorPackages || auditorPackages.length === 0)) {
+              const sysPkgs: ProjectMeritPackage[] = [];
+              const emps = currentState.employees || [];
+              currentState.projects.forEach(prj => {
+                const pls = currentState!.plans.filter(p => p.projectId === prj.id && p.status === 'published');
+                if (!pls.length) return;
+                const pkg = exportProjectMeritPackage(prj, pls, [], emps, 'admin', '管理员');
+                sysPkgs.push(pkg);
+              });
+              if (sysPkgs.length > 0) {
+                setAuditorPackages(sysPkgs);
+              }
+            }
+          } else {
+            setWorkspaceType('general');
+          }
+          if (initialTab) {
+            setTab(initialTab as Tab);
+          } else {
+            setTab('dashboard');
+          }
+          setShowOfficialHome(false);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
+    );
+  }
   if (!state) return (
     <>
       <WorkspaceGate
@@ -1591,13 +1644,22 @@ export default function DesktopWorkspace() {
         <div className="sidebar-foot">
           <Database size={16} />
           <div>
-            <span>{workspaceName || '加密工作区'}</span>
+            <span>{workspaceName || '在线交互演示工作区'}</span>
             {dataFile ? (
               <button onClick={() => window.meritDesktop?.showData()}>
                 <FolderOpen size={13} />定位工作区文件
               </button>
             ) : (
-              <span style={{ color: '#8fa79f' }}>浏览器本地缓存模式</span>
+              <button
+                type="button"
+                style={{ color: '#6ee7b7', cursor: 'pointer' }}
+                onClick={() => {
+                  setShowOfficialHome(true);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              >
+                <Globe size={12} />返回衡绩官网介绍主页
+              </button>
             )}
           </div>
         </div>
@@ -1711,10 +1773,36 @@ export default function DesktopWorkspace() {
             >
               <Sparkles size={14} style={{ color: '#16a34a' }} />新手引导
             </button>
+            {typeof window !== 'undefined' && !window.meritDesktop?.status && (
+              <button
+                className="secondary"
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '12.5px',
+                  gap: '5px',
+                  background: '#ecfdf5',
+                  borderColor: '#6ee7b7',
+                  color: '#047857',
+                  fontWeight: 600,
+                }}
+                onClick={() => {
+                  setShowOfficialHome(true);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                title="返回衡绩官方网站介绍主页"
+              >
+                <Globe size={14} />官网介绍主页
+              </button>
+            )}
             <button className="secondary" style={{ padding: '6px 12px', fontSize: '12.5px', gap: '5px' }} onClick={async () => {
-              if (window.meritDesktop?.lock) await window.meritDesktop.lock();
-              setState(null); setWorkspaceName(''); setDataFile(''); setProjectGroups([]); setNotice('工作区已锁定');
-            }}><LogOut size={14}/>锁定</button>
+              if (window.meritDesktop?.lock) {
+                await window.meritDesktop.lock();
+                setState(null); setWorkspaceName(''); setDataFile(''); setProjectGroups([]); setNotice('工作区已锁定');
+              } else {
+                setShowOfficialHome(true);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }
+            }}><LogOut size={14}/>{typeof window !== 'undefined' && !window.meritDesktop?.status ? '退出体验' : '锁定'}</button>
           </div>
         </header>
 

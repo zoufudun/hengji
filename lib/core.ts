@@ -2532,7 +2532,7 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
 export const APP_VERSION = '0.7.9';
-export const APP_BUILD = '20261024';
+export const APP_BUILD = '20261025';
 export const APP_AUTHOR = '邹富敦 (Phudon Zou) / TOPFIRE 研发团队';
 export const APP_CONTACT = 'zoufudun@163.com';
 
@@ -2696,10 +2696,11 @@ export type VersionUpdate = {
 export const UPDATE_HISTORY: VersionUpdate[] = [
   {
     version: 'v0.7.9',
-    date: '2026-10-24',
+    date: '2026-10-25',
     tag: '重大更新',
-    title: '点击下载弹出四种安装方式选择、MSI非系统盘安装地址自定义、消除终端弹窗、启动页新增关于与检测新版',
+    title: '全新发布衡绩官方网站介绍主页（CC Switch 风格）、内置六大模块交互预览与一键在线体验、点击下载弹出四种安装方式选择与MSI非系统盘安装',
     items: [
+      '【全新官方网站产品介绍主页 & 在线交互体验】将 https://zoufudun.github.io/hengji/ 升级为现代科技感的产品官方介绍主页（参考 CC Switch 官网设计），集交互式窗口预览、六大核心能力、五步闭环指南、四格式客户端高速下载、版本日志与常见问答于一体；点击“在线体验软件”即可免安装直接在浏览器中操作全部软件功能，并可随时返回官网介绍主页。',
       '【点击下载弹出四种安装方式选择与多源高速下载】修复检测到新版后点击下载转圈卡死的问题，内置本地智能识别与多加速源自动切换及实时百分比进度条；点击下载立即弹出四种安装方式选择器（EXE安装版、MSI安装包、便携单文件、ZIP绿色版）。',
       '【MSI安装及全格式自定义安装路径（默认非系统盘）】新增安装目标地址设置栏与文件夹浏览选择器，默认指向 D:\\衡绩员工绩点考核系统 等非系统盘，绝不默认装入系统盘；MSI 安装向导全程开启安装目录修改界面。',
       '【彻底消除终端命令行弹窗】全面重构四种安装方式的底层执行机制，采用原生 GUI 进程直启与无窗口后台任务（windowsHide: true），点击覆盖安装、MSI安装、单文件覆盖、解压覆盖均平滑静默运行，不再弹出黑框/蓝框终端窗口。',
