@@ -26,6 +26,7 @@ import {
   Info,
   X,
   Package,
+  Calendar,
   CalendarRange,
   Award,
   Crown,
@@ -65,6 +66,8 @@ import {
   summarizeCurrentStateForAuditor,
   calculateDepartmentContracts,
   calculateHonorStars,
+  mergeProjectPackages,
+  type AuditorPeriodFilter,
   exportAuditorEmployeesCsv,
   exportAuditorProjectsCsv,
   exportAuditorMatrixCsv,
@@ -279,12 +282,9 @@ export function AuditorSummaryView({
     }
 
     if (newPkgs.length > 0) {
-      const map = new Map<string, ProjectMeritPackage>();
-      packages.forEach(p => map.set(p.project.id, p));
-      newPkgs.forEach(p => map.set(p.project.id, p));
-      const merged = Array.from(map.values());
+      const merged = mergeProjectPackages(packages, newPkgs);
       const bundleHint = bundleCount > 0 ? `（含 ${bundleCount} 个多项目合并包）` : '';
-      const msg = `✅ 成功导入 ${newPkgs.length} 个项目数据包${bundleHint}！已自动汇总并持久化保存。`;
+      const msg = `✅ 成功导入 ${newPkgs.length} 个项目数据包${bundleHint}！已为您按月份精确归集并持久化保存。`;
       updatePackages(merged, msg);
       setNotice(msg);
     }
@@ -309,15 +309,76 @@ export function AuditorSummaryView({
 
   const employees = state?.employees || [];
 
-  // 核心汇总计算：全员跨项目绩点总和、额度对照、全景透视矩阵
+  // 周期维度状态：'month' (按月显示) | 'quarter' (按季度显示) | 'year' (整年度显示) | 'all' (全周期总览)
+  const [periodType, setPeriodType] = useState<'month' | 'quarter' | 'year' | 'all'>('month');
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [selectedQuarter, setSelectedQuarter] = useState<string>('');
+  const [selectedYear, setSelectedYear] = useState<string>('');
+  const [viewMode, setViewMode] = useState<'standard' | 'multi_month'>('standard');
+
+  // 计算所有已导入数据包中的可用月份
+  const allAvailableMonths = useMemo(() => {
+    const set = new Set<string>();
+    packages.forEach(pkg => {
+      (pkg.period?.months || []).forEach(m => set.add(m));
+      (pkg.details || []).forEach(d => { if (d.month) set.add(d.month); });
+    });
+    return Array.from(set).sort();
+  }, [packages]);
+
+  // 计算所有可用季度
+  const allAvailableQuarters = useMemo(() => {
+    const set = new Set<string>();
+    allAvailableMonths.forEach(m => {
+      const [y, mm] = m.split('-');
+      const q = Math.ceil(parseInt(mm, 10) / 3);
+      set.add(`${y}-Q${q}`);
+    });
+    return Array.from(set).sort();
+  }, [allAvailableMonths]);
+
+  // 计算所有可用年度
+  const allAvailableYears = useMemo(() => {
+    const set = new Set<string>();
+    allAvailableMonths.forEach(m => set.add(m.split('-')[0]));
+    return Array.from(set).sort();
+  }, [allAvailableMonths]);
+
+  const activeMonth = (selectedMonth && allAvailableMonths.includes(selectedMonth))
+    ? selectedMonth
+    : (allAvailableMonths[allAvailableMonths.length - 1] || '');
+
+  const activeQuarter = (selectedQuarter && allAvailableQuarters.includes(selectedQuarter))
+    ? selectedQuarter
+    : (allAvailableQuarters[allAvailableQuarters.length - 1] || '');
+
+  const activeYear = (selectedYear && allAvailableYears.includes(selectedYear))
+    ? selectedYear
+    : (allAvailableYears[allAvailableYears.length - 1] || '');
+
+  // 核心汇总计算：全员跨项目绩点总和、额度对照、全景透视矩阵（根据当前选定周期过滤归集）
   const summary: AuditorSummaryResult = useMemo(() => {
-    return summarizeAuditorPackages(packages, employees);
+    if (periodType === 'month' && activeMonth) {
+      return summarizeAuditorPackages(packages, employees, { periodType: 'month', periodValue: activeMonth });
+    }
+    if (periodType === 'quarter' && activeQuarter) {
+      return summarizeAuditorPackages(packages, employees, { periodType: 'quarter', periodValue: activeQuarter });
+    }
+    if (periodType === 'year' && activeYear) {
+      return summarizeAuditorPackages(packages, employees, { periodType: 'year', periodValue: activeYear });
+    }
+    return summarizeAuditorPackages(packages, employees, { periodType: 'all' });
+  }, [packages, employees, periodType, activeMonth, activeQuarter, activeYear]);
+
+  // 全量汇总结果（用于多月平铺矩阵以及各人员月度档案下钻）
+  const fullSummary: AuditorSummaryResult = useMemo(() => {
+    return summarizeAuditorPackages(packages, employees, { periodType: 'all' });
   }, [packages, employees]);
 
   // 全部门合同额度大盘统计
   const deptContracts: DepartmentContractSummary = useMemo(() => {
-    return calculateDepartmentContracts(summary);
-  }, [summary]);
+    return calculateDepartmentContracts(fullSummary);
+  }, [fullSummary]);
 
   // 荣誉之星（月度、季度、年度）
   const honorStars: HonorStarsResult = useMemo(() => {
@@ -395,8 +456,9 @@ export function AuditorSummaryView({
   // 导出操作
   const handleExportEmployeesCsv = async () => {
     const csv = exportAuditorEmployeesCsv(summary);
-    await triggerDownload(csv, `衡绩_全员跨项目绩点汇总表_${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
-    setNotice('全员跨项目绩点汇总表 CSV 导出成功');
+    const pTag = summary.overview.periodLabel ? `_${summary.overview.periodLabel}` : '';
+    await triggerDownload(csv, `衡绩_全员跨项目绩点汇总表${pTag}_${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
+    setNotice(`✅ 全员跨项目绩点汇总表 (${summary.overview.periodLabel || '全周期'}) CSV 导出成功`);
   };
 
   const handleExportProjectsCsv = async () => {
@@ -876,7 +938,7 @@ export function AuditorSummaryView({
               </div>
               <div>
                 <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
-                  {activeTab === 'employees' && `全员跨项目绩效总表 (${summary.employeeSummaries.length} 人)`}
+                  {activeTab === 'employees' && `全员跨项目绩效总表 · ${summary.overview.periodLabel || '全周期'} (${summary.employeeSummaries.length} 人)`}
                   {activeTab === 'contracts' && `全景合同矩阵与执行对照 (${deptContracts.totalProjects} 个项目)`}
                   {(activeTab === 'ranking' || activeTab === 'stars') && '卓越绩星荣誉殿堂 · 月/季/年/区间全员排名与荣誉榜'}
                   {activeTab === 'matrix' && `全项目多维透视矩阵 (${summary.matrix.projectHeaders.length} 项目 × ${summary.matrix.rows.length} 成员)`}
@@ -1094,92 +1156,394 @@ export function AuditorSummaryView({
         {/* ---------------- 视图 1：部门全员汇总表 ---------------- */}
         {activeTab === 'employees' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* 周期维度切换栏（按月显示 / 按季度显示 / 整年度显示 / 全周期总览） */}
+            <div
+              style={{
+                background: '#ffffff',
+                border: '1px solid #bae6fd',
+                borderRadius: '10px',
+                padding: '14px 18px',
+                boxShadow: '0 2px 8px rgba(2, 132, 199, 0.05)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                {/* 四大维度切换胶囊 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#0369a1', padding: '0 8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Calendar size={14} />统计归集维度：
+                  </span>
+                  <button
+                    style={{
+                      border: 'none',
+                      background: periodType === 'month' ? '#0284c7' : 'transparent',
+                      color: periodType === 'month' ? '#ffffff' : '#475569',
+                      fontWeight: periodType === 'month' ? 700 : 500,
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      fontSize: '12.5px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onClick={() => { setPeriodType('month'); setViewMode('standard'); }}
+                  >
+                    📅 按月显示 ({allAvailableMonths.length} 个月)
+                  </button>
+                  <button
+                    style={{
+                      border: 'none',
+                      background: periodType === 'quarter' ? '#0284c7' : 'transparent',
+                      color: periodType === 'quarter' ? '#ffffff' : '#475569',
+                      fontWeight: periodType === 'quarter' ? 700 : 500,
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      fontSize: '12.5px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onClick={() => { setPeriodType('quarter'); setViewMode('standard'); }}
+                  >
+                    🏆 按季度显示 ({allAvailableQuarters.length} 个季度)
+                  </button>
+                  <button
+                    style={{
+                      border: 'none',
+                      background: periodType === 'year' ? '#0284c7' : 'transparent',
+                      color: periodType === 'year' ? '#ffffff' : '#475569',
+                      fontWeight: periodType === 'year' ? 700 : 500,
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      fontSize: '12.5px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onClick={() => { setPeriodType('year'); setViewMode('standard'); }}
+                  >
+                    🎖️ 整年度显示 ({allAvailableYears.length} 个年度)
+                  </button>
+                  <button
+                    style={{
+                      border: 'none',
+                      background: periodType === 'all' ? '#0284c7' : 'transparent',
+                      color: periodType === 'all' ? '#ffffff' : '#475569',
+                      fontWeight: periodType === 'all' ? 700 : 500,
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      fontSize: '12.5px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onClick={() => { setPeriodType('all'); }}
+                  >
+                    🌐 全周期总览
+                  </button>
+                </div>
+
+                {/* 快捷视图切换（单期排位 vs 所有月份平铺横向对比矩阵） */}
+                {allAvailableMonths.length > 1 && (
+                  <button
+                    className="secondary"
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      borderColor: viewMode === 'multi_month' ? '#0284c7' : '#cbd5e1',
+                      background: viewMode === 'multi_month' ? '#f0f9ff' : '#ffffff',
+                      color: viewMode === 'multi_month' ? '#0369a1' : '#475569',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                    onClick={() => setViewMode(viewMode === 'multi_month' ? 'standard' : 'multi_month')}
+                    title="在当前单期排位表与全月份横向平铺对比表之间自由切换"
+                  >
+                    <Table2 size={14} color="#0284c7" />
+                    {viewMode === 'multi_month' ? '📋 切换为单期综合排位视图' : '📊 切换为所有月份平铺矩阵'}
+                  </button>
+                )}
+              </div>
+
+              {/* 子周期选择器与归集准则说明 */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', paddingTop: '8px', borderTop: '1px dashed #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  {periodType === 'month' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#0369a1' }}>核算月份：</span>
+                      <select
+                        value={activeMonth}
+                        onChange={e => setSelectedMonth(e.target.value)}
+                        style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #93c5fd', fontSize: '13px', fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
+                      >
+                        {allAvailableMonths.map(m => (
+                          <option key={m} value={m}>{m} 月度核算</option>
+                        ))}
+                      </select>
+                      <Badge tone="blue">当前为【{activeMonth}】单月数据归集</Badge>
+                    </div>
+                  )}
+
+                  {periodType === 'quarter' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#0369a1' }}>核算季度：</span>
+                      <select
+                        value={activeQuarter}
+                        onChange={e => setSelectedQuarter(e.target.value)}
+                        style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #93c5fd', fontSize: '13px', fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
+                      >
+                        {allAvailableQuarters.map(q => {
+                          const [y, qStr] = q.split('-Q');
+                          return (
+                            <option key={q} value={q}>{y}年 第{qStr}季度 ({q})</option>
+                          );
+                        })}
+                      </select>
+                      <Badge tone="purple">当前为【{activeQuarter}】季度累计数据归集</Badge>
+                    </div>
+                  )}
+
+                  {periodType === 'year' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#0369a1' }}>核算年度：</span>
+                      <select
+                        value={activeYear}
+                        onChange={e => setSelectedYear(e.target.value)}
+                        style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #93c5fd', fontSize: '13px', fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
+                      >
+                        {allAvailableYears.map(y => (
+                          <option key={y} value={y}>{y} 整年度</option>
+                        ))}
+                      </select>
+                      <Badge tone="green">当前为【{activeYear}年度】全额度归集</Badge>
+                    </div>
+                  )}
+
+                  {periodType === 'all' && (
+                    <Badge tone="blue">涵盖已导入全部 {allAvailableMonths.length} 个月份的历史分配总额</Badge>
+                  )}
+                </div>
+
+                <div style={{ fontSize: '12px', color: '#475569', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <ShieldCheck size={14} color="#059669" />
+                  <span>
+                    <strong>跨包归集准则</strong>：严格按员工工号精确归集。同一工号同一月份跨项目数据合并；不同月份数据互不混合。
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 表格区域 */}
             <div style={{ overflowX: 'auto' }}>
-              <table className="table" style={{ width: '100%', fontSize: '13px' }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc' }}>
-                    <th style={{ width: '60px', textAlign: 'center' }}>全员排名</th>
-                    <th style={{ width: '90px' }}>工号</th>
-                    <th>员工姓名</th>
-                    <th>所属专业组</th>
-                    <th>职务</th>
-                    <th>参与项目数</th>
-                    <th style={{ textAlign: 'right' }}>累计获得绩点(万)</th>
-                    <th style={{ textAlign: 'right' }}>折合金额(万元)</th>
-                    <th>参与项目明细</th>
-                    <th style={{ textAlign: 'center', width: '90px' }}>全景下钻</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredEmployees.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
-                        暂未找到匹配的员工分配记录，请检查筛选条件或导入项目数据包。
-                      </td>
+              {viewMode === 'multi_month' ? (
+                /* 所有月份平铺矩阵视图 */
+                <table className="table" style={{ width: '100%', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc' }}>
+                      <th style={{ width: '60px', textAlign: 'center' }}>全员排名</th>
+                      <th style={{ width: '90px' }}>工号</th>
+                      <th>员工姓名</th>
+                      <th>所属专业组</th>
+                      <th>职务</th>
+                      {allAvailableMonths.map(m => (
+                        <th key={m} style={{ textAlign: 'right', minWidth: '90px', background: '#f0f9ff', color: '#0369a1' }}>
+                          {m}
+                        </th>
+                      ))}
+                      <th style={{ textAlign: 'right' }}>累计获得绩点(万)</th>
+                      <th style={{ textAlign: 'right' }}>折合总额(万元)</th>
+                      <th style={{ textAlign: 'center', width: '90px' }}>全景下钻</th>
                     </tr>
-                  ) : (
-                    filteredEmployees.map(emp => (
-                      <tr key={emp.employeeId} style={{ cursor: 'pointer' }} onClick={() => setInspectEmployee(emp)}>
-                        <td style={{ textAlign: 'center', fontWeight: emp.rank <= 3 ? 700 : 500 }}>
-                          {emp.rank === 1 ? '🥇 1' : emp.rank === 2 ? '🥈 2' : emp.rank === 3 ? '🥉 3' : emp.rank}
-                        </td>
-                        <td style={{ fontFamily: 'monospace', color: '#0369a1', fontSize: '12px' }}>
-                          {emp.employeeNo ? <span style={{ background: '#e0f2fe', padding: '1px 6px', borderRadius: '4px' }}>{emp.employeeNo}</span> : <span style={{ color: '#94a3b8' }}>-</span>}
-                        </td>
-                        <td style={{ fontWeight: 600, color: '#0f172a' }}>{emp.name}</td>
-                        <td>
-                          {emp.group ? (
-                            <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', fontSize: '12px' }}>
-                              {emp.group}
-                            </span>
-                          ) : (
-                            <span style={{ color: '#94a3b8' }}>未分组</span>
-                          )}
-                        </td>
-                        <td>{emp.position || '-'}</td>
-                        <td style={{ fontWeight: 600, color: '#0369a1' }}>{emp.projectCount} 个项目</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669', fontSize: '13.5px' }}>
-                          {score(emp.totalPoints)}
-                        </td>
-                        <td style={{ textAlign: 'right', color: '#334155' }}>{formatWan6(emp.totalWan)} 万元</td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxWidth: '380px' }}>
-                            {emp.projects.slice(0, 3).map(p => (
-                              <span
-                                key={p.projectId}
-                                style={{
-                                  background: '#e0f2fe',
-                                  color: '#0369a1',
-                                  padding: '1px 6px',
-                                  borderRadius: '4px',
-                                  fontSize: '11px',
-                                }}
-                              >
-                                {p.projectName}: {score(p.points)}
-                              </span>
-                            ))}
-                            {emp.projects.length > 3 && (
-                              <span style={{ fontSize: '11px', color: '#64748b' }}>+{emp.projects.length - 3}个</span>
-                            )}
-                          </div>
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <button
-                            className="secondary"
-                            style={{ padding: '3px 8px', fontSize: '11.5px', borderRadius: '4px' }}
-                            onClick={e => {
-                              e.stopPropagation();
-                              setInspectEmployee(emp);
-                            }}
-                          >
-                            查看明细
-                          </button>
+                  </thead>
+                  <tbody>
+                    {filteredEmployees.length === 0 ? (
+                      <tr>
+                        <td colSpan={8 + allAvailableMonths.length} style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
+                          暂未找到匹配的员工分配记录，请检查筛选条件或导入项目数据包。
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      filteredEmployees.map(emp => {
+                        const fullEmp = fullSummary.employeeSummaries.find(e => e.id === emp.id) || emp;
+                        return (
+                          <tr key={emp.employeeId} style={{ cursor: 'pointer' }} onClick={() => setInspectEmployee(fullEmp)}>
+                            <td style={{ textAlign: 'center', fontWeight: emp.rank <= 3 ? 700 : 500 }}>
+                              {emp.rank === 1 ? '🥇 1' : emp.rank === 2 ? '🥈 2' : emp.rank === 3 ? '🥉 3' : emp.rank}
+                            </td>
+                            <td style={{ fontFamily: 'monospace', color: '#0369a1', fontSize: '12px' }}>
+                              {emp.employeeNo ? <span style={{ background: '#e0f2fe', padding: '1px 6px', borderRadius: '4px' }}>{emp.employeeNo}</span> : <span style={{ color: '#94a3b8' }}>-</span>}
+                            </td>
+                            <td style={{ fontWeight: 600, color: '#0f172a' }}>{emp.name}</td>
+                            <td>
+                              {emp.group ? (
+                                <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', fontSize: '12px' }}>
+                                  {emp.group}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#94a3b8' }}>未分组</span>
+                              )}
+                            </td>
+                            <td>{emp.position || '-'}</td>
+                            {allAvailableMonths.map(m => {
+                              const mPts = fullEmp.monthlyBreakdown?.[m]?.points || 0;
+                              return (
+                                <td key={m} style={{ textAlign: 'right', fontWeight: mPts > 0 ? 600 : 400, color: mPts > 0 ? '#059669' : '#cbd5e1' }}>
+                                  {mPts > 0 ? score(mPts) : '-'}
+                                </td>
+                              );
+                            })}
+                            <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669', fontSize: '13.5px' }}>
+                              {score(fullEmp.totalPoints)}
+                            </td>
+                            <td style={{ textAlign: 'right', color: '#334155' }}>{formatWan6(fullEmp.totalWan)} 万元</td>
+                            <td style={{ textAlign: 'center' }}>
+                              <button
+                                className="secondary"
+                                style={{ padding: '3px 8px', fontSize: '11.5px', borderRadius: '4px' }}
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setInspectEmployee(fullEmp);
+                                }}
+                              >
+                                查看明细
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              ) : (
+                /* 标准排位视图（按月 / 按季度 / 整年度 / 全周期） */
+                <table className="table" style={{ width: '100%', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc' }}>
+                      <th style={{ width: '60px', textAlign: 'center' }}>
+                        {periodType === 'month' ? '当月排名' : periodType === 'quarter' ? '季度排名' : periodType === 'year' ? '年度排名' : '全员排名'}
+                      </th>
+                      <th style={{ width: '90px' }}>工号</th>
+                      <th>员工姓名</th>
+                      <th>所属专业组</th>
+                      <th>职务</th>
+                      <th>
+                        {periodType === 'month' ? '当月参与项目' : periodType === 'quarter' ? '季度参与项目' : periodType === 'year' ? '年度参与项目' : '参与项目数'}
+                      </th>
+                      <th style={{ textAlign: 'right' }}>
+                        {periodType === 'month'
+                          ? `【${activeMonth}】绩点(万)`
+                          : periodType === 'quarter'
+                          ? `【${activeQuarter}】累计绩点(万)`
+                          : periodType === 'year'
+                          ? `【${activeYear}年】总绩点(万)`
+                          : '累计获得绩点(万)'}
+                      </th>
+                      <th style={{ textAlign: 'right' }}>折合金额(万元)</th>
+                      <th>
+                        {periodType === 'quarter' ? '季度内各月分布' : periodType === 'year' ? '各季度分布' : '参与项目分润明细'}
+                      </th>
+                      <th style={{ textAlign: 'center', width: '90px' }}>全景下钻</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredEmployees.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
+                          暂未找到匹配的员工分配记录，请检查筛选条件或导入项目数据包。
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredEmployees.map(emp => (
+                        <tr key={emp.employeeId} style={{ cursor: 'pointer' }} onClick={() => setInspectEmployee(emp)}>
+                          <td style={{ textAlign: 'center', fontWeight: emp.rank <= 3 ? 700 : 500 }}>
+                            {emp.rank === 1 ? '🥇 1' : emp.rank === 2 ? '🥈 2' : emp.rank === 3 ? '🥉 3' : emp.rank}
+                          </td>
+                          <td style={{ fontFamily: 'monospace', color: '#0369a1', fontSize: '12px' }}>
+                            {emp.employeeNo ? <span style={{ background: '#e0f2fe', padding: '1px 6px', borderRadius: '4px' }}>{emp.employeeNo}</span> : <span style={{ color: '#94a3b8' }}>-</span>}
+                          </td>
+                          <td style={{ fontWeight: 600, color: '#0f172a' }}>{emp.name}</td>
+                          <td>
+                            {emp.group ? (
+                              <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', fontSize: '12px' }}>
+                                {emp.group}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#94a3b8' }}>未分组</span>
+                            )}
+                          </td>
+                          <td>{emp.position || '-'}</td>
+                          <td style={{ fontWeight: 600, color: '#0369a1' }}>{emp.projectCount} 个项目</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669', fontSize: '13.5px' }}>
+                            {score(emp.totalPoints)}
+                          </td>
+                          <td style={{ textAlign: 'right', color: '#334155' }}>{formatWan6(emp.totalWan)} 万元</td>
+                          <td>
+                            {periodType === 'quarter' ? (
+                              /* 季度展示各月分布 */
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxWidth: '380px' }}>
+                                {emp.quarterlyBreakdown?.[activeQuarter]?.months.map(m => {
+                                  const mPts = emp.monthlyBreakdown?.[m]?.points || 0;
+                                  return (
+                                    <span key={m} style={{ background: '#f1f5f9', padding: '1px 6px', borderRadius: '4px', fontSize: '11.5px', color: '#334155' }}>
+                                      {m.slice(5)}月: <b>{score(mPts)}</b>
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            ) : periodType === 'year' ? (
+                              /* 年度展示各季度分布 */
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxWidth: '380px' }}>
+                                {['Q1', 'Q2', 'Q3', 'Q4'].map(q => {
+                                  const qKey = `${activeYear}-${q}`;
+                                  const qPts = emp.quarterlyBreakdown?.[qKey]?.points || 0;
+                                  return (
+                                    <span key={q} style={{ background: qPts > 0 ? '#ecfdf5' : '#f8fafc', color: qPts > 0 ? '#047857' : '#94a3b8', padding: '1px 6px', borderRadius: '4px', fontSize: '11.5px' }}>
+                                      {q}: {qPts > 0 ? score(qPts) : '-'}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              /* 月度或全周期展示项目明细 */
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxWidth: '380px' }}>
+                                {emp.projects.slice(0, 3).map(p => (
+                                  <span
+                                    key={p.projectId}
+                                    style={{
+                                      background: '#e0f2fe',
+                                      color: '#0369a1',
+                                      padding: '1px 6px',
+                                      borderRadius: '4px',
+                                      fontSize: '11px',
+                                    }}
+                                  >
+                                    {p.projectName}: {score(p.points)}
+                                  </span>
+                                ))}
+                                {emp.projects.length > 3 && (
+                                  <span style={{ fontSize: '11px', color: '#64748b' }}>+{emp.projects.length - 3}个</span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <button
+                              className="secondary"
+                              style={{ padding: '3px 8px', fontSize: '11.5px', borderRadius: '4px' }}
+                              onClick={e => {
+                                e.stopPropagation();
+                                setInspectEmployee(emp);
+                              }}
+                            >
+                              查看明细
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         )}
@@ -1943,6 +2307,45 @@ export function AuditorSummaryView({
                 <div style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>{formatWan6(inspectEmployee.totalWan)} 万元</div>
               </div>
             </div>
+
+            {/* 月度履历卡片网格 */}
+            {(() => {
+              const fullEmp = fullSummary.employeeSummaries.find(e => e.id === inspectEmployee.id) || inspectEmployee;
+              const mEntries = Object.entries(fullEmp.monthlyBreakdown || {}).sort((a, b) => a[0].localeCompare(b[0]));
+              if (mEntries.length <= 0) return null;
+              return (
+                <div style={{ marginBottom: '20px' }}>
+                  <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Calendar size={15} color="#0284c7" />
+                    各月份绩效分配履历 ({mEntries.length} 个月份)
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
+                    {mEntries.map(([m, mData]) => (
+                      <div key={m} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#0369a1' }}>{m} 月</span>
+                          <span style={{ fontSize: '11px', color: '#64748b' }}>{mData.projects.length} 个项目</span>
+                        </div>
+                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#059669', margin: '2px 0' }}>
+                          {score(mData.points)} <span style={{ fontSize: '12px', fontWeight: 500 }}>绩点</span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#475569', marginBottom: '4px' }}>
+                          折合: {formatWan6(mData.wan)} 万元
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          {mData.projects.map((p: any) => (
+                            <div key={p.projectId} style={{ display: 'flex', justifyContent: 'space-between', background: '#ffffff', padding: '2px 6px', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={p.projectName}>{p.projectName}</span>
+                              <b style={{ color: '#0369a1' }}>{score(p.points)}</b>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
               各项目获得绩点分布 ({inspectEmployee.projects.length} 个项目)

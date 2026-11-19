@@ -37,7 +37,9 @@ async function deploy() {
   execSync('git config user.email "zoufudun@163.com"', { cwd: tempDir, stdio: 'ignore' });
   execSync('git checkout -b gh-pages', { cwd: tempDir, stdio: 'ignore' });
   execSync('git add -A', { cwd: tempDir, stdio: 'ignore' });
-  execSync('git commit -m "deploy: update GitHub Pages with cache-busted v0.7.10 bundle"', { cwd: tempDir, stdio: 'ignore' });
+  const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
+  const ver = pkg.version || '0.7.11';
+  execSync(`git commit -m "deploy: update GitHub Pages with cache-busted v${ver} bundle"`, { cwd: tempDir, stdio: 'ignore' });
   
   console.log('Pushing to gh-pages remote...');
   execSync(`git push --force "${repoUrl}" gh-pages`, { cwd: tempDir, stdio: 'inherit' });

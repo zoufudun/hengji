@@ -18,6 +18,7 @@ import {
   exportProjectManagerBundle,
   exportProjectManagerBundleJson,
   parseMeritPackageOrBundle,
+  mergeProjectPackages,
   calculateDepartmentContracts,
   calculateHonorStars,
   calculateStars,
@@ -617,6 +618,285 @@ test('全项目二维透视 matrix 兼容性与考核之星殿堂全员评选及
   assert.ok(stars.yearStar.stars.length > 0, '年度之星应成功评出');
   assert.ok(stars.yearStar.stars[0].employee.name, '年度之星姓名不能为空');
   assert.ok(stars.yearStar.topPoints > 0, '年度最高绩点应大于0');
+});
+
+test('按月导出数据包与导出完整数据包（所有月份）', () => {
+  const state = demoState();
+  const admin = state.employees.find(e => e.role === 'admin');
+  
+  // 确保系统有不同月份的发布方案
+  const prj = state.projects[0];
+  state.plans = [
+    {
+      id: 'plan_jan',
+      projectId: prj.id,
+      month: '2026-01',
+      budget: 1000,
+      status: 'published',
+      publishedAt: '2026-01-31T00:00:00Z',
+      entries: [
+        { employeeId: state.employees[0].id, rate: 6000, workContent: '1月工作A' },
+        { employeeId: state.employees[1].id, rate: 4000, workContent: '1月工作B' },
+      ],
+      records: [],
+    },
+    {
+      id: 'plan_feb',
+      projectId: prj.id,
+      month: '2026-02',
+      budget: 1500,
+      status: 'published',
+      publishedAt: '2026-02-28T00:00:00Z',
+      entries: [
+        { employeeId: state.employees[0].id, rate: 5000, workContent: '2月工作A' },
+        { employeeId: state.employees[1].id, rate: 5000, workContent: '2月工作B' },
+      ],
+      records: [],
+    },
+  ];
+
+  // 1. 按月导出 2026-01 数据包
+  const janBundle = exportProjectManagerBundle(state, 'all', admin, { months: ['2026-01'] });
+  assert.ok(janBundle.period);
+  assert.deepEqual(janBundle.period.months, ['2026-01']);
+  assert.ok(janBundle.packages.length > 0);
+  const pkgJan = janBundle.packages[0];
+  assert.equal(pkgJan.details.length, 2);
+  assert.ok(pkgJan.details.every(d => d.month === '2026-01'));
+
+  // 2. 导出完整数据包（所有月份）
+  const fullBundle = exportProjectManagerBundle(state, 'all', admin);
+  assert.ok(fullBundle.period);
+  assert.equal(fullBundle.period.periodLabel, '所有月份');
+  const pkgFull = fullBundle.packages.find(p => p.project.id === prj.id);
+  assert.ok(pkgFull);
+  assert.equal(pkgFull.details.length, 4); // 包含 1月和2月全部 4 条明细
+  assert.deepEqual(pkgFull.period.months, ['2026-01', '2026-02']);
+});
+
+test('核算员多数据包合并按月归集（同一工号同一月份合并，不同月份隔离）及月/季/年视图切换', () => {
+  // 构造跨项目、跨月份数据包
+  // 项目 A：包含 2026-01 与 2026-02 的数据
+  const emp1No = 'NO_8801';
+  const emp2No = 'NO_8802';
+
+  const pkgA_Jan = {
+    version: '1.0',
+    packageType: 'project_merit_package',
+    generatedAt: new Date().toISOString(),
+    project: {
+      id: 'prj_alpha',
+      code: 'A001',
+      name: '甲项目',
+      client: '客户甲',
+      contract: 10000000,
+      contractWan: 10,
+      ownerId: 'owner_a',
+      ownerName: '张负责人',
+      start: '2026-01',
+      end: '2026-12',
+      status: 'active',
+      periodAllocatedPoints: 300000,
+      periodAllocatedWan: 0.3,
+      remainingWan: 9.7,
+      remainingRateBps: 9700,
+    },
+    period: { months: ['2026-01'], periodLabel: '2026-01' },
+    memberSummaries: [],
+    details: [
+      {
+        projectId: 'prj_alpha',
+        projectName: '甲项目',
+        projectCode: 'A001',
+        month: '2026-01',
+        employeeId: 'emp_1',
+        employeeNo: emp1No,
+        employeeName: '张工',
+        department: '技术部',
+        group: '研发组',
+        position: '高级工程师',
+        rate: 5000,
+        points: 200000, // 0.2万
+        wan: 0.2,
+      },
+      {
+        projectId: 'prj_alpha',
+        projectName: '甲项目',
+        projectCode: 'A001',
+        month: '2026-01',
+        employeeId: 'emp_2',
+        employeeNo: emp2No,
+        employeeName: '李工',
+        department: '技术部',
+        group: '产品组',
+        position: '产品经理',
+        rate: 5000,
+        points: 100000,
+        wan: 0.1,
+      },
+    ],
+  };
+
+  const pkgA_Feb = {
+    version: '1.0',
+    packageType: 'project_merit_package',
+    generatedAt: new Date().toISOString(),
+    project: {
+      id: 'prj_alpha',
+      code: 'A001',
+      name: '甲项目',
+      client: '客户甲',
+      contract: 10000000,
+      contractWan: 10,
+      ownerId: 'owner_a',
+      ownerName: '张负责人',
+      start: '2026-01',
+      end: '2026-12',
+      status: 'active',
+      periodAllocatedPoints: 150000,
+      periodAllocatedWan: 0.15,
+      remainingWan: 9.55,
+      remainingRateBps: 9550,
+    },
+    period: { months: ['2026-02'], periodLabel: '2026-02' },
+    memberSummaries: [],
+    details: [
+      {
+        projectId: 'prj_alpha',
+        projectName: '甲项目',
+        projectCode: 'A001',
+        month: '2026-02',
+        employeeId: 'emp_1',
+        employeeNo: emp1No,
+        employeeName: '张工',
+        department: '技术部',
+        group: '研发组',
+        position: '高级工程师',
+        rate: 10000,
+        points: 150000,
+        wan: 0.15,
+      },
+    ],
+  };
+
+  // 项目 B：同样包含 2026-01 与 2026-02 的数据
+  const pkgB = {
+    version: '1.0',
+    packageType: 'project_merit_package',
+    generatedAt: new Date().toISOString(),
+    project: {
+      id: 'prj_beta',
+      code: 'B002',
+      name: '乙项目',
+      client: '客户乙',
+      contract: 20000000,
+      contractWan: 20,
+      ownerId: 'owner_b',
+      ownerName: '赵负责人',
+      start: '2026-01',
+      end: '2026-12',
+      status: 'active',
+      periodAllocatedPoints: 500000,
+      periodAllocatedWan: 0.5,
+      remainingWan: 19.5,
+      remainingRateBps: 9750,
+    },
+    period: { months: ['2026-01', '2026-02'], periodLabel: '2026-01 至 2026-02' },
+    memberSummaries: [],
+    details: [
+      {
+        projectId: 'prj_beta',
+        projectName: '乙项目',
+        projectCode: 'B002',
+        month: '2026-01',
+        employeeId: 'emp_1',
+        employeeNo: emp1No, // 同一工号张工跨项目分配
+        employeeName: '张工',
+        department: '技术部',
+        group: '研发组',
+        position: '高级工程师',
+        rate: 5000,
+        points: 300000, // 0.3万
+        wan: 0.3,
+      },
+      {
+        projectId: 'prj_beta',
+        projectName: '乙项目',
+        projectCode: 'B002',
+        month: '2026-02',
+        employeeId: 'emp_1',
+        employeeNo: emp1No,
+        employeeName: '张工',
+        department: '技术部',
+        group: '研发组',
+        position: '高级工程师',
+        rate: 5000,
+        points: 200000,
+        wan: 0.2,
+      },
+    ],
+  };
+
+  // 1. 验证 mergeProjectPackages：导入甲项目的 1月包与 2月包，不丢失任何月份
+  const mergedA = mergeProjectPackages([pkgA_Jan], [pkgA_Feb]);
+  assert.equal(mergedA.length, 1);
+  assert.equal(mergedA[0].details.length, 3);
+  assert.deepEqual(mergedA[0].period.months, ['2026-01', '2026-02']);
+
+  // 将甲项目与乙项目合并导入
+  const allPackages = mergeProjectPackages(mergedA, [pkgB]);
+  assert.equal(allPackages.length, 2);
+
+  // 2. 验证按月显示 (2026-01)：
+  // 同一工号张工 (NO_8801) 在甲项目 (200,000) + 乙项目 (300,000) = 500,000 分；
+  // 且 2026-02 的数据绝对不合并到 2026-01 中！
+  const janSummary = summarizeAuditorPackages(allPackages, undefined, { periodType: 'month', periodValue: '2026-01' });
+  assert.equal(janSummary.overview.periodLabel, '2026-01 (月度)');
+  assert.equal(janSummary.employeeSummaries.length, 2);
+  const zhangJan = janSummary.employeeSummaries.find(e => e.employeeNo === emp1No);
+  assert.ok(zhangJan);
+  assert.equal(zhangJan.totalPoints, 500000, '同一工号张工在1月份甲项目+乙项目合并应为50万');
+  assert.equal(zhangJan.projects.length, 2);
+  assert.deepEqual(zhangJan.projects.map(p => p.projectName).sort(), ['乙项目', '甲项目']);
+
+  // 李工仅在甲项目有分配：100,000 分
+  const liJan = janSummary.employeeSummaries.find(e => e.employeeNo === emp2No);
+  assert.ok(liJan);
+  assert.equal(liJan.totalPoints, 100000);
+
+  // 3. 验证按月显示 (2026-02)：
+  // 张工在甲项目 (150,000) + 乙项目 (200,000) = 350,000 分；李工 2月无分配
+  const febSummary = summarizeAuditorPackages(allPackages, undefined, { periodType: 'month', periodValue: '2026-02' });
+  assert.equal(febSummary.employeeSummaries.length, 1);
+  const zhangFeb = febSummary.employeeSummaries.find(e => e.employeeNo === emp1No);
+  assert.ok(zhangFeb);
+  assert.equal(zhangFeb.totalPoints, 350000, '2月份张工合并应为35万');
+
+  // 4. 验证按季度显示 (2026-Q1)：
+  // Q1 包含 1月与 2月：张工 = 500,000 + 350,000 = 850,000 分；李工 = 100,000 分
+  const q1Summary = summarizeAuditorPackages(allPackages, undefined, { periodType: 'quarter', periodValue: '2026-Q1' });
+  assert.equal(q1Summary.overview.periodLabel, '2026-Q1 (第1季度)');
+  assert.equal(q1Summary.employeeSummaries.length, 2);
+  const zhangQ1 = q1Summary.employeeSummaries.find(e => e.employeeNo === emp1No);
+  assert.ok(zhangQ1);
+  assert.equal(zhangQ1.totalPoints, 850000);
+
+  // 5. 验证整年度显示 (2026年度)：
+  const yearSummary = summarizeAuditorPackages(allPackages, undefined, { periodType: 'year', periodValue: '2026' });
+  assert.equal(yearSummary.overview.periodLabel, '2026年度');
+  const zhangYear = yearSummary.employeeSummaries.find(e => e.employeeNo === emp1No);
+  assert.ok(zhangYear);
+  assert.equal(zhangYear.totalPoints, 850000);
+
+  // 6. 验证全周期总览及 employee.monthlyBreakdown
+  const allSummary = summarizeAuditorPackages(allPackages);
+  const zhangAll = allSummary.employeeSummaries.find(e => e.employeeNo === emp1No);
+  assert.ok(zhangAll);
+  assert.ok(zhangAll.monthlyBreakdown);
+  assert.equal(zhangAll.monthlyBreakdown['2026-01'].points, 500000);
+  assert.equal(zhangAll.monthlyBreakdown['2026-02'].points, 350000);
+  assert.equal(zhangAll.quarterlyBreakdown['2026-Q1'].points, 850000);
+  assert.equal(zhangAll.annualBreakdown['2026'].points, 850000);
 });
 
 

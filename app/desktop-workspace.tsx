@@ -7,6 +7,7 @@ import {
   BriefcaseBusiness,
   Building2,
   Calculator,
+  Calendar,
   CalendarRange,
   Check,
   CheckSquare,
@@ -185,6 +186,7 @@ import {
   exportAuditorDetailsCsv,
   exportAuditorFullBundleJson,
   parseMeritPackageOrBundle,
+  mergeProjectPackages,
   type ProjectMeritPackage,
 } from '../lib/core';
 import { AuditorSummaryView, type AuditorTab } from '../components/AuditorSummaryView';
@@ -1187,10 +1189,7 @@ export default function DesktopWorkspace() {
     }
 
     if (newPkgs.length > 0) {
-      const map = new Map<string, ProjectMeritPackage>();
-      auditorPackages.forEach(p => map.set(p.project.id, p));
-      newPkgs.forEach(p => map.set(p.project.id, p));
-      const merged = Array.from(map.values());
+      const merged = mergeProjectPackages(auditorPackages, newPkgs);
       const bundleHint = bundleCount > 0 ? `（含 ${bundleCount} 个多项目合并包）` : '';
       const msg = `✅ 成功导入 ${newPkgs.length} 个项目数据包${bundleHint}！已为您自动合并汇总并持久化保存。`;
       await handleUpdateAuditorPackages(merged, msg);
@@ -1301,8 +1300,8 @@ export default function DesktopWorkspace() {
     }
   };
 
-  // 导出项目数据包（项目负责人导出名下项目合包，或管理员一键导出全系统所有项目合包）
-  const handleExportManagerAllPackages = async (targetManagerId?: string) => {
+  // 导出项目数据包（项目负责人导出名下项目合包，或管理员一键导出全系统所有项目合包；支持按月导出或导出完整数据包）
+  const handleExportManagerAllPackages = async (targetManagerId?: string, targetMonth?: string) => {
     if (!state) return;
     if (state.projects.length === 0) {
       setNotice('当前系统暂无任何项目数据可导出。');
@@ -1310,31 +1309,34 @@ export default function DesktopWorkspace() {
     }
     const mId = targetManagerId || (workspaceType === 'project_manager' && ownerEmployeeId ? ownerEmployeeId : currentActor.id);
     const manager = state.employees.find(e => e.id === mId) || currentActor;
+    const isAll = targetManagerId === 'all' || isAdmin || currentActor.role === 'auditor';
     const myProjects = state.projects.filter(p => p.owner === mId || p.owner === manager.name);
 
-    if (myProjects.length === 0 || targetManagerId === 'all') {
-      if (isAdmin || currentActor.role === 'auditor') {
-        try {
-          const bundleJson = exportProjectManagerBundleJson(state, 'all', currentActor);
-          const filename = `【项目数据包合包】全部门_${state.projects.length}个项目数据包_${new Date().toISOString().slice(0, 10)}.json`;
-          await triggerDownload(bundleJson, filename, 'application/json;charset=utf-8');
-          setNotice(`✅ 已成功导出全部门共 ${state.projects.length} 个项目的绩点分配数据包！请直接发给核算员导入。`);
-          return;
-        } catch (err: any) {
-          setNotice(`❌ 导出失败: ${err.message || '未知错误'}`);
-          return;
-        }
-      } else {
-        setNotice(`【${manager.name}】名下暂无管理的任何项目。`);
-        return;
-      }
+    if (!isAll && myProjects.length === 0) {
+      setNotice(`【${manager.name}】名下暂无管理的任何项目。`);
+      return;
     }
 
     try {
-      const bundleJson = exportProjectManagerBundleJson(state, mId, currentActor);
-      const filename = `【项目数据包合包】${manager.name}_负责的全部项目数据包_${new Date().toISOString().slice(0, 10)}.json`;
+      const options = targetMonth ? { months: [targetMonth], status: 'published' as const } : { status: 'published' as const };
+      const bundleJson = exportProjectManagerBundleJson(state, isAll ? 'all' : mId, currentActor, options);
+      const parsedBundle = JSON.parse(bundleJson);
+      const projectCount = parsedBundle.packages?.length || 0;
+
+      if (targetMonth && projectCount === 0) {
+        setNotice(`⚠️ 【${targetMonth}】月份暂无可导出的项目分配数据（该月未发布任何项目分配方案）。`);
+        return;
+      }
+
+      const scopeName = isAll ? '全部门' : manager.name;
+      const periodTag = targetMonth ? `_【${targetMonth}月度】` : '_【完整全量(全部月份)】';
+      const filename = `【项目数据包${periodTag}】${scopeName}_${projectCount}个项目数据包_${new Date().toISOString().slice(0, 10)}.json`;
+
       await triggerDownload(bundleJson, filename, 'application/json;charset=utf-8');
-      setNotice(`✅ 已成功导出【${manager.name}】管理的全部 ${myProjects.length} 个项目数据包！请直接发给核算员导入。`);
+      const periodDesc = targetMonth
+        ? `【${targetMonth}】月度数据包（共 ${projectCount} 个项目）`
+        : `完整数据包（包含全部月份，共 ${projectCount} 个项目）`;
+      setNotice(`✅ 已成功导出${periodDesc}！请直接发给核算员导入。`);
     } catch (err: any) {
       setNotice(`❌ 导出失败: ${err.message || '未知错误'}`);
     }
@@ -6606,7 +6608,7 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
   onImportProjects(projects: any[]): Promise<void>;
   onBatchConfigureTeam?(projectIds: string[], members: string[], defaultRates: Record<string, number>, ownerId?: string): Promise<void>;
   onExportPackage?(projectId: string): void;
-  onExportManagerAllPackages?(managerId?: string): void;
+  onExportManagerAllPackages?(managerId?: string, month?: string): void;
 }) {
   const [filter, setFilter] = useState<'all' | 'active' | 'archived'>('all');
   const [quotaFilter, setQuotaFilter] = useState<'all' | 'full' | 'partial' | 'zero'>('all');
@@ -6618,7 +6620,19 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [batchTeamTargetProjects, setBatchTeamTargetProjects] = useState<Project[] | null>(null);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const prjCsvInputRef = useRef<HTMLInputElement>(null);
+
+  const publishedPlans = useMemo(() => (state.plans || []).filter(p => p.status === 'published'), [state.plans]);
+  const publishedMonths = useMemo(() => {
+    const set = new Set<string>();
+    publishedPlans.forEach(p => set.add(p.month));
+    return Array.from(set).sort();
+  }, [publishedPlans]);
+
+  const [exportMonth, setExportMonth] = useState<string>(() => {
+    return publishedMonths.length > 0 ? publishedMonths[publishedMonths.length - 1] : nowMonth();
+  });
 
   const handleSetLayout = (mode: 'grouped' | 'table' | 'cards') => {
     setLayoutMode(mode);
@@ -6762,8 +6776,8 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
                   alignItems: 'center',
                   gap: '6px',
                 }}
-                onClick={() => onExportManagerAllPackages()}
-                title="导出项目分配绩点数据包（发给核算员一键导入与汇总）"
+                onClick={() => setExportModalOpen(true)}
+                title="导出项目分配绩点数据包（支持按月导出或完整导出，发给核算员一键导入与汇总）"
               >
                 <Package size={15} color="#059669" />
                 导出项目数据包
@@ -7284,6 +7298,82 @@ function ProjectsView({ state, isAdmin, isManager, currentActorId, projectGroups
             }
           }}
         />
+      )}
+
+      {/* 导出项目数据包弹窗（按月或完整导出） */}
+      {exportModalOpen && (
+        <Modal
+          title="导出项目分配绩点数据包（项目协同与核算流转）"
+          subtitle="可选择导出指定月份的数据包，或导出包含所有月份的历史全量完整数据包"
+          onClose={() => setExportModalOpen(false)}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ background: '#f0f9ff', padding: '14px', borderRadius: '8px', border: '1px solid #bae6fd', fontSize: '13px', color: '#0369a1' }}>
+              <p style={{ margin: 0, lineHeight: 1.5 }}>
+                将当前项目（或管理的全部项目）的合同额度、月度成员分配明细、个人绩点总额与流水分发一键打包为标准的绩点数据包文件（.json）。项目负责人可直接将其发给绩效核算员。
+              </p>
+              <div style={{ marginTop: '10px', display: 'flex', gap: '14px', flexWrap: 'wrap', fontSize: '12px', color: '#475569' }}>
+                <span>项目总数: <b style={{ color: '#0284c7' }}>{state.projects.length} 项</b></span>
+                <span>累计已发布方案: <b>{publishedPlans.length} 笔</b></span>
+                <span>涵盖月份: <b>{publishedMonths.length} 个月</b></span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Calendar size={15} color="#0284c7" />选择导出月份：
+              </label>
+              <select
+                value={exportMonth}
+                onChange={e => setExportMonth(e.target.value)}
+                style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13.5px', background: '#f8fafc', fontWeight: 600 }}
+              >
+                {publishedMonths.length === 0 ? (
+                  <option value={nowMonth()}>{nowMonth()} (当月暂无发布方案)</option>
+                ) : (
+                  publishedMonths.map(m => {
+                    const cnt = publishedPlans.filter(p => p.month === m).length;
+                    return (
+                      <option key={m} value={m}>
+                        {m} (包含 {cnt} 个已发布项目)
+                      </option>
+                    );
+                  })
+                )}
+              </select>
+              <span style={{ fontSize: '12px', color: '#64748b' }}>
+                {publishedPlans.filter(p => p.month === exportMonth).length > 0
+                  ? `【${exportMonth}】该月有 ${publishedPlans.filter(p => p.month === exportMonth).length} 个项目已完成绩效发布`
+                  : `⚠️ 【${exportMonth}】该月暂无已发布方案`}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '12px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="secondary"
+                style={{ color: '#0369a1', borderColor: '#7dd3fc', background: '#f0f9ff', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+                onClick={() => {
+                  setExportModalOpen(false);
+                  onExportManagerAllPackages && onExportManagerAllPackages(undefined, undefined);
+                }}
+              >
+                <Layers size={14} />导出完整数据包（所有月份）
+              </button>
+              <button
+                type="button"
+                className="primary"
+                style={{ background: '#0284c7', borderColor: '#0369a1', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+                onClick={() => {
+                  setExportModalOpen(false);
+                  onExportManagerAllPackages && onExportManagerAllPackages(undefined, exportMonth);
+                }}
+              >
+                <Calendar size={14} />按月导出数据包【{exportMonth}】
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </section>
   );
@@ -12844,12 +12934,23 @@ function DataIoView({
   onRestoreState(state: State, projectGroups?: ProjectGroup[]): Promise<void>;
   onImportEmployees(employees: any[]): Promise<void>;
   onImportProjects(projects: any[]): Promise<void>;
-  onExportPackages?(): void;
+  onExportPackages?(managerId?: string, month?: string): void;
   onNavigateAuditor?(): void;
 }) {
   const [empPreview, setEmpPreview] = useState<any[] | null>(null);
   const [prjPreview, setPrjPreview] = useState<any[] | null>(null);
   const [ioNotice, setIoNotice] = useState('');
+
+  const publishedPlans = useMemo(() => (state.plans || []).filter(p => p.status === 'published'), [state.plans]);
+  const publishedMonths = useMemo(() => {
+    const set = new Set<string>();
+    publishedPlans.forEach(p => set.add(p.month));
+    return Array.from(set).sort();
+  }, [publishedPlans]);
+
+  const [exportMonth, setExportMonth] = useState<string>(() => {
+    return publishedMonths.length > 0 ? publishedMonths[publishedMonths.length - 1] : nowMonth();
+  });
 
   const empFileInput = useRef<HTMLInputElement>(null);
   const prjFileInput = useRef<HTMLInputElement>(null);
@@ -13085,20 +13186,61 @@ function DataIoView({
               <Badge tone="blue">协同流转标准包</Badge>
             </div>
             <p style={{ fontSize: '12.5px', color: '#475569', margin: '0 0 14px', lineHeight: 1.5 }}>
-              将当前项目（或管理的全部项目）的合同额度、月度成员分配明细、个人绩点总额与流水分发一键打包为标准的绩点数据包文件（.json）。项目负责人可直接将此包提交发给绩效核算员。
+              将当前项目（或管理的全部项目）的合同额度、月度成员分配明细、个人绩点总额与流水分发一键打包为标准的绩点数据包文件（.json）。支持按月导出指定月份数据包，或导出包含所有月份的完整数据包，项目负责人可直接将其发给绩效核算员。
             </p>
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', background: '#ffffff', padding: '10px 14px', borderRadius: '8px', marginBottom: '14px', fontSize: '12px', border: '1px solid #e0f2fe' }}>
               <span>系统项目总数: <b style={{ color: '#0284c7' }}>{state.projects.length} 项</b></span>
               <span>合同总额度: <b>{wan(state.projects.reduce((acc, p) => acc + (p.contract || 0), 0))} 万元</b></span>
-              <span>累计已分配: <b>{state.plans.filter(p => p.status === 'published').length} 个发布月次</b></span>
+              <span>累计已分配: <b>{publishedPlans.length} 个发布月次</b></span>
+              <span>涵盖月份: <b>{publishedMonths.length} 个月</b></span>
             </div>
+
+            {/* 按月导出选择器 */}
+            <div style={{ background: '#ffffff', padding: '10px 14px', borderRadius: '8px', border: '1px solid #bae6fd', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#0369a1', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Calendar size={15} />选择导出月份：
+              </label>
+              <select
+                value={exportMonth}
+                onChange={e => setExportMonth(e.target.value)}
+                style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #93c5fd', fontSize: '13px', color: '#0f172a', background: '#f8fafc', fontWeight: 600, minWidth: '160px' }}
+              >
+                {publishedMonths.length === 0 ? (
+                  <option value={nowMonth()}>{nowMonth()} (当月暂无发布方案)</option>
+                ) : (
+                  publishedMonths.map(m => {
+                    const cnt = publishedPlans.filter(p => p.month === m).length;
+                    return (
+                      <option key={m} value={m}>
+                        {m} (包含 {cnt} 个已发布项目)
+                      </option>
+                    );
+                  })
+                )}
+              </select>
+              <span style={{ fontSize: '12px', color: '#64748b' }}>
+                {publishedPlans.filter(p => p.month === exportMonth).length > 0
+                  ? `【${exportMonth}】该月有 ${publishedPlans.filter(p => p.month === exportMonth).length} 个项目已完成绩效发布`
+                  : `⚠️ 【${exportMonth}】该月暂无已发布方案`}
+              </span>
+            </div>
+
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <button
                 className="primary"
-                style={{ background: '#0284c7', borderColor: '#0369a1', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                onClick={() => onExportPackages && onExportPackages()}
+                style={{ background: '#0284c7', borderColor: '#0369a1', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+                onClick={() => onExportPackages && onExportPackages('all', exportMonth)}
+                title={`按月导出【${exportMonth}】月份的项目分配数据包`}
               >
-                <Package size={14} />导出项目数据包 (.json)
+                <Calendar size={14} />按月导出数据包【{exportMonth}】(.json)
+              </button>
+              <button
+                className="secondary"
+                style={{ background: '#ffffff', color: '#0369a1', borderColor: '#7dd3fc', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+                onClick={() => onExportPackages && onExportPackages('all')}
+                title="导出系统包含所有历史月份的全部项目分配完整数据包"
+              >
+                <Layers size={14} />导出完整数据包（所有月份）(.json)
               </button>
             </div>
           </div>
