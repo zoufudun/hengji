@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 
 export async function getGitHubToken() {
   if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN.trim();
@@ -128,6 +128,8 @@ async function main() {
   const currentRelease = relRes.ok ? await relRes.json() : release;
   const existingAssets = currentRelease.assets || [];
 
+  const forceReupload = process.argv.includes('--force');
+
   for (const item of filesToUpload) {
     if (!fs.existsSync(item.src)) {
       console.warn(`File not found: ${item.src}, skipping`);
@@ -137,11 +139,11 @@ async function main() {
     const fileSize = fs.statSync(item.src).size;
     const matchedAsset = existingAssets.find(a => a.name === item.name);
     if (matchedAsset) {
-      if (Math.abs(matchedAsset.size - fileSize) < 1024) {
+      if (!forceReupload && matchedAsset.size === fileSize) {
         console.log(`✔ Asset ${item.name} (${(matchedAsset.size / 1024 / 1024).toFixed(2)} MB) already uploaded, skipping.`);
         continue;
       }
-      console.log(`Asset ${item.name} exists with different size, deleting old asset...`);
+      console.log(`Deleting existing release asset ${item.name} (id: ${matchedAsset.id})...`);
       await fetch(`https://api.github.com/repos/${repo}/releases/assets/${matchedAsset.id}`, {
         method: 'DELETE',
         headers
@@ -149,7 +151,6 @@ async function main() {
     }
 
     console.log(`Uploading ${item.name} (${(fileSize / 1024 / 1024).toFixed(2)} MB)...`);
-    const fileBuffer = fs.readFileSync(item.src);
     const uploadUrl = `https://uploads.github.com/repos/${repo}/releases/${release.id}/assets?name=${encodeURIComponent(item.name)}`;
     const contentType = item.name.endsWith('.msi')
       ? 'application/x-msi'
@@ -157,35 +158,62 @@ async function main() {
       ? 'application/zip'
       : 'application/vnd.microsoft.portable-executable';
 
-    let success = false;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const uploadRes = await fetch(uploadUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `token ${token}`,
-            'User-Agent': 'HengJi-Release-Publisher',
-            'Content-Type': contentType,
-            'Content-Length': String(fileBuffer.length)
-          },
-          body: fileBuffer
-        });
+    const curlBin = fs.existsSync('D:\\Soft\\Git\\mingw64\\bin\\curl.exe')
+      ? 'D:\\Soft\\Git\\mingw64\\bin\\curl.exe'
+      : 'curl.exe';
 
-        if (!uploadRes.ok) {
-          const err = await uploadRes.text();
-          console.error(`Attempt ${attempt} failed for ${item.name}: ${uploadRes.status} ${err}`);
-        } else {
-          const uploaded = await uploadRes.json();
+    let success = false;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        const curlArgs = [
+          '-s', '-S',
+          '--http1.1',
+          '--connect-timeout', '60',
+          '-X', 'POST',
+          '-H', `Authorization: token ${token}`,
+          '-H', 'User-Agent: HengJi-Release-Publisher',
+          '-H', `Content-Type: ${contentType}`,
+          '-H', `Content-Length: ${fileSize}`,
+          '--data-binary', `@${item.src}`,
+          uploadUrl
+        ];
+        const resText = execFileSync(curlBin, curlArgs, { encoding: 'utf8', timeout: 1200000 });
+        const uploaded = JSON.parse(resText);
+        if (uploaded.id && uploaded.name) {
           console.log(`✔ Successfully uploaded ${item.name} (${uploaded.browser_download_url})`);
           success = true;
           break;
+        } else {
+          console.error(`Attempt ${attempt} upload response error for ${item.name}:`, resText);
         }
       } catch (e) {
         console.warn(`Attempt ${attempt} network error for ${item.name}:`, e.message);
       }
+
+      // Check if GitHub actually received it or created a conflicting asset
+      try {
+        const verifyRes = await fetch(`https://api.github.com/repos/${repo}/releases/${release.id}/assets`, { headers });
+        if (verifyRes.ok) {
+          const remoteAssets = await verifyRes.json();
+          const found = remoteAssets.find(a => a.name === item.name);
+          if (found) {
+            if (found.state === 'uploaded' && Math.abs(found.size - fileSize) < 10) {
+              console.log(`✔ Verified ${item.name} is uploaded and intact on GitHub (${found.browser_download_url})`);
+              success = true;
+              break;
+            } else {
+              console.log(`Cleaning up partial/conflicting asset ${item.name} (id: ${found.id})...`);
+              await fetch(`https://api.github.com/repos/${repo}/releases/assets/${found.id}`, { method: 'DELETE', headers });
+            }
+          }
+        }
+      } catch (checkErr) {
+        console.warn(`Could not verify remote asset status:`, checkErr.message);
+      }
+
       if (attempt < 3) {
-        console.log(`Retrying in 3 seconds...`);
-        await new Promise(r => setTimeout(r, 3000));
+        console.log(`Retrying in 5 seconds...`);
+        await new Promise(r => setTimeout(r, 5000));
       }
     }
     if (!success) {
