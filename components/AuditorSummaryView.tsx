@@ -60,6 +60,7 @@ import {
   score,
   wan,
   pct,
+  exportProjectMeritPackage,
   parseProjectMeritPackage,
   parseMeritPackageOrBundle,
   summarizeAuditorPackages,
@@ -156,6 +157,8 @@ export function AuditorSummaryView({
   const [starCategory, setStarCategory] = useState<'monthly' | 'quarterly' | 'annual'>('monthly');
   // 查看某位员工跨项目明细的弹窗
   const [inspectEmployee, setInspectEmployee] = useState<AuditorSummaryResult['employeeSummaries'][0] | null>(null);
+  // 员工明细弹窗内的周期视图模式：'current' (当前所选周期) | 'all' (全周期全部历史细目)
+  const [inspectPeriodScope, setInspectPeriodScope] = useState<'current' | 'all'>('current');
   // 查看某个数据包详情的弹窗
   const [inspectPackage, setInspectPackage] = useState<ProjectMeritPackage | null>(null);
   // 是否正在拖拽文件
@@ -168,49 +171,18 @@ export function AuditorSummaryView({
     const hasExisting = (externalPackages && externalPackages.length > 0) || (state.auditorPackages && state.auditorPackages.length > 0);
     if (!hasExisting && packages.length === 0 && state && state.projects.length > 0 && state.plans.length > 0) {
       try {
-        const initialSummary = summarizeCurrentStateForAuditor(state);
-        if (initialSummary.projectSummaries.length > 0) {
-          const initialPkgs: ProjectMeritPackage[] = [];
-          for (const prj of state.projects) {
-            const hasPublished = state.plans.some(p => p.projectId === prj.id && p.status === 'published');
-            if (hasPublished) {
-              try {
-                const pkg = parseProjectMeritPackage(JSON.stringify({
-                  version: '1.0',
-                  packageType: 'project_merit_package',
-                  generatedAt: new Date().toISOString(),
-                  project: {
-                    id: prj.id,
-                    code: prj.code,
-                    name: prj.name,
-                    client: prj.client,
-                    contract: prj.contract,
-                    ownerId: prj.owner,
-                    ownerName: (state?.employees || []).find(e => e.id === prj.owner)?.name || prj.owner,
-                    contractWan: prj.contract / 1000000,
-                  },
-                  details: (state?.plans || [])
-                    .filter(p => p.projectId === prj.id && p.status === 'published')
-                    .flatMap(plan => plan.entries.map(e => ({
-                      projectId: prj.id,
-                      projectCode: prj.code,
-                      projectName: prj.name,
-                      month: plan.month,
-                      employeeId: e.employeeId,
-                      employeeName: (state?.employees || []).find(emp => emp.id === e.employeeId)?.name || e.employeeId,
-                      rate: e.rate,
-                      points: Math.round((prj.contract * plan.budget * e.rate) / 100000000),
-                      wan: Number((((prj.contract * plan.budget * e.rate) / 100000000) / 1000000).toFixed(6)),
-                      workContent: e.workContent,
-                    }))),
-                }));
-                if (pkg.details.length > 0) initialPkgs.push(pkg);
-              } catch {}
-            }
+        const initialPkgs: ProjectMeritPackage[] = [];
+        for (const prj of state.projects) {
+          const hasPublished = state.plans.some(p => p.projectId === prj.id && p.status === 'published');
+          if (hasPublished) {
+            try {
+              const pkg = exportProjectMeritPackage(state, prj.id);
+              if (pkg.details.length > 0) initialPkgs.push(pkg);
+            } catch {}
           }
-          if (initialPkgs.length > 0) {
-            updatePackages(initialPkgs);
-          }
+        }
+        if (initialPkgs.length > 0) {
+          updatePackages(initialPkgs);
         }
       } catch {}
     }
@@ -223,48 +195,20 @@ export function AuditorSummaryView({
         setNotice('当前系统工作区尚未就绪。');
         return;
       }
-      const summary = summarizeCurrentStateForAuditor(state);
-      if (summary.projectSummaries.length === 0) {
-        setNotice('当前系统中暂无已发布月度分配方案的项目。');
-        return;
-      }
-      const employees = state?.employees || [];
       const plans = state?.plans || [];
       const initialPkgs: ProjectMeritPackage[] = [];
       for (const prj of state.projects || []) {
         const hasPublished = plans.some(p => p.projectId === prj.id && p.status === 'published');
         if (hasPublished) {
-          const pkg = parseProjectMeritPackage(JSON.stringify({
-            version: '1.0',
-            packageType: 'project_merit_package',
-            generatedAt: new Date().toISOString(),
-            project: {
-              id: prj.id,
-              code: prj.code,
-              name: prj.name,
-              client: prj.client,
-              contract: prj.contract,
-              ownerId: prj.owner,
-              ownerName: employees.find(e => e.id === prj.owner)?.name || prj.owner,
-              contractWan: prj.contract / 1000000,
-            },
-            details: plans
-              .filter(p => p.projectId === prj.id && p.status === 'published')
-              .flatMap(plan => plan.entries.map(e => ({
-                projectId: prj.id,
-                projectCode: prj.code,
-                projectName: prj.name,
-                month: plan.month,
-                employeeId: e.employeeId,
-                employeeName: employees.find(emp => emp.id === e.employeeId)?.name || e.employeeId,
-                rate: e.rate,
-                points: Math.round((prj.contract * plan.budget * e.rate) / 100000000),
-                wan: Number((((prj.contract * plan.budget * e.rate) / 100000000) / 1000000).toFixed(6)),
-                workContent: e.workContent,
-              }))),
-          }));
-          if (pkg.details.length > 0) initialPkgs.push(pkg);
+          try {
+            const pkg = exportProjectMeritPackage(state, prj.id);
+            if (pkg.details.length > 0) initialPkgs.push(pkg);
+          } catch {}
         }
+      }
+      if (initialPkgs.length === 0) {
+        setNotice('当前系统中暂无已发布月度分配方案的项目。');
+        return;
       }
       updatePackages(initialPkgs, `已成功读取并载入系统内的 ${initialPkgs.length} 个项目分配数据包！`);
       setNotice(`已成功读取并载入系统内的 ${initialPkgs.length} 个项目分配数据包！`);
@@ -417,11 +361,12 @@ export function AuditorSummaryView({
       if (search.trim()) {
         const q = search.trim().toLowerCase();
         const matchName = emp.name.toLowerCase().includes(q);
+        const matchNo = emp.employeeNo?.toLowerCase().includes(q) || emp.employeeId?.toLowerCase().includes(q);
         const matchGroup = emp.group?.toLowerCase().includes(q);
         const matchPos = emp.position?.toLowerCase().includes(q);
         const matchDept = emp.department?.toLowerCase().includes(q);
         const matchPrj = emp.projects.some(p => p.projectName.toLowerCase().includes(q) || p.projectCode?.toLowerCase().includes(q));
-        if (!matchName && !matchGroup && !matchPos && !matchDept && !matchPrj) return false;
+        if (!matchName && !matchNo && !matchGroup && !matchPos && !matchDept && !matchPrj) return false;
       }
       return true;
     });
@@ -451,6 +396,8 @@ export function AuditorSummaryView({
         const q = search.trim().toLowerCase();
         return (
           d.employeeName.toLowerCase().includes(q) ||
+          (d.employeeNo && d.employeeNo.toLowerCase().includes(q)) ||
+          (d.employeeId && d.employeeId.toLowerCase().includes(q)) ||
           d.projectName.toLowerCase().includes(q) ||
           d.projectCode.toLowerCase().includes(q) ||
           d.month.toLowerCase().includes(q) ||
@@ -1398,9 +1345,16 @@ export function AuditorSummaryView({
                       </tr>
                     ) : (
                       filteredEmployees.map(emp => {
-                        const fullEmp = fullSummary.employeeSummaries.find(e => e.id === emp.id) || emp;
+                        const fullEmp = fullSummary.employeeSummaries.find(e => e.id === emp.id || e.employeeId === emp.employeeId) || emp;
                         return (
-                          <tr key={emp.employeeId} style={{ cursor: 'pointer' }} onClick={() => setInspectEmployee(fullEmp)}>
+                          <tr
+                            key={emp.employeeId}
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => {
+                              setInspectPeriodScope('all');
+                              setInspectEmployee(fullEmp);
+                            }}
+                          >
                             <td style={{ textAlign: 'center', fontWeight: emp.rank <= 3 ? 700 : 500 }}>
                               {emp.rank === 1 ? '🥇 1' : emp.rank === 2 ? '🥈 2' : emp.rank === 3 ? '🥉 3' : emp.rank}
                             </td>
@@ -1432,10 +1386,12 @@ export function AuditorSummaryView({
                             <td style={{ textAlign: 'right', color: '#334155' }}>{formatWan6(fullEmp.totalWan)} 万元</td>
                             <td style={{ textAlign: 'center' }}>
                               <button
+                                type="button"
                                 className="secondary"
-                                style={{ padding: '3px 8px', fontSize: '11.5px', borderRadius: '4px' }}
+                                style={{ padding: '4px 10px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                                 onClick={e => {
                                   e.stopPropagation();
+                                  setInspectPeriodScope('all');
                                   setInspectEmployee(fullEmp);
                                 }}
                               >
@@ -1488,7 +1444,14 @@ export function AuditorSummaryView({
                       </tr>
                     ) : (
                       filteredEmployees.map(emp => (
-                        <tr key={emp.employeeId} style={{ cursor: 'pointer' }} onClick={() => setInspectEmployee(emp)}>
+                        <tr
+                          key={emp.employeeId}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => {
+                            setInspectPeriodScope(periodType === 'all' ? 'all' : 'current');
+                            setInspectEmployee(emp);
+                          }}
+                        >
                           <td style={{ textAlign: 'center', fontWeight: emp.rank <= 3 ? 700 : 500 }}>
                             {emp.rank === 1 ? '🥇 1' : emp.rank === 2 ? '🥈 2' : emp.rank === 3 ? '🥉 3' : emp.rank}
                           </td>
@@ -1562,10 +1525,12 @@ export function AuditorSummaryView({
                           </td>
                           <td style={{ textAlign: 'center' }}>
                             <button
+                              type="button"
                               className="secondary"
-                              style={{ padding: '3px 8px', fontSize: '11.5px', borderRadius: '4px' }}
+                              style={{ padding: '4px 10px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                               onClick={e => {
                                 e.stopPropagation();
+                                setInspectPeriodScope(periodType === 'all' ? 'all' : 'current');
                                 setInspectEmployee(emp);
                               }}
                             >
@@ -2247,6 +2212,49 @@ export function AuditorSummaryView({
         {/* ---------------- 视图 6：全量明细流水表 ---------------- */}
         {activeTab === 'details' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {search.trim() && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: '#f0f9ff',
+                  border: '1px solid #bae6fd',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ fontSize: '13px', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Search size={15} />
+                  <span>
+                    当前细目筛选条件：<strong>{search}</strong>（周期：<strong>{summary.overview.periodLabel || '全周期'}</strong>，共匹配 <strong>{filteredDetails.length}</strong> 条分配细目）
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ fontSize: '12px', padding: '4px 10px' }}
+                    onClick={() => setSearch('')}
+                  >
+                    ✕ 清除筛选显示全部细目
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ fontSize: '12px', padding: '4px 10px', color: '#047857', borderColor: '#a7f3d0', background: '#ecfdf5', fontWeight: 600 }}
+                    onClick={() => {
+                      setSearch('');
+                      setActiveTab('employees');
+                    }}
+                  >
+                    ⬅ 返回全员跨项目总表
+                  </button>
+                </div>
+              </div>
+            )}
             <div style={{ overflowX: 'auto' }}>
               <table className="table" style={{ width: '100%', fontSize: '12.5px' }}>
                 <thead>
@@ -2304,133 +2312,421 @@ export function AuditorSummaryView({
       </div>
       )}
 
-      {/* 弹窗 1：员工跨项目分配全景下钻档案 */}
-      {inspectEmployee && (
-        <div className="modal-mask" onClick={() => setInspectEmployee(null)}>
+      {/* 弹窗 1：员工跨项目分配全景下钻档案（含具体分配细目流水表） */}
+      {inspectEmployee && (() => {
+        const currentEmp = summary.employeeSummaries.find(
+          e => e.id === inspectEmployee.id || e.employeeId === inspectEmployee.employeeId
+        ) || inspectEmployee;
+        const fullEmp = fullSummary.employeeSummaries.find(
+          e => e.id === inspectEmployee.id || e.employeeId === inspectEmployee.employeeId
+        ) || inspectEmployee;
+        const activeEmp = (inspectPeriodScope === 'all' || periodType === 'all') ? fullEmp : currentEmp;
+        const activePeriodLabel = (inspectPeriodScope === 'all' || periodType === 'all')
+          ? (fullSummary.overview.periodLabel || '全部月份')
+          : (summary.overview.periodLabel || '当前选定周期');
+        const sortedDetails = [...(activeEmp.details || [])].sort(
+          (a, b) => (b.month || '').localeCompare(a.month || '') || (b.points || 0) - (a.points || 0)
+        );
+        const mEntries = Object.entries(fullEmp.monthlyBreakdown || {}).sort((a, b) => a[0].localeCompare(b[0]));
+
+        const handleExportSingleEmployeeDetailsCsv = async () => {
+          const headers = ['序号', '考核月份', '工作令号', '项目名称', '员工工号', '员工姓名', '专业组', '职务', '当月分润比例(%)', '获得绩点(万元)', '折合金额(万元)', '工作履职内容'];
+          const rows = sortedDetails.map((d, idx) => [
+            idx + 1,
+            d.month || '',
+            d.projectCode || '-',
+            d.projectName || '',
+            d.employeeNo || activeEmp.employeeNo || activeEmp.employeeId || '',
+            d.employeeName || activeEmp.name || '',
+            d.group || activeEmp.group || '',
+            d.position || activeEmp.position || '',
+            ((d.rate || 0) / 100).toFixed(2),
+            ((d.points || 0) / 1_000_000).toFixed(6),
+            d.wan != null ? Number(d.wan).toFixed(6) : '0.000000',
+            (d.workContent || '').replace(/"/g, '""'),
+          ]);
+          const csvContent = '\uFEFF' + [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+          await triggerDownload(
+            csvContent,
+            `衡绩_${activeEmp.name}_${activeEmp.employeeNo || ''}_绩效分配细目_${activePeriodLabel}.csv`,
+            'text/csv'
+          );
+          setNotice(`✅ 已导出【${activeEmp.name}】在 ${activePeriodLabel} 的 ${sortedDetails.length} 条绩效分配细目 CSV`);
+        };
+
+        return (
           <div
-            className="modal-container"
-            style={{ maxWidth: '820px', width: '92%' }}
-            onClick={e => e.stopPropagation()}
+            className="modal-backdrop modal-mask"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 1050,
+              background: 'rgba(10, 24, 19, 0.56)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '24px',
+            }}
+            onClick={() => setInspectEmployee(null)}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '14px', marginBottom: '16px' }}>
-              <div>
-                <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                  【{inspectEmployee.name}】跨项目分配全景档案
-                </h2>
-                <div style={{ fontSize: '12.5px', color: '#64748b', marginTop: '4px' }}>
-                  {inspectEmployee.employeeNo ? <span style={{ color: '#0369a1', background: '#e0f2fe', padding: '1px 6px', borderRadius: '4px', marginRight: '6px', fontWeight: 600 }}>工号: {inspectEmployee.employeeNo}</span> : null}
-                  {inspectEmployee.department} · {inspectEmployee.group || '未分组'} · {inspectEmployee.position || '员工'}
-                </div>
-              </div>
-              <button className="icon-button" onClick={() => setInspectEmployee(null)}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-              <div style={{ background: '#f0fdf4', padding: '12px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
-                <div style={{ fontSize: '11.5px', color: '#166534' }}>全员绩效排名</div>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#15803d' }}>第 {inspectEmployee.rank} 名</div>
-              </div>
-              <div style={{ background: '#f0f9ff', padding: '12px', borderRadius: '8px', border: '1px solid #bae6fd' }}>
-                <div style={{ fontSize: '11.5px', color: '#0369a1' }}>跨项目累计绩点</div>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0284c7' }}>{score(inspectEmployee.totalPoints)}</div>
-              </div>
-              <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '11.5px', color: '#475569' }}>折合总金额</div>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>{formatWan6(inspectEmployee.totalWan)} 万元</div>
-              </div>
-            </div>
-
-            {/* 月度履历卡片网格 */}
-            {(() => {
-              const fullEmp = fullSummary.employeeSummaries.find(e => e.id === inspectEmployee.id) || inspectEmployee;
-              const mEntries = Object.entries(fullEmp.monthlyBreakdown || {}).sort((a, b) => a[0].localeCompare(b[0]));
-              if (mEntries.length <= 0) return null;
-              return (
-                <div style={{ marginBottom: '20px' }}>
-                  <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Calendar size={15} color="#0284c7" />
-                    各月份绩效分配履历 ({mEntries.length} 个月份)
-                  </h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
-                    {mEntries.map(([m, mData]) => (
-                      <div key={m} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#0369a1' }}>{m} 月</span>
-                          <span style={{ fontSize: '11px', color: '#64748b' }}>{mData.projects.length} 个项目</span>
-                        </div>
-                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#059669', margin: '2px 0' }}>
-                          {score(mData.points)} <span style={{ fontSize: '12px', fontWeight: 500 }}>绩点</span>
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#475569', marginBottom: '4px' }}>
-                          折合: {formatWan6(mData.wan)} 万元
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          {mData.projects.map((p: any) => (
-                            <div key={p.projectId} style={{ display: 'flex', justifyContent: 'space-between', background: '#ffffff', padding: '2px 6px', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
-                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={p.projectName}>{p.projectName}</span>
-                              <b style={{ color: '#0369a1' }}>{score(p.points)}</b>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+            <div
+              className="modal wide modal-container"
+              style={{
+                maxWidth: '1040px',
+                width: '95vw',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                background: '#ffffff',
+                borderRadius: '16px',
+                boxShadow: '0 30px 80px rgba(0, 0, 0, 0.28)',
+                padding: '24px 28px',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* 顶部标题与快捷操作栏 */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #e2e8f0', paddingBottom: '14px', marginBottom: '16px', gap: '12px', flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <h2 style={{ fontSize: '19px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                      【{activeEmp.name}】跨项目绩效分配细目与全景档案
+                    </h2>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#047857', background: '#dcfce7', padding: '2px 10px', borderRadius: '12px', border: '1px solid #86efac' }}>
+                      核算周期：{activePeriodLabel}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: '#64748b', marginTop: '6px' }}>
+                    {activeEmp.employeeNo ? (
+                      <span style={{ color: '#0369a1', background: '#e0f2fe', padding: '2px 8px', borderRadius: '4px', marginRight: '8px', fontWeight: 600, fontFamily: 'monospace' }}>
+                        唯一工号: {activeEmp.employeeNo}
+                      </span>
+                    ) : null}
+                    {activeEmp.department || '研发部门'} · {activeEmp.group || '未分组'} · {activeEmp.position || '骨干成员'}
                   </div>
                 </div>
-              );
-            })()}
 
-            <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
-              各项目获得绩点分布 ({inspectEmployee.projects.length} 个项目)
-            </h4>
-            <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
-              <table className="table" style={{ width: '100%', fontSize: '12.5px' }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc' }}>
-                    <th>工作令号</th>
-                    <th>项目名称</th>
-                    <th>项目负责人</th>
-                    <th style={{ textAlign: 'right' }}>在该项目获得绩点(万)</th>
-                    <th style={{ textAlign: 'right' }}>折合金额(万元)</th>
-                    <th style={{ textAlign: 'right' }}>在该项目占比</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inspectEmployee.projects.map(p => {
-                    const ratio = inspectEmployee.totalPoints > 0 ? ((p.points / inspectEmployee.totalPoints) * 100).toFixed(1) : '0';
-                    return (
-                      <tr key={p.projectId}>
-                        <td style={{ color: '#0369a1', fontWeight: 600 }}>{p.projectCode || '-'}</td>
-                        <td style={{ fontWeight: 600, color: '#0f172a' }}>{p.projectName}</td>
-                        <td>{p.ownerName}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>
-                          {score(p.points)}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>{formatWan6(p.wan)} 万元</td>
-                        <td style={{ textAlign: 'right', color: '#64748b' }}>{ratio}%</td>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  {periodType !== 'all' && (
+                    <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: '3px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                      <button
+                        type="button"
+                        style={{
+                          border: 'none',
+                          background: inspectPeriodScope === 'current' ? '#0284c7' : 'transparent',
+                          color: inspectPeriodScope === 'current' ? '#ffffff' : '#475569',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => setInspectPeriodScope('current')}
+                      >
+                        当前所选周期 ({summary.overview.periodLabel})
+                      </button>
+                      <button
+                        type="button"
+                        style={{
+                          border: 'none',
+                          background: inspectPeriodScope === 'all' ? '#0284c7' : 'transparent',
+                          color: inspectPeriodScope === 'all' ? '#ffffff' : '#475569',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => setInspectPeriodScope('all')}
+                      >
+                        全周期全部细目 ({fullSummary.overview.periodLabel || '全部月份'})
+                      </button>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ fontSize: '12px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '5px', color: '#0369a1', borderColor: '#bae6fd', background: '#f0f9ff' }}
+                    onClick={handleExportSingleEmployeeDetailsCsv}
+                  >
+                    <Download size={13} />
+                    导出该员工细目 CSV
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ fontSize: '12px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '5px', color: '#047857', borderColor: '#a7f3d0', background: '#ecfdf5', fontWeight: 600 }}
+                    onClick={() => {
+                      const queryKey = activeEmp.employeeNo || activeEmp.name;
+                      setGroupFilter('all');
+                      setSearch(queryKey);
+                      setActiveTab('details');
+                      setInspectEmployee(null);
+                      setNotice(`已转到【全量明细流水】视图并筛选员工：${activeEmp.name}${activeEmp.employeeNo ? ` (${activeEmp.employeeNo})` : ''}`);
+                    }}
+                  >
+                    <FileSpreadsheet size={13} />
+                    转到【全量明细流水】页查看
+                  </button>
+
+                  <button type="button" className="icon-button" onClick={() => setInspectEmployee(null)} title="关闭明细窗口">
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* 关键汇总指标卡 */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+                <div style={{ background: '#f0fdf4', padding: '12px 14px', borderRadius: '10px', border: '1px solid #bbf7d0' }}>
+                  <div style={{ fontSize: '11.5px', color: '#166534' }}>当前周期绩效排名</div>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#15803d', marginTop: '2px' }}>第 {activeEmp.rank} 名</div>
+                </div>
+                <div style={{ background: '#f0f9ff', padding: '12px 14px', borderRadius: '10px', border: '1px solid #bae6fd' }}>
+                  <div style={{ fontSize: '11.5px', color: '#0369a1' }}>累计获得总绩点(万)</div>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#0284c7', marginTop: '2px' }}>{score(activeEmp.totalPoints)}</div>
+                </div>
+                <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '11.5px', color: '#475569' }}>折合绩效总金额</div>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>{formatWan6(activeEmp.totalWan)} 万元</div>
+                </div>
+                <div style={{ background: '#faf5ff', padding: '12px 14px', borderRadius: '10px', border: '1px solid #e9d5ff' }}>
+                  <div style={{ fontSize: '11.5px', color: '#6b21a8' }}>参与项目 / 分配细目笔数</div>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#7e22ce', marginTop: '2px' }}>
+                    {(activeEmp.projects || []).length} 项 / {sortedDetails.length} 笔
+                  </div>
+                </div>
+              </div>
+
+              {/* 核心区域 1：具体绩效分配细目流水表（逐月、逐项目具体分配细目） */}
+              <div style={{ marginBottom: '22px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <h4 style={{ fontSize: '14.5px', fontWeight: 700, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <FileSpreadsheet size={16} color="#059669" />
+                    具体绩效分配细目流水 ({sortedDetails.length} 条具体细目)
+                  </h4>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>
+                    按考核月份与项目展示每一笔具体绩点分润比例、绩点额与工作履职内容
+                  </span>
+                </div>
+
+                <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+                  <table className="table" style={{ width: '100%', fontSize: '12.5px', margin: 0 }}>
+                    <thead>
+                      <tr style={{ background: '#f1f5f9' }}>
+                        <th style={{ width: '48px', textAlign: 'center' }}>序号</th>
+                        <th style={{ width: '95px' }}>考核月份</th>
+                        <th style={{ width: '110px' }}>工作令号</th>
+                        <th>项目名称</th>
+                        <th style={{ textAlign: 'right', width: '95px' }}>当月分润比例</th>
+                        <th style={{ textAlign: 'right', width: '120px' }}>获得绩点(万)</th>
+                        <th style={{ textAlign: 'right', width: '130px' }}>折合金额(万元)</th>
+                        <th>具体工作履职内容</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {sortedDetails.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} style={{ textAlign: 'center', padding: '28px', color: '#94a3b8' }}>
+                            该员工在当前周期暂无分配细目记录。
+                          </td>
+                        </tr>
+                      ) : (
+                        <>
+                          {sortedDetails.map((d, idx) => (
+                            <tr key={`${d.projectId}_${d.month}_${idx}`}>
+                              <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
+                              <td>
+                                <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 7px', borderRadius: '4px', fontWeight: 700, fontSize: '12px' }}>
+                                  {d.month}
+                                </span>
+                              </td>
+                              <td style={{ fontFamily: 'monospace', color: '#0369a1', fontWeight: 600 }}>{d.projectCode || '-'}</td>
+                              <td style={{ fontWeight: 600, color: '#0f172a' }}>{d.projectName}</td>
+                              <td style={{ textAlign: 'right', fontWeight: 600, color: '#475569' }}>{pct(d.rate)}</td>
+                              <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669', fontSize: '13px' }}>
+                                {score(d.points)}
+                              </td>
+                              <td style={{ textAlign: 'right', color: '#334155' }}>{formatWan6(d.wan)} 万元</td>
+                              <td style={{ color: '#475569', maxWidth: '280px' }} title={d.workContent}>
+                                {d.workContent || '项目研发与交付任务'}
+                              </td>
+                            </tr>
+                          ))}
+                          <tr style={{ background: '#f0fdf4', fontWeight: 700 }}>
+                            <td colSpan={5} style={{ textAlign: 'right', color: '#166534', paddingRight: '12px' }}>
+                              细目累计总和（共 {sortedDetails.length} 笔）：
+                            </td>
+                            <td style={{ textAlign: 'right', color: '#15803d', fontWeight: 800, fontSize: '13.5px' }}>
+                              {score(activeEmp.totalPoints)}
+                            </td>
+                            <td style={{ textAlign: 'right', color: '#15803d', fontWeight: 800 }}>
+                              {formatWan6(activeEmp.totalWan)} 万元
+                            </td>
+                            <td></td>
+                          </tr>
+                        </>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button className="primary" onClick={() => setInspectEmployee(null)}>
-                关闭档案
-              </button>
+              {/* 核心区域 2：各项目获得绩点汇总分布 */}
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <BriefcaseBusiness size={15} color="#0284c7" />
+                  各项目获得绩点汇总分布 ({(activeEmp.projects || []).length} 个项目)
+                </h4>
+                <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+                  <table className="table" style={{ width: '100%', fontSize: '12.5px', margin: 0 }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc' }}>
+                        <th>工作令号</th>
+                        <th>项目名称</th>
+                        <th>项目负责人</th>
+                        <th>参与发放月份</th>
+                        <th style={{ textAlign: 'right' }}>在该项目获得绩点(万)</th>
+                        <th style={{ textAlign: 'right' }}>折合金额(万元)</th>
+                        <th style={{ textAlign: 'right' }}>占个人总绩点比例</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(activeEmp.projects || []).map(p => {
+                        const ratio = activeEmp.totalPoints > 0 ? ((p.points / activeEmp.totalPoints) * 100).toFixed(1) : '0';
+                        return (
+                          <tr key={p.projectId}>
+                            <td style={{ color: '#0369a1', fontWeight: 600, fontFamily: 'monospace' }}>{p.projectCode || '-'}</td>
+                            <td style={{ fontWeight: 600, color: '#0f172a' }}>{p.projectName}</td>
+                            <td>{p.ownerName || '-'}</td>
+                            <td>
+                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                {(p.months || []).map((m: string) => (
+                                  <span key={m} style={{ fontSize: '11px', background: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: '4px' }}>
+                                    {m}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>
+                              {score(p.points)}
+                            </td>
+                            <td style={{ textAlign: 'right' }}>{formatWan6(p.wan)} 万元</td>
+                            <td style={{ textAlign: 'right', color: '#64748b' }}>{ratio}%</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 核心区域 3：各月份绩效分配履历卡片网格 */}
+              {mEntries.length > 0 && (
+                <div style={{ marginBottom: '20px' }}>
+                  <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Calendar size={15} color="#0284c7" />
+                    全周期各月份绩效分配履历 ({mEntries.length} 个月份，点击可快速切换至该月)
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
+                    {mEntries.map(([m, mData]) => {
+                      const isCurrentSelectedMonth = periodType === 'month' && activeMonth === m && inspectPeriodScope === 'current';
+                      return (
+                        <div
+                          key={m}
+                          style={{
+                            background: isCurrentSelectedMonth ? '#f0f9ff' : '#f8fafc',
+                            border: isCurrentSelectedMonth ? '2px solid #0284c7' : '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            padding: '10px 12px',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => {
+                            setPeriodType('month');
+                            setSelectedMonth(m);
+                            setInspectPeriodScope('current');
+                          }}
+                          title={`点击查看 ${m} 月份细目`}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 700, color: '#0369a1' }}>{m} 月</span>
+                            <span style={{ fontSize: '11px', color: '#64748b' }}>{(mData.projects || []).length} 个项目</span>
+                          </div>
+                          <div style={{ fontSize: '16px', fontWeight: 800, color: '#059669', margin: '2px 0' }}>
+                            {score(mData.points)} <span style={{ fontSize: '12px', fontWeight: 500 }}>绩点</span>
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#475569', marginBottom: '4px' }}>
+                            折合: {formatWan6(mData.wan)} 万元
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            {(mData.projects || []).map((p: any) => (
+                              <div key={p.projectId} style={{ display: 'flex', justifyContent: 'space-between', background: '#ffffff', padding: '2px 6px', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={p.projectName}>{p.projectName}</span>
+                                <b style={{ color: '#0369a1' }}>{score(p.points)}</b>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #e2e8f0', paddingTop: '14px' }}>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    const queryKey = activeEmp.employeeNo || activeEmp.name;
+                    setGroupFilter('all');
+                    setSearch(queryKey);
+                    setActiveTab('details');
+                    setInspectEmployee(null);
+                  }}
+                >
+                  在【全量明细流水】表中筛选该员工
+                </button>
+                <button type="button" className="primary" onClick={() => setInspectEmployee(null)}>
+                  关闭明细档案
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 弹窗 2：单个数据包详细信息 */}
       {inspectPackage && (
-        <div className="modal-mask" onClick={() => setInspectPackage(null)}>
+        <div
+          className="modal-backdrop modal-mask"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1050,
+            background: 'rgba(10, 24, 19, 0.56)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+          }}
+          onClick={() => setInspectPackage(null)}
+        >
           <div
-            className="modal-container"
-            style={{ maxWidth: '820px', width: '92%' }}
+            className="modal wide modal-container"
+            style={{
+              maxWidth: '860px',
+              width: '92vw',
+              maxHeight: '88vh',
+              overflowY: 'auto',
+              background: '#ffffff',
+              borderRadius: '16px',
+              boxShadow: '0 30px 80px rgba(0, 0, 0, 0.28)',
+              padding: '24px',
+            }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '14px', marginBottom: '16px' }}>

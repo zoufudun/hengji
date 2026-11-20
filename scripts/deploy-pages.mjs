@@ -38,7 +38,7 @@ async function deploy() {
   execSync('git checkout -b gh-pages', { cwd: tempDir, stdio: 'ignore' });
   execSync('git add -A', { cwd: tempDir, stdio: 'ignore' });
   const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
-  const ver = pkg.version || '0.7.11';
+  const ver = pkg.version || '0.7.13';
   execSync(`git commit -m "deploy: update GitHub Pages with cache-busted v${ver} bundle"`, { cwd: tempDir, stdio: 'ignore' });
   
   console.log('Pushing to gh-pages remote...');

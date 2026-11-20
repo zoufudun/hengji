@@ -1242,20 +1242,13 @@ export default function DesktopWorkspace() {
   const handleLoadSystemProjectsToAuditor = () => {
     if (!state) return;
     const systemPackages: ProjectMeritPackage[] = [];
-    const employees = state.employees || [];
     state.projects.forEach(prj => {
       const plans = state.plans.filter(p => p.projectId === prj.id && p.status === 'published');
       if (!plans.length) return;
-      const records = plans.flatMap(p => p.records);
-      const pkg = exportProjectMeritPackage(
-        prj,
-        plans,
-        records,
-        employees,
-        currentActor.id,
-        currentActor.name
-      );
-      systemPackages.push(pkg);
+      try {
+        const pkg = exportProjectMeritPackage(state, prj.id, { actor: currentActor });
+        if (pkg.details.length > 0) systemPackages.push(pkg);
+      } catch {}
     });
     if (!systemPackages.length) {
       setNotice('当前系统内暂无已发布的项目月度分配记录');
@@ -1462,12 +1455,13 @@ export default function DesktopWorkspace() {
             setWorkspaceType(targetWsType);
             if (targetWsType === 'auditor' && currentState && (!auditorPackages || auditorPackages.length === 0)) {
               const sysPkgs: ProjectMeritPackage[] = [];
-              const emps = currentState.employees || [];
               currentState.projects.forEach(prj => {
                 const pls = currentState!.plans.filter(p => p.projectId === prj.id && p.status === 'published');
                 if (!pls.length) return;
-                const pkg = exportProjectMeritPackage(prj, pls, [], emps, 'admin', '管理员');
-                sysPkgs.push(pkg);
+                try {
+                  const pkg = exportProjectMeritPackage(currentState!, prj.id);
+                  if (pkg.details.length > 0) sysPkgs.push(pkg);
+                } catch {}
               });
               if (sysPkgs.length > 0) {
                 setAuditorPackages(sysPkgs);
@@ -1632,12 +1626,13 @@ export default function DesktopWorkspace() {
             onClick={() => {
               if (state && (!auditorPackages || auditorPackages.length === 0)) {
                 const sysPkgs: ProjectMeritPackage[] = [];
-                const emps = state.employees || [];
                 state.projects.forEach(prj => {
                   const pls = state.plans.filter(p => p.projectId === prj.id && p.status === 'published');
                   if (!pls.length) return;
-                  const pkg = exportProjectMeritPackage(prj, pls, [], emps, 'admin', '管理员');
-                  sysPkgs.push(pkg);
+                  try {
+                    const pkg = exportProjectMeritPackage(state, prj.id);
+                    if (pkg.details.length > 0) sysPkgs.push(pkg);
+                  } catch {}
                 });
                 if (sysPkgs.length > 0) {
                   setAuditorPackages(sysPkgs);
@@ -1937,12 +1932,13 @@ export default function DesktopWorkspace() {
                 } else {
                   if (state && (!auditorPackages || auditorPackages.length === 0)) {
                     const sysPkgs: ProjectMeritPackage[] = [];
-                    const emps = state.employees || [];
                     state.projects.forEach(prj => {
                       const pls = state.plans.filter(p => p.projectId === prj.id && p.status === 'published');
                       if (!pls.length) return;
-                      const pkg = exportProjectMeritPackage(prj, pls, [], emps, 'admin', '管理员');
-                      sysPkgs.push(pkg);
+                      try {
+                        const pkg = exportProjectMeritPackage(state, prj.id, { actor: currentActor });
+                        if (pkg.details.length > 0) sysPkgs.push(pkg);
+                      } catch {}
                     });
                     if (sysPkgs.length > 0) {
                       setAuditorPackages(sysPkgs);

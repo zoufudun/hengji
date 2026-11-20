@@ -897,6 +897,14 @@ test('核算员多数据包合并按月归集（同一工号同一月份合并�
   assert.equal(zhangAll.monthlyBreakdown['2026-02'].points, 350000);
   assert.equal(zhangAll.quarterlyBreakdown['2026-Q1'].points, 850000);
   assert.equal(zhangAll.annualBreakdown['2026'].points, 850000);
+
+  // 7. 验证员工全景下钻细目列表 (emp.details) 在按月、按季度、全周期下均完整保留具体分配细目
+  assert.equal(zhangJan.details.length, 2, '张工1月份应包含甲、乙2个项目的具体分配细目');
+  assert.deepEqual(zhangJan.details.map(d => d.projectName).sort(), ['乙项目', '甲项目']);
+  assert.ok(zhangJan.details.every(d => d.month === '2026-01'));
+
+  assert.equal(zhangQ1.details.length, 4, '张工Q1季度应包含1月和2月共4条具体分配细目');
+  assert.equal(zhangAll.details.length, 4, '张工全周期应包含全部4条具体分配细目');
 });
 
 

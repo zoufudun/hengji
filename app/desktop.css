@@ -321,12 +321,12 @@ tr:hover td { background: #fafcfb; }
 .chart-kpi-item small { font-size: 11px; color: #15803d; }
 
 /* Modals */
-.modal-backdrop {
+.modal-backdrop, .modal-mask {
   position: fixed; inset: 0; background: rgba(10, 24, 19, 0.52);
   z-index: 50; display: grid; place-items: center; padding: 24px;
   backdrop-filter: blur(4px);
 }
-.modal {
+.modal, .modal-container {
   width: min(840px, 94vw); max-height: 90vh; overflow-y: auto;
   background: #fff; border-radius: 16px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.28);
   display: flex; flex-direction: column;

@@ -2023,7 +2023,7 @@ export function DocArticleContent({
               <b>⚠️ {isEn ? 'Three-Way Version Consistency Rule' : '三处版本号必须严格一致'}</b>：
               <br />
               {isEn
-                ? 'Ensure APP_VERSION in lib/core.ts, version in package.json, and the current release tag share the exact same version string (e.g. 0.7.11).'
+                ? 'Ensure APP_VERSION in lib/core.ts, version in package.json, and the current release tag share the exact same version string (e.g. 0.7.13).'
                 : `每次发布前，请检查以下三处版本号字符串是否完全统一（例如统一为 ${APP_VERSION}）：\n① package.json 中的 "version": "${APP_VERSION}"\n② lib/core.ts 中的 export const APP_VERSION = '${APP_VERSION}';\n③ app/desktop-updater.ts 中的当前版本常量。`}
             </div>
           </section>
@@ -2092,7 +2092,7 @@ export function DocArticleContent({
             <h2>{isEn ? '2. Create Annotated Tag & Push to Remote Origin' : '2. 创建版本附注标签并推送到 GitHub'}</h2>
             <p>
               {isEn
-                ? 'Create a Git annotated tag matching the release version (e.g. v0.7.11), then push both the main branch and the tag to GitHub:'
+                ? 'Create a Git annotated tag matching the release version (e.g. v0.7.13), then push both the main branch and the tag to GitHub:'
                 : `使用 -a 参数创建带附注说明的版本标签（例如 v${APP_VERSION}），然后分别将 main 分支与新标签推送到远程：`}
             </p>
 

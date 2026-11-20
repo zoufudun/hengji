@@ -2531,7 +2531,7 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData {
 // -------------------------------------------------------------
 // 系统版本、更新历史与开发作者
 // -------------------------------------------------------------
-export const APP_VERSION = '0.7.11';
+export const APP_VERSION = '0.7.13';
 export const APP_BUILD = '20261120';
 export const APP_AUTHOR = 'TOPFIRE 研发团队';
 export const APP_CONTACT = 'phudoncou@outlook.com';
@@ -2694,6 +2694,19 @@ export type VersionUpdate = {
 };
 
 export const UPDATE_HISTORY: VersionUpdate[] = [
+  {
+    version: 'v0.7.13',
+    date: '2026-11-20',
+    tag: '重大修复',
+    title: '修复核算员总表“查看明细”弹窗与具体细目下钻、完善全量明细联动筛选与白屏保护',
+    items: [
+      '【修复核算员“查看明细”弹窗无法弹出与具体细目下钻】在桌面样式与核算员视图中补全 .modal-mask / .modal-container 固定居中弹窗样式，点击全员跨项目绩效总表（标准视图与多月平铺矩阵）中的“查看明细”立即居中弹出该员工全景档案。',
+      '【新增员工具体绩效分配细目流水表与单人导出】下钻档案首屏新增逐月、逐项目具体绩效分配细目流水表（含考核月份、工作令号、项目名称、当月分润比例、获得绩点、折合金额、工作履职内容及合计行），支持“当前所选周期”与“全周期全部细目”切换及单人细目 CSV 导出。',
+      '【一键转到全量明细流水页精准筛选】下钻档案新增“转到【全量明细流水】页查看”按钮，自动按工号/姓名筛选该员工全部细目并补全工号检索，顶部提供筛选提示栏与一键返回总表按钮。',
+      '【修复切换核算员界面报错与总表白屏保护】修正工作区切换及数据包导出中 exportProjectMeritPackage 的参数签名错误，并集成 Badge 组件与 SafeAuditorBoundary 错误边界保护。',
+      '【发布工具与四格式分发包同步升级至 v0.7.13】同步生成并发布 EXE、MSI、Portable 单文件与 ZIP 绿色版四大离线客户端及 GitHub Pages 演示站。'
+    ]
+  },
   {
     version: 'v0.7.11',
     date: '2026-11-20',
