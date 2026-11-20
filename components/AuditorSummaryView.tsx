@@ -78,6 +78,22 @@ import {
 const formatWan6 = (val: number | null | undefined): string =>
   val == null || isNaN(val) ? '0' : Number(Number(val).toFixed(6)).toLocaleString('zh-CN', { maximumFractionDigits: 6 });
 
+function Badge({
+  children,
+  tone = 'neutral',
+  style,
+}: {
+  children: React.ReactNode;
+  tone?: 'neutral' | 'green' | 'amber' | 'blue' | 'purple' | 'gray';
+  style?: React.CSSProperties;
+}) {
+  return (
+    <span className={`badge ${tone}`} style={style}>
+      {children}
+    </span>
+  );
+}
+
 interface AuditorSummaryViewProps {
   state: State;
   currentActor: Employee;
@@ -1271,51 +1287,69 @@ export function AuditorSummaryView({
                   {periodType === 'month' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '13px', fontWeight: 700, color: '#0369a1' }}>核算月份：</span>
-                      <select
-                        value={activeMonth}
-                        onChange={e => setSelectedMonth(e.target.value)}
-                        style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #93c5fd', fontSize: '13px', fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
-                      >
-                        {allAvailableMonths.map(m => (
-                          <option key={m} value={m}>{m} 月度核算</option>
-                        ))}
-                      </select>
-                      <Badge tone="blue">当前为【{activeMonth}】单月数据归集</Badge>
+                      {allAvailableMonths.length > 0 ? (
+                        <>
+                          <select
+                            value={activeMonth}
+                            onChange={e => setSelectedMonth(e.target.value)}
+                            style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #93c5fd', fontSize: '13px', fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
+                          >
+                            {allAvailableMonths.map(m => (
+                              <option key={m} value={m}>{m} 月度核算</option>
+                            ))}
+                          </select>
+                          <Badge tone="blue">当前为【{activeMonth}】单月数据归集</Badge>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: '12px', color: '#64748b' }}>暂无可核算月份</span>
+                      )}
                     </div>
                   )}
 
                   {periodType === 'quarter' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '13px', fontWeight: 700, color: '#0369a1' }}>核算季度：</span>
-                      <select
-                        value={activeQuarter}
-                        onChange={e => setSelectedQuarter(e.target.value)}
-                        style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #93c5fd', fontSize: '13px', fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
-                      >
-                        {allAvailableQuarters.map(q => {
-                          const [y, qStr] = q.split('-Q');
-                          return (
-                            <option key={q} value={q}>{y}年 第{qStr}季度 ({q})</option>
-                          );
-                        })}
-                      </select>
-                      <Badge tone="purple">当前为【{activeQuarter}】季度累计数据归集</Badge>
+                      {allAvailableQuarters.length > 0 ? (
+                        <>
+                          <select
+                            value={activeQuarter}
+                            onChange={e => setSelectedQuarter(e.target.value)}
+                            style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #93c5fd', fontSize: '13px', fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
+                          >
+                            {allAvailableQuarters.map(q => {
+                              const [y, qStr] = q.split('-Q');
+                              return (
+                                <option key={q} value={q}>{y}年 第{qStr}季度 ({q})</option>
+                              );
+                            })}
+                          </select>
+                          <Badge tone="purple">当前为【{activeQuarter}】季度累计数据归集</Badge>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: '12px', color: '#64748b' }}>暂无可核算季度</span>
+                      )}
                     </div>
                   )}
 
                   {periodType === 'year' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '13px', fontWeight: 700, color: '#0369a1' }}>核算年度：</span>
-                      <select
-                        value={activeYear}
-                        onChange={e => setSelectedYear(e.target.value)}
-                        style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #93c5fd', fontSize: '13px', fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
-                      >
-                        {allAvailableYears.map(y => (
-                          <option key={y} value={y}>{y} 整年度</option>
-                        ))}
-                      </select>
-                      <Badge tone="green">当前为【{activeYear}年度】全额度归集</Badge>
+                      {allAvailableYears.length > 0 ? (
+                        <>
+                          <select
+                            value={activeYear}
+                            onChange={e => setSelectedYear(e.target.value)}
+                            style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #93c5fd', fontSize: '13px', fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
+                          >
+                            {allAvailableYears.map(y => (
+                              <option key={y} value={y}>{y} 整年度</option>
+                            ))}
+                          </select>
+                          <Badge tone="green">当前为【{activeYear}年度】全额度归集</Badge>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: '12px', color: '#64748b' }}>暂无可核算年度</span>
+                      )}
                     </div>
                   )}
 
@@ -1481,7 +1515,7 @@ export function AuditorSummaryView({
                             {periodType === 'quarter' ? (
                               /* 季度展示各月分布 */
                               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxWidth: '380px' }}>
-                                {emp.quarterlyBreakdown?.[activeQuarter]?.months.map(m => {
+                                {(emp.quarterlyBreakdown?.[activeQuarter]?.months || []).map(m => {
                                   const mPts = emp.monthlyBreakdown?.[m]?.points || 0;
                                   return (
                                     <span key={m} style={{ background: '#f1f5f9', padding: '1px 6px', borderRadius: '4px', fontSize: '11.5px', color: '#334155' }}>

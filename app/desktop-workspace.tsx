@@ -466,6 +466,45 @@ class SafeStarsBoundary extends React.Component<{ children: React.ReactNode }, {
   }
 }
 
+class SafeAuditorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: any, info: any) {
+    console.error('AuditorView caught error:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '36px', background: '#ffffff', borderRadius: '16px', border: '1px solid #fee2e2', margin: '20px 0', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#dc2626', marginBottom: '12px' }}>
+            <AlertTriangle size={24} />
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>全员跨项目绩效总表渲染提示</h3>
+          </div>
+          <p style={{ color: '#475569', fontSize: '13.5px', lineHeight: 1.6, marginBottom: '16px' }}>
+            检测到当前数据在汇总渲染时发生异常（{this.state.error?.message || '未知数据错误'}）。
+          </p>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              type="button"
+              className="primary"
+              style={{ background: '#059669', borderColor: '#047857' }}
+              onClick={() => this.setState({ hasError: false, error: null })}
+            >
+              🔄 重新加载总表视图
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function GroupRoleBadge({ role }: { role?: string }) {
   if (!role) return <span style={{ color: '#94a3b8', fontSize: '11px' }}>—</span>;
   if (role === '组长') return <Badge tone="amber">🌟 组长</Badge>;
@@ -2125,25 +2164,27 @@ export default function DesktopWorkspace() {
                 <StarsView state={derivedAuditorState} />
               </SafeStarsBoundary>
             ) : (
-              <AuditorSummaryView
-                state={state!}
-                currentActor={currentActor}
-                isAdmin={isAdmin}
-                isAuditor={isAuditor}
-                packages={auditorPackages}
-                onUpdatePackages={handleUpdateAuditorPackages}
-                activeSubTab={auditorSubTab}
-                onSubTabChange={setAuditorSubTab}
-                hideTabBar={workspaceType === 'auditor'}
-                onSwitchToAuditor={() => {
-                  const employees = state?.employees || [];
-                  const audEmp = employees.find(e => e.role === 'auditor' && e.active) || employees.find(e => e.role === 'admin' && e.active);
-                  if (audEmp) setActorId(audEmp.id);
-                  else setAuthModalOpen(true);
-                }}
-                triggerDownload={triggerDownload}
-                setNotice={setNotice}
-              />
+              <SafeAuditorBoundary>
+                <AuditorSummaryView
+                  state={state!}
+                  currentActor={currentActor}
+                  isAdmin={isAdmin}
+                  isAuditor={isAuditor}
+                  packages={auditorPackages}
+                  onUpdatePackages={handleUpdateAuditorPackages}
+                  activeSubTab={auditorSubTab}
+                  onSubTabChange={setAuditorSubTab}
+                  hideTabBar={workspaceType === 'auditor'}
+                  onSwitchToAuditor={() => {
+                    const employees = state?.employees || [];
+                    const audEmp = employees.find(e => e.role === 'auditor' && e.active) || employees.find(e => e.role === 'admin' && e.active);
+                    if (audEmp) setActorId(audEmp.id);
+                    else setAuthModalOpen(true);
+                  }}
+                  triggerDownload={triggerDownload}
+                  setNotice={setNotice}
+                />
+              </SafeAuditorBoundary>
             )
           )}
         </div>
